@@ -16,3 +16,6 @@
 .vscode/
 *.swp
 .DS_Store
+
+# git worktrees used by parallel porting sessions
+/worktrees
