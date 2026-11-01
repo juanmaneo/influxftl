@@ -330,12 +330,38 @@ fn numeric_conversions() {
 fn bit_representations() {
     assert_top("255 TOHEX", "00000000000000ff");
     assert_top("-1 ->HEX", "ffffffffffffffff");
+    assert_top("'é!' TOHEX", "c3a921");
+    assert_top("'' ->HEX", "");
+    assert_top("'00ff7f' HEX-> ->HEX", "00ff7f");
     assert_top("5 TOBIN", format!("{:064b}", 5));
+    assert_top("-1 ->BIN", "1".repeat(64));
+    assert_top("'A' TOBIN", "01000001");
+    assert_top("'8f' HEX-> ->BIN", "10001111");
+    // bits 0, 2 and 23 are set: length() is 24
+    assert_top(
+        "'050080' HEX-> BYTESTOBITS ->BIN",
+        format!("101{}1", "0".repeat(20)),
+    );
+    assert_top("'00' HEX-> BYTESTOBITS TOBIN", "");
     assert_top("'ff' FROMHEX", 255);
     assert_top("'ffffffffffffffff' FROMHEX", -1);
     assert_top("'101' FROMBIN", 5);
-    assert_fails("1.0 TOHEX", "TOHEX can only operate on long values.");
-    assert_fails("1.0 TOBIN", "TOBIN can only operate on long values.");
+    assert_fails(
+        "1.0 TOHEX",
+        "TOHEX operates on a STRING, BYTES, BIGDECIMAL or LONG.",
+    );
+    assert_fails(
+        "1.0 ->HEX",
+        "->HEX operates on a STRING, BYTES, BIGDECIMAL or LONG.",
+    );
+    assert_fails(
+        "1.0 TOBIN",
+        "TOBIN operates on a STRING, BYTES, LONG, BIGDECIMAL or BITSET.",
+    );
+    assert_fails(
+        "1.0 ->BIN",
+        "->BIN operates on a STRING, BYTES, LONG, BIGDECIMAL or BITSET.",
+    );
     assert_fails(
         "1 FROMHEX",
         "FROMHEX can only operate on string of hexadecimal representations.",

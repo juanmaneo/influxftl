@@ -14,11 +14,24 @@ categories = ["science", "parser-implementations"]
 path = "src/lib.rs"
 
 [dependencies]
+aes = { workspace = true }
 base64 = { workspace = true }
+digest = { workspace = true }
 fancy-regex = { workspace = true }
+flate2 = { workspace = true }
 getrandom = { workspace = true }
+gost94 = { workspace = true }
 indexmap = { workspace = true }
+keccak = { workspace = true }
+md-5 = { workspace = true }
+md2 = { workspace = true }
+md4 = { workspace = true }
+ripemd = { workspace = true }
 serde_json = { workspace = true }
+sha1 = { workspace = true }
+sha2 = { workspace = true }
+tiger = { workspace = true }
+whirlpool = { workspace = true }
 
 [lints]
 workspace = true

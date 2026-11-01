@@ -296,3 +296,58 @@ The collection functions reproduce the Java implementations, including their edg
   `APPEND`, `SHRINK`, `PIVOT` and `PIVOTSTRICT` on a GTS (or a GTS encoder, matrix…) raise
   the error Java raises for an unsupported operand type. `SORT` and `RSORT` (GTS-only
   functions) and `IMMUTABLE` (containers carry no immutability flag yet) are not ported.
+
+## 11. Cryptography and compression
+
+The digests (`MD5`, `SHA256`, `KECCAK.*`, `SHA3.*`, `RIPEMD*`, `TIGER`, `WHIRLPOOL`,
+`GOST`…), `SHA256HMAC` / `SHA1HMAC`, `HASH`, the Base58 conversions and `AESWRAP` /
+`AESUNWRAP` are verified against the BouncyCastle version Warp 10 depends on (1.78.1) and
+produce identical bytes. The differences:
+
+- **Compressed bytes.** `GZIP` and `DEFLATE` are produced by the pure Rust `miniz_oxide`
+  backend of `flate2`; they decompress to the same data as the JDK streams (and the JDK
+  streams decompress here) but the compressed bytes are not identical to those of
+  `java.util.zip` (zlib). The gzip header carries no modification time and the `OS` byte is
+  `255` (unknown) like JDK 16 and later; earlier JDKs wrote `0`. Scripts must not compare
+  compressed output byte for byte (they could not across JDK versions either).
+- **Decompression error causes.** `UNGZIP` / `INFLATE` raise Java's `… encountered an error
+  while decompressing.` with the decoder's own message as the cause (`corrupt deflate
+  stream`, `incomplete deflate stream`…) instead of the `ZipException` texts (`Not in GZIP
+  format`, `incorrect header check`…). Like `GZIPInputStream`, `UNGZIP` concatenates all gzip
+  members and silently ignores trailing bytes that do not start another member; `INFLATE`
+  ignores anything after the end of the zlib stream, like `InflaterInputStream`.
+- **Base58 error rendering.** `B58->` reports an invalid character as Java does (`Invalid
+  input 'c' at position i.`, positions in UTF-16 units; characters `{`, `|`, `}` and `~` raise
+  Java's `Index N out of bounds for length 123`); a character outside the Basic Multilingual
+  Plane is rendered as the character itself where Java prints a lone surrogate.
+- **`AESWRAP` nonce.** The 8 random bytes come from the operating system (`getrandom`)
+  instead of `java.security.SecureRandom`; a failure to obtain entropy is a script error
+  (`Unable to obtain random data from the operating system (…)`) rather than a JVM error.
+- **`AESUNWRAP` of data without a nonce** (wrapped by a plain `CryptoUtils.wrap`) raises
+  `8 > N`, the text of the `IllegalArgumentException` of `Arrays.copyOfRange`.
+- **`ARGON2`** is a line-by-line port of BouncyCastle's `Argon2BytesGenerator` (with its own
+  BLAKE2b) and produces the same bytes for every type, version, lane count, memory size and
+  output length, including the sizes other libraries refuse (salts shorter than 8 bytes,
+  memory below 8 KiB). The engine's `IllegalStateException` texts are raised unchanged
+  (`iterations is less than: 1`, `memory is less than: 2 expected 2`, `lanes must be greater
+  than 1`, `output length less than 4`), as is the `-1` of the `NegativeArraySizeException`
+  for a negative `size`. Memory that cannot be allocated raises `Java heap space` (Java: an
+  `OutOfMemoryError`, which is not catchable by scripts).
+
+## 12. Capabilities and tokens
+
+Capabilities (`CAPGET`, `CAPCHECK`, `CAPDEL`, `CAPADD`, `CAPEXPORT`, and the `argon2.*`,
+`limits`, `maxops`… checks of other functions) follow `io.warp10.warp.sdk.Capabilities`, with
+these differences:
+
+- **Source of the capabilities.** Warp 10 reads them from the `.cap:` attributes of the token
+  of the request (and from the `warp.capabilities.default` configuration). Here the host
+  installs them on the stack (`Stack::capabilities_mut`) before running the script. Default
+  capabilities merged there by the host can be revoked by `CAPDEL`; in Warp 10 the defaults
+  survive `CAPDEL`.
+- **`CAPADD`** needs a `TokenResolver` installed by the host (`Stack::set_token_resolver`) to
+  decode tokens; without one every token is `invalid token.`, like an undecodable token in
+  Warp 10.
+- **`CAPGET` with a `LIST`** on a stack that was granted no capability at all returns an empty
+  map, like a Warp 10 stack without a `Capabilities` object; once at least one capability is
+  granted, missing names map to `NULL` as in Warp 10.

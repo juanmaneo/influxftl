@@ -12,6 +12,7 @@
 //! assert_eq!(stack.pop().unwrap(), Value::Long(42));
 //! ```
 
+pub mod argon2;
 pub mod bitset;
 pub mod cmath;
 pub mod encoding;
@@ -35,6 +36,8 @@ pub fn version() -> &'static str {
     env!("CARGO_PKG_VERSION")
 }
 
+#[cfg(test)]
+mod argon2_tests;
 #[cfg(test)]
 mod bitset_tests;
 #[cfg(test)]

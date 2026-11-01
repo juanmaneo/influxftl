@@ -4,8 +4,11 @@
 //! `(name, Entry)` pairs. The registry is the union of all tables; names must be unique.
 
 pub mod args;
+pub mod capabilities;
 pub mod collections;
+pub mod compression;
 pub mod control;
+pub mod crypto;
 pub mod functional;
 pub mod json;
 pub mod math;
@@ -50,6 +53,9 @@ const TABLES: &[&[(&str, Entry)]] = &[
     collections::FUNCTIONS,
     functional::FUNCTIONS,
     pack::FUNCTIONS,
+    crypto::FUNCTIONS,
+    compression::FUNCTIONS,
+    capabilities::FUNCTIONS,
 ];
 
 static REGISTRY: OnceLock<HashMap<&'static str, &'static Entry>> = OnceLock::new();
@@ -130,9 +136,15 @@ pub fn call(stack: &mut Stack, name: &str) -> Result<()> {
 #[cfg(test)]
 mod args_tests;
 #[cfg(test)]
+mod capabilities_tests;
+#[cfg(test)]
 mod collections_tests;
 #[cfg(test)]
+mod compression_tests;
+#[cfg(test)]
 mod control_tests;
+#[cfg(test)]
+mod crypto_tests;
 #[cfg(test)]
 mod functional_tests;
 #[cfg(test)]

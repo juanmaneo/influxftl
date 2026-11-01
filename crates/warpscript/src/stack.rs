@@ -64,6 +64,17 @@ pub trait SecureCodec {
     fn unsecure(&self, encoded: &str) -> Result<SecureScript>;
 }
 
+/// Resolves the tokens given to `CAPADD` into their attributes (`Tokens.extractReadToken` /
+/// `extractWriteToken`). The runtime has no token store of its own: without a resolver every
+/// token is invalid.
+pub trait TokenResolver {
+    /// The attributes of `token`, or `None` when it is not a valid read or write token.
+    fn token_attributes(&self, token: &str) -> Option<IndexMap<String, String>>;
+}
+
+/// Prefix of the token attributes that carry capabilities (`CAPABILITIES_PREFIX`).
+pub const CAPABILITIES_PREFIX: &str = ".cap:";
+
 const MACRO_START: &str = "<%";
 const MACRO_END: &str = "%>";
 const COMMENT_START: &str = "/*";
@@ -170,6 +181,12 @@ pub struct Stack {
     deadline: Option<Instant>,
     secure_codec: Option<Rc<dyn SecureCodec>>,
     config: IndexMap<String, String>,
+    /// Capabilities granted to the script (`Capabilities`), set by the host from the token.
+    capabilities: IndexMap<String, String>,
+    /// Capabilities a `GUARD`ed macro exports to its caller (`EXPORTED_CAPABILITIES_ATTR`);
+    /// `None` outside `GUARD`. `None` entries stand for Java's `null` name.
+    exported_capabilities: Option<Vec<Option<String>>>,
+    token_resolver: Option<Rc<dyn TokenResolver>>,
 }
 
 impl Default for Stack {
@@ -212,6 +229,9 @@ impl Stack {
             line_number: None,
             deadline: None,
             secure_codec: None,
+            capabilities: IndexMap::new(),
+            exported_capabilities: None,
+            token_resolver: None,
             config: IndexMap::new(),
         }
     }
@@ -475,6 +495,45 @@ impl Stack {
     /// Replace the configuration properties visible to `MACROCONFIG`.
     pub fn set_config(&mut self, config: IndexMap<String, String>) {
         self.config = config;
+    }
+
+    /// The value of the capability `name`, if granted (`Capabilities.get(stack, name)`).
+    pub fn capability(&self, name: &str) -> Option<&str> {
+        self.capabilities.get(name).map(String::as_str)
+    }
+
+    /// All the capabilities granted to the script, in insertion order.
+    pub fn capabilities(&self) -> &IndexMap<String, String> {
+        &self.capabilities
+    }
+
+    /// Mutable access to the capabilities, for the host (token attributes) and for `CAPDEL`.
+    pub fn capabilities_mut(&mut self) -> &mut IndexMap<String, String> {
+        &mut self.capabilities
+    }
+
+    /// The capabilities exported by the running `GUARD`ed macro, `None` outside `GUARD`.
+    pub fn exported_capabilities_mut(&mut self) -> Option<&mut Vec<Option<String>>> {
+        self.exported_capabilities.as_mut()
+    }
+
+    /// Install (or remove, with `None`) the exported capabilities set; returns the previous
+    /// one.
+    pub fn set_exported_capabilities(
+        &mut self,
+        exported: Option<Vec<Option<String>>>,
+    ) -> Option<Vec<Option<String>>> {
+        std::mem::replace(&mut self.exported_capabilities, exported)
+    }
+
+    /// The token resolver, if one was installed.
+    pub fn token_resolver(&self) -> Option<Rc<dyn TokenResolver>> {
+        self.token_resolver.clone()
+    }
+
+    /// Install (or remove) the token resolver used by `CAPADD`.
+    pub fn set_token_resolver(&mut self, resolver: Option<Rc<dyn TokenResolver>>) {
+        self.token_resolver = resolver;
     }
 
     /// The secure script codec, if one was installed.

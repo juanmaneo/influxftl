@@ -22,6 +22,25 @@ fancy-regex = "0.20"
 # Guava `BaseEncoding.base64()` / `base64Url()` equivalents (`->B64`, `B64->`…). The default
 # `simd-unsafe` feature is left out: the pure Rust code path is plenty fast for script data.
 base64 = { version = "0.23", default-features = false, features = ["std"] }
+# Message digests of the `DIGEST` family (BouncyCastle `*Digest` classes in Warp 10) and HMAC.
+digest = "0.11"
+md2 = "0.11"
+md4 = "0.11"
+md-5 = "0.11"
+sha1 = "0.11"
+sha2 = "0.11"
+ripemd = "0.2"
+tiger = "0.3"
+whirlpool = "0.11"
+gost94 = "0.11"
+# Keccak-f[1600] permutation: the SHA-3 / Keccak sponges are built on it (Keccak-128 and
+# Keccak-288 have no ready-made implementation).
+keccak = "0.2"
+# AES block cipher for the RFC 3394 key wrap of `AESWRAP` / `AESUNWRAP`.
+aes = "0.9"
+# BLAKE2b for Argon2 (`ARGON2`).
+# `GZIP` / `UNGZIP` / `DEFLATE` / `INFLATE` (pure Rust `miniz_oxide` backend).
+flate2 = { version = "1", default-features = false, features = ["rust_backend"] }
 
 [workspace.lints.rust]
 unsafe_code = "forbid"

@@ -53,10 +53,10 @@ pub const FUNCTIONS: &[(&str, Entry)] = &[
     ("TOBOOLEAN", Entry::Stack(toboolean)),
     ("TOSTRING", Entry::Stack(tostring)),
     ("TOHEX", Entry::Stack(tohex)),
-    ("->HEX", Entry::Stack(tohex)),
+    ("->HEX", Entry::Stack(tohex_arrow)),
     ("FROMHEX", Entry::Stack(fromhex)),
     ("TOBIN", Entry::Stack(tobin)),
-    ("->BIN", Entry::Stack(tobin)),
+    ("->BIN", Entry::Stack(tobin_arrow)),
     ("FROMBIN", Entry::Stack(frombin)),
     ("->DOUBLEBITS", Entry::Stack(to_double_bits)),
     ("DOUBLEBITS->", Entry::Stack(from_double_bits)),
@@ -648,28 +648,74 @@ fn tostring(stack: &mut Stack) -> Result<()> {
 }
 
 fn tohex(stack: &mut Stack) -> Result<()> {
-    radix_string(stack, "TOHEX", 16)
+    to_hex(stack, "TOHEX")
+}
+
+fn tohex_arrow(stack: &mut Stack) -> Result<()> {
+    to_hex(stack, "->HEX")
 }
 
 fn tobin(stack: &mut Stack) -> Result<()> {
-    radix_string(stack, "TOBIN", 2)
+    to_bin(stack, "TOBIN")
 }
 
-/// `TOHEX` / `TOBIN`: the two's complement representation of a `LONG` padded to 16 (hex) or 64
-/// (binary) digits.
-fn radix_string(stack: &mut Stack, name: &str, radix: u32) -> Result<()> {
-    match stack.pop()? {
-        Value::Long(v) => {
-            let unsigned = v as u64;
-            let text = match radix {
-                16 => format!("{unsigned:016x}"),
-                _ => format!("{unsigned:064b}"),
-            };
-            stack.push(Value::from(text));
-            Ok(())
+fn tobin_arrow(stack: &mut Stack) -> Result<()> {
+    to_bin(stack, "->BIN")
+}
+
+/// `TOHEX` / `->HEX`: the hexadecimal form of a `STRING` (its UTF-8 bytes), of `BYTES`, or of
+/// a `LONG` (two's complement, padded to 16 digits).
+///
+/// `BIGDECIMAL` is not modelled by this runtime (see `DIVERGENCES.md`).
+fn to_hex(stack: &mut Stack, name: &str) -> Result<()> {
+    let text = match stack.pop()? {
+        Value::String(s) => crate::encoding::hex_encode(s.as_bytes()),
+        Value::Bytes(b) => crate::encoding::hex_encode(&b),
+        Value::Long(v) => format!("{:016x}", v as u64),
+        _ => {
+            return Err(fail(
+                name,
+                "operates on a STRING, BYTES, BIGDECIMAL or LONG.",
+            ));
         }
-        _ => Err(fail(name, "can only operate on long values.")),
-    }
+    };
+    stack.push(Value::from(text));
+    Ok(())
+}
+
+/// `TOBIN` / `->BIN`: the binary form of a `STRING` (its UTF-8 bytes), of `BYTES`, of a `LONG`
+/// (two's complement, padded to 64 digits) or of a `BITSET` (one digit per bit below
+/// `length()`).
+fn to_bin(stack: &mut Stack, name: &str) -> Result<()> {
+    let text = match stack.pop()? {
+        Value::String(s) => bytes_to_bin(s.as_bytes()),
+        Value::Bytes(b) => bytes_to_bin(&b),
+        Value::Long(v) => format!("{:064b}", v as u64),
+        Value::BitSet(bits) => {
+            let length = usize::try_from(bits.length()).unwrap_or_default();
+            let set: std::collections::BTreeSet<usize> = bits.set_bits().collect();
+            (0..length)
+                .map(|i| if set.contains(&i) { '1' } else { '0' })
+                .collect()
+        }
+        _ => {
+            return Err(fail(
+                name,
+                "operates on a STRING, BYTES, LONG, BIGDECIMAL or BITSET.",
+            ));
+        }
+    };
+    stack.push(Value::from(text));
+    Ok(())
+}
+
+/// Eight binary digits per byte, most significant bit first.
+fn bytes_to_bin(data: &[u8]) -> String {
+    use std::fmt::Write;
+    data.iter().fold(String::new(), |mut text, b| {
+        let _ = write!(text, "{b:08b}");
+        text
+    })
 }
 
 fn fromhex(stack: &mut Stack) -> Result<()> {
