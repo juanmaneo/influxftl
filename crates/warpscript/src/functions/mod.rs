@@ -6,6 +6,7 @@
 pub mod args;
 pub mod control;
 pub mod misc;
+pub mod operators;
 pub mod stack_ops;
 pub mod symbols;
 
@@ -35,6 +36,7 @@ const TABLES: &[&[(&str, Entry)]] = &[
     symbols::FUNCTIONS,
     control::FUNCTIONS,
     misc::FUNCTIONS,
+    operators::FUNCTIONS,
 ];
 
 static REGISTRY: OnceLock<HashMap<&'static str, &'static Entry>> = OnceLock::new();
@@ -118,6 +120,8 @@ mod args_tests;
 mod control_tests;
 #[cfg(test)]
 mod misc_tests;
+#[cfg(test)]
+mod operators_tests;
 #[cfg(test)]
 mod stack_ops_tests;
 #[cfg(test)]
