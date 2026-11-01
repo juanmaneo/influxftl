@@ -44,6 +44,53 @@ fn double_to_string_matches_java() {
 }
 
 #[test]
+fn tiny_subnormals_pick_the_closest_two_digit_decimal() {
+    // `Double.toString(Double.longBitsToDouble(m))` for m = 1..=24 (OpenJDK 27): the shortest
+    // round-tripping decimal has a single digit for 8 of them and Java prints the closest
+    // two-digit decimal instead.
+    let expected = [
+        "4.9E-324",
+        "9.9E-324",
+        "1.5E-323",
+        "2.0E-323",
+        "2.5E-323",
+        "3.0E-323",
+        "3.5E-323",
+        "4.0E-323",
+        "4.4E-323",
+        "4.9E-323",
+        "5.4E-323",
+        "5.9E-323",
+        "6.4E-323",
+        "6.9E-323",
+        "7.4E-323",
+        "7.9E-323",
+        "8.4E-323",
+        "8.9E-323",
+        "9.4E-323",
+        "9.9E-323",
+        "1.04E-322",
+        "1.1E-322",
+        "1.14E-322",
+        "1.2E-322",
+    ];
+    for (m, text) in (1u64..).zip(expected) {
+        assert_eq!(java_double_to_string(f64::from_bits(m)), text, "{m}");
+        assert_eq!(
+            java_double_to_string(-f64::from_bits(m)),
+            format!("-{text}"),
+            "-{m}"
+        );
+    }
+    assert_eq!(
+        java_double_to_string(f64::MIN_POSITIVE),
+        "2.2250738585072014E-308"
+    );
+    assert_eq!(java_double_to_string(1e23), "1.0E23");
+    assert_eq!(java_double_to_string(9e-324), "9.9E-324");
+}
+
+#[test]
 fn long_detection() {
     assert!(is_long("0"));
     assert!(is_long("-12"));

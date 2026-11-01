@@ -25,6 +25,13 @@ pub fn java_double_to_string(d: f64) -> String {
     let (mantissa, exponent) = sci.split_once('e').unwrap_or((sci.as_str(), "0"));
     let exponent: i32 = exponent.parse().unwrap_or(0);
     let digits: String = mantissa.chars().filter(|c| *c != '.').collect();
+    let (digits, exponent) = match digits.parse::<u32>() {
+        Ok(digit) if digits.len() == 1 && d.abs() < f64::MIN_POSITIVE => {
+            let (two_digits, exponent) = closest_two_digits(d.abs(), digit, exponent);
+            (two_digits.to_string(), exponent)
+        }
+        _ => (digits, exponent),
+    };
     if (-3..7).contains(&exponent) {
         if exponent >= 0 {
             let int_len = (exponent + 1) as usize;
@@ -44,6 +51,32 @@ pub fn java_double_to_string(d: f64) -> String {
         let rest = if rest.is_empty() { "0" } else { rest };
         format!("{sign}{first}.{rest}E{exponent}")
     }
+}
+
+/// When the shortest decimal that rounds to `v` has a single digit, `Double.toString` picks
+/// instead, among all decimals of one or two digits that round to `v`, the one closest to `v`.
+/// For a normal double the single digit followed by `0` is already that decimal; only the
+/// subnormals below 1e-322 have several candidates (`Double.MIN_VALUE` prints as `4.9E-324`,
+/// not `5.0E-324`). Returns the two digits (`10..=99`) and the exponent of the first one.
+fn closest_two_digits(v: f64, digit: u32, exponent: i32) -> (u32, i32) {
+    // `v` is subnormal, i.e. exactly `bits * 2^-1074`: measure everything in that unit, where
+    // `j * 10^x` is `j * 2^(1074 + x) / 5^-x`. The f64 evaluation is accurate to ~1e-13 while
+    // candidates are at least 0.2 units apart, and no candidate can tie exactly.
+    let target = v.to_bits() as f64;
+    let distance =
+        |j: u32, x: i32| (f64::from(j) * 2f64.powi(1074 + x) / 5f64.powi(-x) - target).abs();
+    let mut best = (distance(digit * 10, exponent - 1), digit * 10, exponent);
+    for x in [exponent - 2, exponent - 1] {
+        for j in 10u32..=99 {
+            let round_trips = format!("{j}e{x}")
+                .parse::<f64>()
+                .is_ok_and(|c| c.to_bits() == v.to_bits());
+            if round_trips && distance(j, x) < best.0 {
+                best = (distance(j, x), j, x + 1);
+            }
+        }
+    }
+    (best.1, best.2)
 }
 
 /// `UnsafeString.isLong`: optional leading spaces, optional sign, one or more ASCII digits.
