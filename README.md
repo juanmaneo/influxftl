@@ -237,6 +237,9 @@ Build arguments: `RUST_VERSION` (default from `rust-toolchain.toml`), `DEBIAN_VE
 
 - Work is committed **locally and iteratively**; nothing is pushed automatically.
   Each commit must leave `cargo xtask dev-check` green.
+- Long-running commands (`dev-check`, coverage, Kani) are best launched detached from the
+  editor or terminal session, e.g. `setsid nohup cargo xtask dev-check > /tmp/devcheck.log 2>&1 &`,
+  so that closing the editor never kills them.
 - Porting a function: read the Java source under `reference/`, add the Rust implementation
   in the matching `crates/warpscript/src/functions/<group>/` module, register it, add
   script-level tests (`assert_script!`) covering every branch, update `docs/FUNCTIONS.md`
