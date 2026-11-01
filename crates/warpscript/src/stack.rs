@@ -5,6 +5,7 @@
 //! compiled into the macro. The parsing state (block comments, multiline strings, open macros)
 //! therefore lives on the stack and spans lines, exactly like in Warp 10.
 
+use std::cell::RefCell;
 use std::rc::Rc;
 use std::time::Instant;
 
@@ -13,7 +14,7 @@ use indexmap::IndexMap;
 use crate::error::{Error, Result};
 use crate::format;
 use crate::functions::{self, Entry};
-use crate::macros::{Callable, Macro, Statement};
+use crate::macros::{Callable, Macro, StackFunction, Statement};
 use crate::value::{Context, Value};
 
 /// Default maximum recursion level (`DEFAULT_MAX_RECURSION_LEVEL`).
@@ -74,6 +75,13 @@ pub trait TokenResolver {
 
 /// Prefix of the token attributes that carry capabilities (`CAPABILITIES_PREFIX`).
 pub const CAPABILITIES_PREFIX: &str = ".cap:";
+
+/// The Warp 10 revision this runtime reproduces (`Revision.REVISION`), reported by `REV` and
+/// compared by `MINREV` / `MAXREV`.
+pub const REVISION: &str = "3.5.0";
+
+/// Where the interactive functions (`PEEK`, `PSTACK`…) print (`ATTRIBUTE_INTERACTIVE_WRITER`).
+pub type InteractiveWriter = Rc<RefCell<dyn std::io::Write>>;
 
 const MACRO_START: &str = "<%";
 const MACRO_END: &str = "%>";
@@ -187,6 +195,9 @@ pub struct Stack {
     /// `None` outside `GUARD`. `None` entries stand for Java's `null` name.
     exported_capabilities: Option<Vec<Option<String>>>,
     token_resolver: Option<Rc<dyn TokenResolver>>,
+    interactive_writer: Option<InteractiveWriter>,
+    /// `IMPORT` rules, longest alias first (`ATTRIBUTE_IMPORT_RULES`).
+    import_rules: Vec<(String, String)>,
 }
 
 impl Default for Stack {
@@ -232,6 +243,8 @@ impl Stack {
             capabilities: IndexMap::new(),
             exported_capabilities: None,
             token_resolver: None,
+            interactive_writer: None,
+            import_rules: Vec::new(),
             config: IndexMap::new(),
         }
     }
@@ -243,6 +256,11 @@ impl Stack {
     /// Number of visible elements.
     pub fn depth(&self) -> usize {
         self.elements.len() - self.offset
+    }
+
+    /// Number of elements including the hidden ones (what the depth limit applies to).
+    pub fn total_depth(&self) -> usize {
+        self.elements.len()
     }
 
     /// Push a value. The depth limit is enforced by [`Stack::check_depth`], which the
@@ -534,6 +552,60 @@ impl Stack {
     /// Install (or remove) the token resolver used by `CAPADD`.
     pub fn set_token_resolver(&mut self, resolver: Option<Rc<dyn TokenResolver>>) {
         self.token_resolver = resolver;
+    }
+
+    /// The interactive writer, if one was installed.
+    pub fn interactive_writer(&self) -> Option<InteractiveWriter> {
+        self.interactive_writer.clone()
+    }
+
+    /// Install (or remove) the writer used by `PEEK`, `PEEKN`, `NPEEK` and `PSTACK`.
+    pub fn set_interactive_writer(&mut self, writer: Option<InteractiveWriter>) {
+        self.interactive_writer = writer;
+    }
+
+    /// The `IMPORT` rules (alias → namespace), longest alias first.
+    pub fn import_rules(&self) -> &[(String, String)] {
+        &self.import_rules
+    }
+
+    /// Add an `IMPORT` rule, or remove the rule of `alias` when `imported` is `None`.
+    ///
+    /// Like Warp 10's `TreeMap` keyed by alias length, two aliases of the same length share
+    /// one rule: the newer namespace replaces the older one under the original alias.
+    pub fn import(&mut self, alias: &str, imported: Option<&str>) {
+        let slot = self
+            .import_rules
+            .iter()
+            .position(|(existing, _)| existing.len() == alias.len());
+        match (slot, imported) {
+            (Some(index), Some(namespace)) => {
+                namespace.clone_into(&mut self.import_rules[index].1);
+            }
+            (Some(index), None) => {
+                self.import_rules.remove(index);
+            }
+            (None, Some(namespace)) => {
+                let at = self
+                    .import_rules
+                    .iter()
+                    .position(|(existing, _)| existing.len() < alias.len())
+                    .unwrap_or(self.import_rules.len());
+                self.import_rules
+                    .insert(at, (alias.to_owned(), namespace.to_owned()));
+            }
+            (None, None) => {}
+        }
+    }
+
+    /// `rewriteMacroSymbol`: apply the first (longest) matching `IMPORT` rule to a macro name.
+    fn rewrite_macro_symbol<'a>(&self, symbol: &'a str) -> std::borrow::Cow<'a, str> {
+        for (prefix, substitute) in &self.import_rules {
+            if let Some(rest) = symbol.strip_prefix(prefix.as_str()) {
+                return std::borrow::Cow::Owned(format!("{substitute}{rest}"));
+            }
+        }
+        std::borrow::Cow::Borrowed(symbol)
     }
 
     /// The secure script codec, if one was installed.
@@ -1062,6 +1134,16 @@ impl Stack {
         self.macros[innermost].push(statement);
     }
 
+    /// The function bound to `name` as a value (`findFunction`): a `DEF`inition first, then
+    /// the WarpLib registry. Stack functions become [`StackFunction`] objects, function
+    /// objects (`mapper.sum`…) are returned as is.
+    pub fn function_ref(&self, name: &str) -> Result<Value> {
+        match self.find_function(name)? {
+            Found::Stack(callable) => Ok(StackFunction::value(callable)),
+            Found::Object(value) => Ok(value),
+        }
+    }
+
     /// Resolve a function name: `DEF`initions first, then the WarpLib registry.
     fn find_function(&self, name: &str) -> Result<Found> {
         if let Some(definition) = self.defined.get(name) {
@@ -1089,10 +1171,11 @@ impl Stack {
         }
     }
 
-    /// Look a macro up by name (`find`): symbol table only, since macro repositories are not
-    /// part of the runtime.
+    /// Look a macro up by name (`find`): the `IMPORT` rules are applied, then the symbol
+    /// table is consulted (macro repositories are not part of the runtime).
     pub fn find_macro(&self, symbol: &str) -> Result<Rc<Macro>> {
-        match self.symbols.get(symbol) {
+        let symbol = self.rewrite_macro_symbol(symbol);
+        match self.symbols.get(&*symbol) {
             Some(Value::Macro(m)) => Ok(Rc::clone(m)),
             Some(_) => Err(Error::new(format!("'{symbol}' is not a macro."))),
             None => Err(Error::new(format!("Unknown macro '{symbol}'"))),

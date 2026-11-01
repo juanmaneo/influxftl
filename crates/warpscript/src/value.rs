@@ -37,8 +37,9 @@ pub trait FunctionObject {
     fn type_name(&self) -> &'static str;
 
     /// WarpScript snippet that recreates this object (Java `toString()`), e.g. `3 mapper.add`.
+    /// The default is the reference snapshot of `NamedWarpScriptFunction`: `'name' FUNCREF`.
     fn snapshot(&self) -> String {
-        self.name().to_owned()
+        format!("'{}' FUNCREF", crate::format::url_encode(self.name()))
     }
 
     /// The concrete object, for the functions that consume a specific kind of object (a

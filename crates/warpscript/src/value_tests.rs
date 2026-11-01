@@ -218,7 +218,10 @@ fn display_matches_java_to_string() {
         "{a=1, b=null}"
     );
     assert_eq!(Value::from(Rc::new(Macro::new())).to_string(), "<% %>");
-    assert_eq!(Value::Function(Rc::new(Dummy)).to_string(), "dummy.fn");
+    assert_eq!(
+        Value::Function(Rc::new(Dummy)).to_string(),
+        "'dummy.fn' FUNCREF"
+    );
     assert_eq!(Value::Mark.to_string(), "MARK");
     assert_eq!(context().to_string(), "CONTEXT");
 }

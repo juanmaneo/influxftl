@@ -22,7 +22,7 @@ use base64::engine::general_purpose::STANDARD;
 use indexmap::IndexMap;
 
 use super::Entry;
-use super::args::{fail, fail_with_cause, pop_long, pop_string};
+use super::args::{fail_with_cause, pop_string};
 use super::misc::ATTRIBUTE_JSON_STRICT;
 use crate::error::{Error, Result};
 use crate::format::java_double_to_string;
@@ -1061,14 +1061,17 @@ fn jsoncompact(stack: &mut Stack) -> Result<()> {
     Ok(())
 }
 
-/// `MAXJSON`: raise (or lower) the JSON size limit, up to the hard limit. The capability
-/// check of Warp 10 (`maxjson` / `limits`) has no equivalent here and is not enforced.
+/// `MAXJSON`: raise (or lower) the JSON size limit, up to the `maxjson` capability value or
+/// the hard limit (requires the `maxjson` or `limits` capability).
 fn maxjson(stack: &mut Stack) -> Result<()> {
-    let limit = pop_long(stack, "MAXJSON", "expects a numeric (long) limit.")?;
-    let max = stack.hard_limits.max_json;
-    if limit > max {
-        return Err(fail("MAXJSON", &format!("cannot extend limit past {max}")));
-    }
+    let hard = stack.hard_limits.max_json;
+    let limit = super::limits::pop_limit(
+        stack,
+        "MAXJSON",
+        "maxjson",
+        hard,
+        "expects a numeric (long) limit.",
+    )?;
     stack.limits.max_json = limit;
     Ok(())
 }

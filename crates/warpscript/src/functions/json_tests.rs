@@ -166,14 +166,14 @@ fn tojson_bytes_and_objects() {
     );
     assert_eq!(render(&Value::bytes([]), false, false), "\"\"");
     assert_eq!(json("<% 1 2 + %> ->JSON"), "\"<% 1 2 + %>\"");
-    assert_eq!(json("test.object ->JSON"), "\"test.object\"");
+    assert_eq!(json("test.object ->JSON"), "\"'test.object' FUNCREF\"");
     assert_eq!(json("'01' HEX-> BYTESTOBITS ->JSON"), "null");
     assert_eq!(json("MARK ->JSON"), "null");
     assert_eq!(json("SAVE ->JSON"), "null");
     assert_eq!(json("'a' MATCHER ->JSON"), "null");
     assert_eq!(
         json("[ <% 1 2 + %> test.object 'a' MATCHER 'A' ] ->JSON"),
-        "[\"<% 1 2 + %>\",\"test.object\",null,\"A\"]"
+        "[\"<% 1 2 + %>\",\"'test.object' FUNCREF\",null,\"A\"]"
     );
     let context = top("SAVE");
     assert_eq!(
@@ -263,7 +263,7 @@ fn tojson_map_keys() {
     );
     assert_eq!(
         json("{ <% 1 2 + %> 1 test.object 2 '01' HEX-> BYTESTOBITS 3 } ->JSON"),
-        "{\"<% 1 2 + %>\":1,\"test.object\":2,\"{0}\":3}"
+        "{\"<% 1 2 + %>\":1,\"'test.object' FUNCREF\":2,\"{0}\":3}"
     );
     assert_eq!(json("{ [ 1 2 ] ->SET 1 } ->JSON"), "{\"[1, 2]\":1}");
     let keys = map(vec![
@@ -457,6 +457,15 @@ fn maxjson() {
     assert_fails("MAXJSON", "Empty stack.");
     // The hard limit cannot be exceeded (default stack: 20 MB).
     let mut stack = Stack::new();
+    let err = stack.exec("20971521 MAXJSON").unwrap_err();
+    assert!(
+        err.to_string()
+            .contains("MAXJSON missing capability 'maxjson' or 'limits'."),
+        "{err}"
+    );
+    stack
+        .capabilities_mut()
+        .insert("limits".to_owned(), String::new());
     let err = stack.exec("20971521 MAXJSON").unwrap_err();
     assert!(
         err.to_string()

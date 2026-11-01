@@ -257,10 +257,10 @@ objects and `NULL`, in strict and loose mode, compact and pretty. The difference
   booleans, lists, maps, sets, bit sets, macros nor named functions (`MARK`, saved contexts,
   `MATCHER` objects) are rendered with the runtime's `TOSTRING` text (`MARK`, `CONTEXT`,
   `'re' MATCHER`) instead of Java's default `Object.toString()`.
-- **`MAXJSON`** does not check the `maxjson` / `limits` capabilities (there is no capability
-  system yet) and therefore never raises `MAXJSON missing capability 'maxjson' or 'limits'.`;
-  the ceiling is the hard limit (`warpscript.maxjson.hard` in Warp 10, `Stack::hard_limits` here)
-  with the Java message `MAXJSON cannot extend limit past <limit>`.
+- **`MAXJSON`** checks the `maxjson` / `limits` capabilities like Warp 10 (see §12); the
+  ceiling is the `maxjson` capability value or the hard limit (`warpscript.maxjson.hard` in
+  Warp 10, `Stack::hard_limits` here) with the Java message `MAXJSON cannot extend limit past
+  <limit>`.
 - **Not ported yet.** The serializers of Geo Time Series, GTS encoders, `Metadata`,
   `RealVector` / `RealMatrix` and audit statements (`io.warp10.json`), and the
   `JsonUtils.addTransformer` extension point: objects without a serializer are written as
@@ -351,3 +351,34 @@ these differences:
 - **`CAPGET` with a `LIST`** on a stack that was granted no capability at all returns an empty
   map, like a Warp 10 stack without a `Capabilities` object; once at least one capability is
   granted, missing names map to `NULL` as in Warp 10.
+
+## 13. Runtime introspection and control
+
+- **Function objects render as `'name' FUNCREF`.** Like `NamedWarpScriptFunction.toString()`,
+  a function object on the stack (`mapper.sum`, the result of `FUNCREF`…) is snapshot and
+  JSON-serialised as `'name' FUNCREF`; inside a macro, stack functions keep their bare name.
+- **`REV`** reports `3.5.0`, the Warp 10 revision this runtime reproduces (`Stack::REVISION`),
+  rather than a build-specific string; `MINREV` / `MAXREV` compare against it.
+- **`DEREF`** returns a modified copy of the macro; Warp 10 modifies the macro object in place,
+  which was observable through other references to the same macro.
+- **`STMTPOS`**, **`LINEON`** / **`LINEOFF`**, **`ECHOON`** / **`ECHOOFF`**, **`TIMEON`** /
+  **`TIMEOFF`**, **`DEBUGON`** / **`NDEBUGON`** / **`DEBUGOFF`** and **`TIMINGS`** /
+  **`NOTIMINGS`** record their flags as stack attributes for the host (interactive console,
+  HTTP endpoint) to honour; statement positions (`last.stmtpos`, `last.errorpos`) and per-line
+  timings (`ELAPSED`) are not produced by the interpreter itself.
+- **`PEEK`, `PEEKN`, `NPEEK`, `PSTACK`** print to the writer installed by the host
+  (`Stack::set_interactive_writer`) and do nothing without one, like Warp 10 without an
+  interactive writer attribute.
+- **`CALL`** (external subprocesses) is not supported and fails with `CALL Not supported.`;
+  **`EXTLOADED`** is always `false` (no Java extension can be loaded).
+- **`REPORT`** produces the revision and runtime sections only (no JVM memory, Sensision
+  metrics, extensions or plugins); it still requires the `report` capability.
+- **`FUNCTIONS`** lists the functions in alphabetical order (Warp 10: hash order).
+- **`SYMBOLS`**, **`SNAPSHOTALL`**, **`CAPGET`** and the other functions enumerating a Java
+  `HashMap` return insertion order instead of hash order.
+- **`IMPORT`** reproduces the Warp 10 rule table keyed by alias length: two aliases of the
+  same length share one rule (the later namespace replaces the earlier one under the first
+  alias), and removing an alias removes the rule of that length.
+- **`GUARD`** failures are `WarpScriptATCException`s wrapped as `Line #n (Exception in GUARDed
+  macro.)` at the top level; the exception class is reported by `ERROR` as
+  `class io.warp10.script.WarpScriptATCException`.

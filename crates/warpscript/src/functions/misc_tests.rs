@@ -8,6 +8,7 @@ use crate::error::{Error, Result};
 use crate::functions::misc::{
     ATTRIBUTE_INFOMODE, ATTRIBUTE_JSON_STRICT, ATTRIBUTE_MACRO_TTL, ATTRIBUTE_SECURE_KEY,
 };
+use crate::functions::symbols::ATTRIBUTE_IN_XEVAL;
 use crate::stack::{Limits, SecureCodec, SecureScript, Stack};
 use crate::tests::{assert_fails, assert_stack, assert_top, exec};
 use crate::value::Value;
@@ -59,16 +60,31 @@ fn info_and_attributes() {
     stack.exec("{ } INFO 'not reached'").unwrap();
     assert_eq!(stack.depth(), 1);
     assert_eq!(stack.pop().unwrap().to_string(), "{}");
-    // Errors while re-evaluating the snapshot are reported: a CONTEXT is replaced by a
-    // comment, so the `PUT` of its entry runs short of operands.
+    // A map nested too deep cannot be snapshot: the error is reported.
     let Value::Map(doc) = crate::tests::top("{ 'name' 'doc' }") else {
         panic!("not a map");
     };
-    doc.borrow_mut()
-        .insert(Value::from("ctx"), crate::tests::top("SAVE"));
+    let mut nested = Value::Long(1);
+    for _ in 0..20 {
+        nested = Value::list(vec![nested]);
+    }
+    doc.borrow_mut().insert(Value::from("deep"), nested);
     stack.push(Value::Map(doc));
     let err = stack.exec("INFO").unwrap_err();
-    assert!(err.to_string().contains("Empty stack."), "{err}");
+    assert!(
+        err.to_string()
+            .contains("Recursive data structures exceeded 16 levels."),
+        "{err}"
+    );
+    assert!(stack.attribute(ATTRIBUTE_IN_XEVAL).is_none());
+    // The xeval attribute is left alone when it was already set.
+    stack.set_attribute(ATTRIBUTE_IN_XEVAL, Some(Value::from(true)));
+    stack.exec("{ 'a' 1 } INFO").unwrap();
+    assert_eq!(stack.pop().unwrap().to_string(), "{a=1}");
+    assert_eq!(
+        stack.attribute(ATTRIBUTE_IN_XEVAL),
+        Some(&Value::from(true))
+    );
     let stack = exec("JSONSTRICT");
     assert_eq!(
         stack.attribute(ATTRIBUTE_JSON_STRICT),

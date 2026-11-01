@@ -1,27 +1,83 @@
 //! Rendering of values as WarpScript source (`SNAPSHOT`, macro `toString`).
 //!
-//! Mirrors `SNAPSHOT.addElement` in its non-readable form: every element is followed by a
-//! space, strings are percent-encoded, containers are rebuilt with `[] … +!`, `{} … PUT` and
-//! `() … +!`.
+//! Mirrors `SNAPSHOT.addElement`: every element is followed by a space; in the default form
+//! strings are percent-encoded and containers are rebuilt with `[] … +!`, `{} … PUT` and
+//! `() … +!`, in the *readable* form (`SNAPSHOTREADABLE`) strings only escape `%`, `'` and
+//! control characters and containers use the `[ … ]`, `{ … }` and `( … )` syntax.
 
 use crate::encoding::opb64_encode;
-use crate::format::{java_double_to_string, url_encode};
+use crate::error::{Error, Result};
+use crate::format::{java_double_to_string, snapshot_encode_readable, url_encode};
+use crate::macros::{Macro, Statement};
 use crate::value::Value;
 
-/// Maximum nesting of containers before giving up (`SNAPSHOT.MAX_RECURSION_LEVEL`).
-const MAX_RECURSION_LEVEL: usize = 1000;
+/// Maximum nesting of elements before giving up (`SNAPSHOT.MAX_RECURSION_LEVEL`).
+const MAX_RECURSION_LEVEL: usize = 16;
 
-/// WarpScript source that recreates `value`, followed by a space.
+/// WarpScript source that recreates `value`, followed by a space. Structures nested too deep
+/// are replaced by the comment `Macro.snapshot` emits in that case.
 pub fn value_snapshot(value: &Value) -> String {
     let mut out = String::new();
-    append(&mut out, value, 0);
+    if append(&mut out, value, 1, false).is_err() {
+        out = format!(
+            "/* Error while snapshoting element of type '{}' */ ",
+            value.type_name()
+        );
+    }
     out
 }
 
-fn append(out: &mut String, value: &Value, depth: usize) {
-    if depth >= MAX_RECURSION_LEVEL {
-        out.push_str("/* Recursive data structures exceeded 1000 levels. */ ");
-        return;
+/// `SNAPSHOT.addElement`: append the source of `value` (and a space) to `out`, in the
+/// readable form when `readable` is set. Fails with `Recursive data structures exceeded 16
+/// levels.` on structures nested too deep.
+pub fn add_element(out: &mut String, value: &Value, readable: bool) -> Result<()> {
+    append(out, value, 1, readable)
+}
+
+/// `Macro.snapshot(hideSecure)`: the source of the macro, with every statement that cannot
+/// be rendered replaced by a comment.
+pub fn macro_snapshot(m: &Macro, hide_secure: bool) -> String {
+    macro_snapshot_at(m, hide_secure, 1)
+}
+
+fn macro_snapshot_at(m: &Macro, hide_secure: bool, depth: usize) -> String {
+    let mut out = String::from("<% ");
+    if m.is_secure() && hide_secure {
+        out.push_str("/* Secure Macro */ ");
+    } else {
+        for stmt in &m.statements {
+            match stmt {
+                Statement::Push(Value::Macro(inner)) => {
+                    out.push_str(&macro_snapshot_at(inner, hide_secure, depth));
+                    out.push(' ');
+                }
+                Statement::Push(value) => {
+                    let mut element = String::new();
+                    if append(&mut element, value, depth, false).is_ok() {
+                        out.push_str(&element);
+                    } else {
+                        out.push_str(&format!(
+                            "/* Error while snapshoting element of type '{}' */ ",
+                            value.type_name()
+                        ));
+                    }
+                }
+                Statement::Call(callable) => {
+                    out.push_str(callable.name());
+                    out.push(' ');
+                }
+            }
+        }
+    }
+    out.push_str("%>");
+    out
+}
+
+fn append(out: &mut String, value: &Value, depth: usize, readable: bool) -> Result<()> {
+    if depth > MAX_RECURSION_LEVEL {
+        return Err(Error::new(format!(
+            "Recursive data structures exceeded {MAX_RECURSION_LEVEL} levels."
+        )));
     }
     match value {
         Value::Null => out.push_str("NULL "),
@@ -37,7 +93,11 @@ fn append(out: &mut String, value: &Value, depth: usize) {
         }
         Value::String(s) => {
             out.push('\'');
-            out.push_str(&url_encode(s));
+            if readable {
+                out.push_str(&snapshot_encode_readable(s));
+            } else {
+                out.push_str(&url_encode(s));
+            }
             out.push_str("' ");
         }
         Value::Bytes(b) => {
@@ -51,29 +111,55 @@ fn append(out: &mut String, value: &Value, depth: usize) {
             out.push_str("' OPB64-> BYTESTOBITS ");
         }
         Value::List(list) => {
-            out.push_str("[] ");
-            for item in list.borrow().iter() {
-                append(out, item, depth + 1);
-                out.push_str("+! ");
+            if readable {
+                out.push_str("[ ");
+                for item in list.borrow().iter() {
+                    append(out, item, depth + 1, true)?;
+                }
+                out.push_str("] ");
+            } else {
+                out.push_str("[] ");
+                for item in list.borrow().iter() {
+                    append(out, item, depth + 1, false)?;
+                    out.push_str("+! ");
+                }
             }
         }
         Value::Set(set) => {
-            out.push_str("() ");
-            for item in set.borrow().iter() {
-                append(out, item, depth + 1);
-                out.push_str("+! ");
+            if readable {
+                out.push_str("( ");
+                for item in set.borrow().iter() {
+                    append(out, item, depth + 1, true)?;
+                }
+                out.push_str(") ");
+            } else {
+                out.push_str("() ");
+                for item in set.borrow().iter() {
+                    append(out, item, depth + 1, false)?;
+                    out.push_str("+! ");
+                }
             }
         }
         Value::Map(map) => {
-            out.push_str("{} ");
-            for (k, v) in map.borrow().iter() {
-                append(out, v, depth + 1);
-                append(out, k, depth + 1);
-                out.push_str("PUT ");
+            if readable {
+                out.push_str("{\n");
+                for (k, v) in map.borrow().iter() {
+                    append(out, k, depth + 1, true)?;
+                    append(out, v, depth + 1, true)?;
+                    out.push('\n');
+                }
+                out.push_str("} ");
+            } else {
+                out.push_str("{} ");
+                for (k, v) in map.borrow().iter() {
+                    append(out, v, depth + 1, false)?;
+                    append(out, k, depth + 1, false)?;
+                    out.push_str("PUT ");
+                }
             }
         }
         Value::Macro(m) => {
-            out.push_str(&m.snapshot(true));
+            out.push_str(&macro_snapshot_at(m, true, depth + 1));
             out.push(' ');
         }
         Value::Function(f) => {
@@ -81,8 +167,8 @@ fn append(out: &mut String, value: &Value, depth: usize) {
             out.push(' ');
         }
         Value::Mark => out.push_str("MARK "),
-        Value::Context(_) => {
-            out.push_str("/* Error while snapshoting element of type 'CONTEXT' */ ");
-        }
+        // Unsupported types keep their stack level as an informative string.
+        Value::Context(_) => out.push_str("'UNSUPPORTED:CONTEXT' "),
     }
+    Ok(())
 }

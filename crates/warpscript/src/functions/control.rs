@@ -468,7 +468,7 @@ fn stop(_stack: &mut Stack) -> Result<()> {
     Err(Error::Stop("STOP".to_owned()))
 }
 
-fn r#try(stack: &mut Stack) -> Result<()> {
+pub(crate) fn r#try(stack: &mut Stack) -> Result<()> {
     let finally = pop_macro(
         stack,
         "TRY",
@@ -497,7 +497,7 @@ fn r#try(stack: &mut Stack) -> Result<()> {
     result
 }
 
-fn rethrow(stack: &mut Stack) -> Result<()> {
+pub(crate) fn rethrow(stack: &mut Stack) -> Result<()> {
     match stack.last_error() {
         Some(err) => Err(err.clone()),
         None => Ok(()),
@@ -512,6 +512,7 @@ fn error_type(err: &Error) -> &'static str {
         Error::Stop(_) => "class io.warp10.script.WarpScriptStopException",
         Error::Break => "class io.warp10.script.WarpScriptLoopBreakException",
         Error::Continue => "class io.warp10.script.WarpScriptLoopContinueException",
+        Error::Abort(_) => "class io.warp10.script.WarpScriptATCException",
     }
 }
 

@@ -11,11 +11,13 @@ pub mod control;
 pub mod crypto;
 pub mod functional;
 pub mod json;
+pub mod limits;
 pub mod math;
 pub mod misc;
 pub mod numerical;
 pub mod operators;
 pub mod pack;
+pub mod runtime;
 pub mod stack_ops;
 pub mod strings;
 pub mod symbols;
@@ -56,6 +58,9 @@ const TABLES: &[&[(&str, Entry)]] = &[
     crypto::FUNCTIONS,
     compression::FUNCTIONS,
     capabilities::FUNCTIONS,
+    limits::FUNCTIONS,
+    runtime::FUNCTIONS,
+    runtime::SNAPSHOT_FUNCTIONS,
 ];
 
 static REGISTRY: OnceLock<HashMap<&'static str, &'static Entry>> = OnceLock::new();
@@ -150,6 +155,8 @@ mod functional_tests;
 #[cfg(test)]
 mod json_tests;
 #[cfg(test)]
+mod limits_tests;
+#[cfg(test)]
 mod math_tests;
 #[cfg(test)]
 mod misc_tests;
@@ -159,6 +166,8 @@ mod numerical_tests;
 mod operators_tests;
 #[cfg(test)]
 mod pack_tests;
+#[cfg(test)]
+mod runtime_tests;
 #[cfg(test)]
 mod stack_ops_tests;
 #[cfg(test)]

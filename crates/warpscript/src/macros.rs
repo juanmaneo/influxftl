@@ -1,5 +1,6 @@
 //! Macros: compiled sequences of statements (`<% … %>`).
 
+use std::any::Any;
 use std::cell::{Cell, RefCell};
 use std::fmt;
 use std::rc::Rc;
@@ -7,7 +8,7 @@ use std::rc::Rc;
 use crate::error::{Error, Result};
 use crate::snapshot;
 use crate::stack::Stack;
-use crate::value::Value;
+use crate::value::{FunctionObject, Value};
 
 /// Signature of a native stack function: it consumes and produces values on the stack.
 pub type StackFn = fn(&mut Stack) -> Result<()>;
@@ -52,6 +53,43 @@ impl Callable {
             Callable::Native { func, .. } => func(stack),
             Callable::Defined { body, .. } => stack.exec_macro(body),
             Callable::Undefined { name } => Err(Error::new(format!("{name} is undefined."))),
+        }
+    }
+}
+
+/// A stack function as a value (`FUNCREF`, `MACRO->`): a `WarpScriptStackFunction` object
+/// on the stack, which `EVAL` applies and `->MACRO` turns back into a call.
+#[derive(Clone, Debug)]
+pub struct StackFunction(pub Callable);
+
+impl FunctionObject for StackFunction {
+    fn name(&self) -> &str {
+        self.0.name()
+    }
+
+    fn type_name(&self) -> &'static str {
+        "FUNCTION"
+    }
+
+    fn as_any(&self) -> Option<&dyn Any> {
+        Some(self)
+    }
+}
+
+impl StackFunction {
+    /// The function object wrapping `callable`.
+    pub fn value(callable: Callable) -> Value {
+        Value::Function(Rc::new(StackFunction(callable)))
+    }
+
+    /// The callable behind `value`, when it is a stack function object.
+    pub fn of(value: &Value) -> Option<&Callable> {
+        match value {
+            Value::Function(f) => f
+                .as_any()
+                .and_then(|any| any.downcast_ref::<StackFunction>())
+                .map(|f| &f.0),
+            _ => None,
         }
     }
 }
@@ -147,26 +185,7 @@ impl Macro {
     /// WarpScript source that recreates the macro (`Macro.snapshot`). Secure macros are
     /// rendered as `<% /* Secure Macro */ %>` unless `hide_secure` is `false`.
     pub fn snapshot(&self, hide_secure: bool) -> String {
-        let mut out = String::from("<% ");
-        if self.is_secure() && hide_secure {
-            out.push_str("/* Secure Macro */ ");
-        } else {
-            for stmt in &self.statements {
-                match stmt {
-                    Statement::Push(Value::Macro(inner)) => {
-                        out.push_str(&inner.snapshot(hide_secure));
-                        out.push(' ');
-                    }
-                    Statement::Push(value) => out.push_str(&snapshot::value_snapshot(value)),
-                    Statement::Call(callable) => {
-                        out.push_str(callable.name());
-                        out.push(' ');
-                    }
-                }
-            }
-        }
-        out.push_str("%>");
-        out
+        snapshot::macro_snapshot(self, hide_secure)
     }
 }
 

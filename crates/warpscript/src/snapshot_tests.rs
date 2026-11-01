@@ -5,8 +5,8 @@ use std::rc::Rc;
 use indexmap::{IndexMap, IndexSet};
 
 use super::bitset::BitSet;
-use super::macros::Macro;
-use super::snapshot::value_snapshot;
+use super::macros::{Macro, Statement};
+use super::snapshot::{add_element, value_snapshot};
 use super::tests::top;
 use super::value::{Context, FunctionObject, Value};
 
@@ -45,11 +45,11 @@ fn scalars() {
             registers: Vec::new(),
             defined: IndexMap::new(),
         }))),
-        "/* Error while snapshoting element of type 'CONTEXT' */ "
+        "'UNSUPPORTED:CONTEXT' "
     );
     assert_eq!(
         value_snapshot(&Value::Function(Rc::new(Dummy))),
-        "dummy.fn "
+        "'dummy.fn' FUNCREF "
     );
     assert_eq!(
         value_snapshot(&Value::from(Rc::new(Macro::new()))),
@@ -83,8 +83,87 @@ fn recursive_structures_are_cut() {
         panic!("not a list");
     };
     list.borrow_mut().push(inner.clone());
-    let snapshot = value_snapshot(&inner);
-    assert!(snapshot.contains("/* Recursive data structures exceeded 1000 levels. */ "));
+    // `value_snapshot` falls back to the comment `Macro.snapshot` emits…
+    assert_eq!(
+        value_snapshot(&inner),
+        "/* Error while snapshoting element of type 'LIST' */ "
+    );
+    // …while `addElement` reports the error, past 16 levels.
+    let mut out = String::new();
+    assert_eq!(
+        add_element(&mut out, &inner, false).unwrap_err().message(),
+        "Recursive data structures exceeded 16 levels."
+    );
+    let mut nested = Value::Long(1);
+    for _ in 0..15 {
+        nested = Value::list(vec![nested]);
+    }
+    let mut out = String::new();
+    add_element(&mut out, &nested, false).unwrap();
+    assert_eq!(out.matches("[] ").count(), 15);
+    let mut out = String::new();
+    assert!(add_element(&mut out, &Value::list(vec![nested]), false).is_err());
+    // A macro statement nested too deep becomes a comment inside the macro; the macro
+    // itself does not count as a level.
+    let deep = |levels: usize| {
+        let mut nested = Value::Long(1);
+        for _ in 0..levels {
+            nested = Value::list(vec![nested]);
+        }
+        Value::from(Rc::new(Macro::from_statements(vec![Statement::Push(
+            nested,
+        )])))
+    };
+    // `Macro.toString()`: the statements are the first level (15 lists + the scalar = 16).
+    assert_eq!(
+        deep(16).to_string(),
+        "<% /* Error while snapshoting element of type 'LIST' */ %>"
+    );
+    assert!(deep(15).to_string().starts_with("<% [] [] [] "));
+    // `SNAPSHOT.addElement(macro)`: the macro itself is the first level.
+    assert_eq!(
+        value_snapshot(&deep(15)),
+        "<% /* Error while snapshoting element of type 'LIST' */ %> "
+    );
+    assert!(value_snapshot(&deep(14)).starts_with("<% [] [] [] "));
+    // Nested macros do not add a level.
+    let inner = deep(14);
+    let outer = Value::from(Rc::new(Macro::from_statements(vec![Statement::Push(
+        inner,
+    )])));
+    assert!(!value_snapshot(&outer).contains("/* Error"));
+    assert!(value_snapshot(&Value::list(vec![outer])).contains("/* Error"));
+}
+
+#[test]
+fn readable_snapshots() {
+    let mut out = String::new();
+    let value = top("{ 'k' [ 1 'a%25b' ( true NULL ) ] 'it%27s' 2.5 }");
+    add_element(&mut out, &value, true).unwrap();
+    assert_eq!(
+        out,
+        "{\n'k' [ 1 'a%25b' ( true NULL ) ] \n'it%27s' 2.5 \n} "
+    );
+    let mut out = String::new();
+    add_element(&mut out, &top("'tab\there'"), true).unwrap();
+    assert_eq!(out, "'tab%09here' ");
+    // Structures nested too deep fail in every container, readable or not.
+    let mut deep = Value::Long(1);
+    for _ in 0..16 {
+        deep = Value::list(vec![deep]);
+    }
+    let containers = [
+        Value::list(vec![deep.clone()]),
+        Value::set([deep.clone()].into_iter().collect()),
+        Value::map(IndexMap::from([(Value::from("k"), deep.clone())])),
+        Value::map(IndexMap::from([(deep, Value::Long(1))])),
+    ];
+    for container in &containers {
+        for readable in [false, true] {
+            let mut out = String::new();
+            assert!(add_element(&mut out, container, readable).is_err());
+        }
+    }
 }
 
 #[test]

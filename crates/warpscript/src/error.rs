@@ -22,6 +22,9 @@ pub enum Error {
     Break,
     /// `CONTINUE`: skip to the next iteration of the innermost loop.
     Continue,
+    /// A plain `WarpScriptATCException` (`GUARD` failures): propagates unwrapped like the
+    /// other signals but is a failure at the top level.
+    Abort(String),
 }
 
 /// The payload of a `WarpScriptException`: a message and an optional cause chain.
@@ -60,7 +63,7 @@ impl Error {
         match self {
             Error::Script(err) => err.message.clone(),
             Error::Return => "RETURN".to_owned(),
-            Error::Stop(msg) => msg.clone(),
+            Error::Stop(msg) | Error::Abort(msg) => msg.clone(),
             Error::Break => format!("Exception at BREAK: {LOOP_ONLY}"),
             Error::Continue => format!("Exception at CONTINUE: {LOOP_ONLY}"),
         }

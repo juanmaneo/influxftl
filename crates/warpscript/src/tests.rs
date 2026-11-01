@@ -6,9 +6,19 @@ use crate::error::Error;
 use crate::stack::{Limits, Stack};
 use crate::value::Value;
 
+/// A fresh stack with generous limits and the `limits` capability (so that tests may use
+/// `MAXOPS`, `MAXJSON`… freely), like `MemoryWarpScriptStack.maxLimits()`.
+pub(crate) fn test_stack() -> Stack {
+    let mut stack = Stack::with_limits(Limits::unlimited());
+    stack
+        .capabilities_mut()
+        .insert("limits".to_owned(), String::new());
+    stack
+}
+
 /// Execute `script` on a fresh stack with generous limits and return the resulting stack.
 pub(crate) fn exec(script: &str) -> Stack {
-    let mut stack = Stack::with_limits(Limits::unlimited());
+    let mut stack = test_stack();
     if let Err(err) = stack.exec_checked(script) {
         panic!("script failed: {err}\n{script}");
     }
@@ -28,7 +38,7 @@ pub(crate) fn top(script: &str) -> Value {
 
 /// Execute `script`, which must fail, and return the error.
 pub(crate) fn fail(script: &str) -> Error {
-    let mut stack = Stack::with_limits(Limits::unlimited());
+    let mut stack = test_stack();
     match stack.exec_checked(script) {
         Ok(()) => panic!("script did not fail:\n{script}"),
         Err(err) => err,

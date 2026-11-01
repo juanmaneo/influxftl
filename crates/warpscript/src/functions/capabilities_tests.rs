@@ -57,10 +57,14 @@ fn capget_and_capcheck() {
         map(&[("b", Value::from("two")), ("c", Value::Null)])
     );
     // Without any capability there is no `Capabilities` object: nothing is reported.
-    assert_top("[ 'a' ] CAPGET", map(&[]));
-    assert_top("NULL CAPGET", map(&[]));
-    assert_top("'a' CAPGET", Value::Null);
-    assert_top("'a' CAPCHECK", false);
+    let mut none = granted(&[]);
+    assert_eq!(run(&mut none, "[ 'a' ] CAPGET"), map(&[]));
+    assert_eq!(run(&mut none, "NULL CAPGET"), map(&[]));
+    assert_eq!(run(&mut none, "'a' CAPGET"), Value::Null);
+    assert_eq!(run(&mut none, "'a' CAPCHECK"), Value::Boolean(false));
+    // The test stacks are granted `limits` only.
+    assert_top("[ 'a' ] CAPGET", map(&[("a", Value::Null)]));
+    assert_top("NULL CAPGET", map(&[("limits", Value::from(""))]));
     assert_fails(
         "1 CAPGET",
         "CAPGET expects a capability name (STRING) or a LIST thereof.",
@@ -88,7 +92,11 @@ fn capdel() {
     assert_eq!(run(&mut stack, "NULL CAPGET"), map(&[]));
     assert_eq!(stack.depth(), 0);
     // Deleting from a stack without capabilities is a no-op.
-    assert_top("'x' CAPDEL [ 'x' ] CAPDEL NULL CAPDEL 1", 1);
+    let mut none = granted(&[]);
+    assert_eq!(
+        run(&mut none, "'x' CAPDEL [ 'x' ] CAPDEL NULL CAPDEL 1"),
+        Value::Long(1)
+    );
     assert_fails(
         "1 CAPDEL",
         "CAPDEL expects a capability name (STRING), a LIST thereof or NULL.",

@@ -5,6 +5,7 @@ use std::rc::Rc;
 use super::Entry;
 use super::args::{fail, pop_string};
 use crate::error::{Error, Result};
+use crate::macros::StackFunction;
 use crate::stack::Stack;
 use crate::value::Value;
 
@@ -197,8 +198,12 @@ fn run_register(stack: &mut Stack, index: i64, dedicated: bool) -> Result<()> {
     }
 }
 
-fn eval(stack: &mut Stack) -> Result<()> {
-    match stack.pop()? {
+pub(crate) fn eval(stack: &mut Stack) -> Result<()> {
+    let top = stack.pop()?;
+    if let Some(callable) = StackFunction::of(&top) {
+        return callable.clone().apply(stack);
+    }
+    match top {
         Value::String(script) => stack.exec_multi(&script),
         Value::Macro(m) => stack.exec_macro(&m),
         _ => Err(fail("EVAL", "expects a Macro, a function or a String.")),

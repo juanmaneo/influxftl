@@ -3,7 +3,7 @@
 use super::Entry;
 use super::args::{fail, pop_long, pop_map, pop_string};
 use crate::error::{Error, Result};
-use crate::snapshot::value_snapshot;
+use crate::snapshot::add_element;
 use crate::stack::Stack;
 use crate::value::Value;
 
@@ -78,15 +78,29 @@ fn typeof_fn(stack: &mut Stack) -> Result<()> {
 }
 
 /// `INFO`: drop the documentation map, unless the info mode is on, in which case a copy of the
-/// map is left on the stack and the execution stops.
+/// map (snapshot and re-evaluated under `XEVAL` rules) is left on the stack and the
+/// execution stops.
 fn info(stack: &mut Stack) -> Result<()> {
     let doc = pop_map(stack, "INFO", "expects an info map on top of the stack.")?;
     if matches!(
         stack.attribute(ATTRIBUTE_INFOMODE),
         Some(Value::Boolean(true))
     ) {
-        let source = value_snapshot(&Value::Map(doc));
-        stack.exec_multi(&source)?;
+        let already_set = matches!(
+            stack.attribute(super::symbols::ATTRIBUTE_IN_XEVAL),
+            Some(Value::Boolean(true))
+        );
+        stack.set_attribute(
+            super::symbols::ATTRIBUTE_IN_XEVAL,
+            Some(Value::Boolean(true)),
+        );
+        let mut source = String::new();
+        let result = add_element(&mut source, &Value::Map(doc), false)
+            .and_then(|()| stack.exec_multi(&source));
+        if !already_set {
+            stack.set_attribute(super::symbols::ATTRIBUTE_IN_XEVAL, None);
+        }
+        result?;
         return Err(Error::Stop(String::new()));
     }
     Ok(())

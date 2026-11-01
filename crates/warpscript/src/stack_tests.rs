@@ -120,7 +120,10 @@ fn functions_and_macros() {
     assert_eq!(top("<% 1 2 %>").to_string(), "<% 1 2 %>");
     assert_eq!(top("<% <% 1 %> %>").to_string(), "<% <% 1 %> %>");
     assert_eq!(top("test.object").type_name(), "OPERATOR");
-    assert_eq!(top("<% test.object %>").to_string(), "<% test.object %>");
+    assert_eq!(
+        top("<% test.object %>").to_string(),
+        "<% 'test.object' FUNCREF %>"
+    );
 }
 
 #[test]
