@@ -119,7 +119,7 @@ fn isnull(stack: &mut Stack) -> Result<()> {
 // -----------------------------------------------------------------------------------------
 
 /// The error raised when the operating system cannot provide entropy.
-fn entropy_error(err: getrandom::Error) -> Error {
+pub(crate) fn entropy_error(err: getrandom::Error) -> Error {
     Error::new(format!(
         "Unable to obtain random data from the operating system ({err})."
     ))

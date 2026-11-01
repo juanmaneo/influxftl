@@ -6,8 +6,13 @@ use std::rc::Rc;
 
 use indexmap::{IndexMap, IndexSet};
 
+use super::bitset::BitSet;
 use super::macros::Macro;
 use super::value::{Context, FunctionObject, Value, double_to_long};
+
+fn bitset(bytes: &[u8]) -> Value {
+    Value::BitSet(Rc::new(BitSet::from_bytes(bytes)))
+}
 
 struct Dummy;
 
@@ -45,6 +50,7 @@ fn constructors_and_type_names() {
     assert_eq!(Value::from(String::from("s")).type_name(), "STRING");
     assert_eq!(Value::string("s").type_name(), "STRING");
     assert_eq!(Value::bytes([1u8]).type_name(), "BYTES");
+    assert_eq!(bitset(&[1]).type_name(), "BITSET");
     assert_eq!(Value::from(vec![Value::Null]).type_name(), "LIST");
     assert_eq!(Value::map(IndexMap::new()).type_name(), "MAP");
     assert_eq!(Value::set(IndexSet::new()).type_name(), "SET");
@@ -116,6 +122,10 @@ fn equality_follows_java() {
     let f = Value::Function(Rc::new(Dummy));
     assert_eq!(f, f.clone());
     assert_ne!(f, Value::Function(Rc::new(Dummy)));
+    assert!(Dummy.as_any().is_none());
+    assert_eq!(bitset(&[5, 0]), bitset(&[5]));
+    assert_ne!(bitset(&[5]), bitset(&[4]));
+    assert_ne!(bitset(&[5]), Value::bytes([5u8]));
     let c = context();
     assert_eq!(c, c.clone());
     assert_ne!(c, context());
@@ -151,6 +161,7 @@ fn hashing_is_consistent_with_equality() {
         Value::Double(f64::NAN),
         Value::from("s"),
         Value::bytes([1u8, 2]),
+        bitset(&[1, 2]),
         Value::list(vec![Value::Long(1)]),
         Value::map(IndexMap::from([(Value::from("k"), Value::Long(1))])),
         Value::set(IndexSet::from([Value::Long(1), Value::Long(2)])),
@@ -189,6 +200,7 @@ fn display_matches_java_to_string() {
     assert_eq!(Value::Double(1.0).to_string(), "1.0");
     assert_eq!(Value::from("s").to_string(), "s");
     assert_eq!(Value::bytes([1u8, 2, 3]).to_string(), "[B@3");
+    assert_eq!(bitset(&[5]).to_string(), "{0, 2}");
     assert_eq!(
         Value::list(vec![Value::Long(1), Value::from("a")]).to_string(),
         "[1, a]"

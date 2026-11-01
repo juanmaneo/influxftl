@@ -4,6 +4,7 @@ use std::rc::Rc;
 
 use indexmap::{IndexMap, IndexSet};
 
+use super::bitset::BitSet;
 use super::macros::Macro;
 use super::snapshot::value_snapshot;
 use super::tests::top;
@@ -32,6 +33,10 @@ fn scalars() {
     assert_eq!(
         value_snapshot(&Value::bytes(b"foobar")),
         "'OaxjNa4m' OPB64-> "
+    );
+    assert_eq!(
+        value_snapshot(&Value::BitSet(Rc::new(BitSet::from_bytes(b"foobar")))),
+        "'OaxjNa4m' OPB64-> BYTESTOBITS "
     );
     assert_eq!(value_snapshot(&Value::Mark), "MARK ");
     assert_eq!(

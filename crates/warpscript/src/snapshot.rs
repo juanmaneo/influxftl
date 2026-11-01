@@ -45,6 +45,11 @@ fn append(out: &mut String, value: &Value, depth: usize) {
             out.push_str(&opb64_encode(b));
             out.push_str("' OPB64-> ");
         }
+        Value::BitSet(b) => {
+            out.push('\'');
+            out.push_str(&opb64_encode(&b.to_bytes()));
+            out.push_str("' OPB64-> BYTESTOBITS ");
+        }
         Value::List(list) => {
             out.push_str("[] ");
             for item in list.borrow().iter() {

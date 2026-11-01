@@ -48,6 +48,19 @@ fn hex_round_trips() {
     );
     assert_eq!(
         hex_decode("zz").unwrap_err().to_string(),
-        "Invalid hexadecimal digit."
+        "Invalid hex character."
+    );
+    assert_eq!(
+        hex_decode("az").unwrap_err().to_string(),
+        "Invalid hex character."
+    );
+    // Lengths are counted in UTF-16 units like Java: one non-ASCII character is odd.
+    assert_eq!(
+        hex_decode("\u{e9}").unwrap_err().to_string(),
+        "Odd number of hexadecimal digits."
+    );
+    assert_eq!(
+        hex_decode("\u{e9}\u{e9}").unwrap_err().to_string(),
+        "Invalid hex character."
     );
 }

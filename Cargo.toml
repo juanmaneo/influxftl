@@ -17,6 +17,11 @@ warpscript = { path = "crates/warpscript", version = "0.1.0" }
 indexmap = "2"
 serde_json = "1"
 getrandom = "0.4"
+# Java-style regular expressions (lookaround, backreferences) for MATCH / MATCHER / REPLACE.
+fancy-regex = "0.20"
+# Guava `BaseEncoding.base64()` / `base64Url()` equivalents (`->B64`, `B64->`…). The default
+# `simd-unsafe` feature is left out: the pure Rust code path is plenty fast for script data.
+base64 = { version = "0.23", default-features = false, features = ["std"] }
 
 [workspace.lints.rust]
 unsafe_code = "forbid"

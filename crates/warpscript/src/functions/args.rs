@@ -13,6 +13,11 @@ pub fn fail(name: &str, message: &str) -> Error {
     Error::new(format!("{name} {message}"))
 }
 
+/// [`fail`] with a cause (`new WarpScriptException(getName() + " message", cause)`).
+pub fn fail_with_cause(name: &str, message: &str, cause: Error) -> Error {
+    Error::with_cause(format!("{name} {message}"), cause)
+}
+
 /// Pop a `MACRO`.
 pub fn pop_macro(stack: &mut Stack, name: &str, message: &str) -> Result<Rc<Macro>> {
     match stack.pop()? {
@@ -78,6 +83,24 @@ pub fn int_value(value: &Value) -> Option<i32> {
         Value::Double(d) => Some(*d as i32),
         _ => None,
     }
+}
+
+/// `GET.computeAndCheckIndex`: resolve a possibly negative index (counted from the end) into
+/// `0..size`, with the Java error messages when it is out of bounds.
+pub fn compute_and_check_index(index: i32, size: i32) -> Result<i32> {
+    let mut index = index;
+    if index < 0 {
+        index = index.wrapping_add(size);
+    } else if index >= size {
+        return Err(Error::new(format!("Index out of bound, {index} >= {size}")));
+    }
+    if index < 0 {
+        return Err(Error::new(format!(
+            "Index out of bound, {} < -{size}",
+            index.wrapping_sub(size)
+        )));
+    }
+    Ok(index)
 }
 
 /// `MemoryWarpScriptStack.getn`: pop the top of the stack as a count of elements, checked

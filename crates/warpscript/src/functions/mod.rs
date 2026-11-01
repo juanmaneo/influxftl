@@ -10,6 +10,7 @@ pub mod misc;
 pub mod numerical;
 pub mod operators;
 pub mod stack_ops;
+pub mod strings;
 pub mod symbols;
 
 use std::collections::HashMap;
@@ -40,6 +41,7 @@ const TABLES: &[&[(&str, Entry)]] = &[
     misc::FUNCTIONS,
     operators::FUNCTIONS,
     math::FUNCTIONS,
+    strings::FUNCTIONS,
 ];
 
 static REGISTRY: OnceLock<HashMap<&'static str, &'static Entry>> = OnceLock::new();
@@ -131,5 +133,7 @@ mod numerical_tests;
 mod operators_tests;
 #[cfg(test)]
 mod stack_ops_tests;
+#[cfg(test)]
+mod strings_tests;
 #[cfg(test)]
 mod symbols_tests;

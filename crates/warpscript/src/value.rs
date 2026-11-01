@@ -8,6 +8,7 @@
 //! `DOUBLE`, `NaN` equals `NaN` as a map key…). The numeric comparison used by `==`, `<`… is a
 //! separate function in the function library.
 
+use std::any::Any;
 use std::cell::RefCell;
 use std::fmt;
 use std::hash::{Hash, Hasher};
@@ -15,6 +16,7 @@ use std::rc::Rc;
 
 use indexmap::{IndexMap, IndexSet};
 
+use crate::bitset::BitSet;
 use crate::format::java_double_to_string;
 use crate::macros::Macro;
 
@@ -37,6 +39,12 @@ pub trait FunctionObject {
     /// WarpScript snippet that recreates this object (Java `toString()`), e.g. `3 mapper.add`.
     fn snapshot(&self) -> String {
         self.name().to_owned()
+    }
+
+    /// The concrete object, for the functions that consume a specific kind of object (a
+    /// `MATCHER` fed to `MATCH`…). Objects that are only ever applied keep the default `None`.
+    fn as_any(&self) -> Option<&dyn Any> {
+        None
     }
 }
 
@@ -66,6 +74,8 @@ pub enum Value {
     String(Rc<str>),
     /// `BYTES` (Java `byte[]`).
     Bytes(Rc<[u8]>),
+    /// `BITSET` (`java.util.BitSet`, immutable here).
+    BitSet(Rc<BitSet>),
     /// `LIST`.
     List(List),
     /// `MAP`.
@@ -117,6 +127,7 @@ impl Value {
             Value::Double(_) => "DOUBLE",
             Value::String(_) => "STRING",
             Value::Bytes(_) => "BYTES",
+            Value::BitSet(_) => "BITSET",
             Value::List(_) => "LIST",
             Value::Map(_) => "MAP",
             Value::Set(_) => "SET",
@@ -215,6 +226,7 @@ impl PartialEq for Value {
             (Value::Double(a), Value::Double(b)) => double_bits(*a) == double_bits(*b),
             (Value::String(a), Value::String(b)) => a == b,
             (Value::Bytes(a), Value::Bytes(b)) => a == b,
+            (Value::BitSet(a), Value::BitSet(b)) => a == b,
             (Value::List(a), Value::List(b)) => Rc::ptr_eq(a, b) || *a.borrow() == *b.borrow(),
             (Value::Map(a), Value::Map(b)) => Rc::ptr_eq(a, b) || *a.borrow() == *b.borrow(),
             (Value::Set(a), Value::Set(b)) => Rc::ptr_eq(a, b) || *a.borrow() == *b.borrow(),
@@ -238,6 +250,7 @@ impl Hash for Value {
             Value::Double(d) => double_bits(*d).hash(state),
             Value::String(s) => s.hash(state),
             Value::Bytes(b) => b.hash(state),
+            Value::BitSet(b) => b.hash(state),
             Value::List(l) => {
                 for item in l.borrow().iter() {
                     item.hash(state);
@@ -277,6 +290,7 @@ impl fmt::Display for Value {
             Value::Double(d) => f.write_str(&java_double_to_string(*d)),
             Value::String(s) => f.write_str(s),
             Value::Bytes(b) => write!(f, "[B@{:x}", b.len()),
+            Value::BitSet(b) => write!(f, "{b}"),
             Value::List(l) => {
                 f.write_str("[")?;
                 for (idx, item) in l.borrow().iter().enumerate() {

@@ -78,20 +78,19 @@ pub fn hex_encode(data: &[u8]) -> String {
     out
 }
 
-/// Decode a hexadecimal string (either case, no separators). Odd length or invalid digits
-/// are errors.
+/// `WarpHexDecoder.decode`: decode a hexadecimal string (either case, no separators). An odd
+/// number of characters (UTF-16 units, like Java) or an invalid digit are errors with the
+/// Java messages.
 pub fn hex_decode(text: &str) -> Result<Vec<u8>> {
-    let bytes = text.as_bytes();
-    if !bytes.len().is_multiple_of(2) {
+    if !text.encode_utf16().count().is_multiple_of(2) {
         return Err(Error::new("Odd number of hexadecimal digits."));
     }
-    let mut out = Vec::with_capacity(bytes.len() / 2);
-    for pair in bytes.as_chunks::<2>().0 {
-        let hi = (pair[0] as char).to_digit(16);
-        let lo = (pair[1] as char).to_digit(16);
-        match (hi, lo) {
+    let mut out = Vec::with_capacity(text.len() / 2);
+    let mut digits = text.chars().map(|c| c.to_digit(16));
+    while let Some(hi) = digits.next() {
+        match (hi, digits.next().flatten()) {
             (Some(hi), Some(lo)) => out.push((hi * 16 + lo) as u8),
-            _ => return Err(Error::new("Invalid hexadecimal digit.")),
+            _ => return Err(Error::new("Invalid hex character.")),
         }
     }
     Ok(out)

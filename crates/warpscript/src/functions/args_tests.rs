@@ -1,7 +1,8 @@
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
 use crate::functions::args::{
-    getn, int_value, pop_bool, pop_list, pop_long, pop_macro, pop_map, pop_number, pop_string,
+    compute_and_check_index, getn, int_value, pop_bool, pop_list, pop_long, pop_macro, pop_map,
+    pop_number, pop_string,
 };
 use crate::functions::{Entry, call, lookup, registered_names, registry};
 use crate::stack::Stack;
@@ -89,6 +90,28 @@ fn int_values_and_counts() {
     assert_eq!(getn(&mut stack).unwrap(), 2);
     let mut stack = Stack::new();
     assert_eq!(getn(&mut stack).unwrap_err().to_string(), "Empty stack.");
+}
+
+#[test]
+fn indices_are_checked_like_get() {
+    assert_eq!(compute_and_check_index(0, 3).unwrap(), 0);
+    assert_eq!(compute_and_check_index(2, 3).unwrap(), 2);
+    assert_eq!(compute_and_check_index(-1, 3).unwrap(), 2);
+    assert_eq!(compute_and_check_index(-3, 3).unwrap(), 0);
+    assert_eq!(
+        compute_and_check_index(3, 3).unwrap_err().to_string(),
+        "Index out of bound, 3 >= 3"
+    );
+    assert_eq!(
+        compute_and_check_index(-4, 3).unwrap_err().to_string(),
+        "Index out of bound, -4 < -3"
+    );
+    assert_eq!(
+        compute_and_check_index(i32::MIN, 5)
+            .unwrap_err()
+            .to_string(),
+        "Index out of bound, -2147483648 < -5"
+    );
 }
 
 #[test]
