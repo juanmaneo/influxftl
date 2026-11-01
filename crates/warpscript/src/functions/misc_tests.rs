@@ -59,7 +59,8 @@ fn info_and_attributes() {
     stack.exec("{ } INFO 'not reached'").unwrap();
     assert_eq!(stack.depth(), 1);
     assert_eq!(stack.pop().unwrap().to_string(), "{}");
-    // Errors while re-evaluating the snapshot are reported.
+    // Errors while re-evaluating the snapshot are reported: a CONTEXT is replaced by a
+    // comment, so the `PUT` of its entry runs short of operands.
     let Value::Map(doc) = crate::tests::top("{ 'name' 'doc' }") else {
         panic!("not a map");
     };
@@ -67,7 +68,7 @@ fn info_and_attributes() {
         .insert(Value::from("ctx"), crate::tests::top("SAVE"));
     stack.push(Value::Map(doc));
     let err = stack.exec("INFO").unwrap_err();
-    assert!(err.to_string().contains("Unknown function"), "{err}");
+    assert!(err.to_string().contains("Empty stack."), "{err}");
     let stack = exec("JSONSTRICT");
     assert_eq!(
         stack.attribute(ATTRIBUTE_JSON_STRICT),

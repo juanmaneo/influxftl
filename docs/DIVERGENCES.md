@@ -265,3 +265,34 @@ objects and `NULL`, in strict and loose mode, compact and pretty. The difference
   `RealVector` / `RealMatrix` and audit statements (`io.warp10.json`), and the
   `JsonUtils.addTransformer` extension point: objects without a serializer are written as
   `null`, like Warp 10 does when no transformer handles them.
+
+## 10. Collections (lists, maps, sets, `PACK` / `UNPACK`)
+
+The collection functions reproduce the Java implementations, including their edge cases
+(`SUBLIST` bound arithmetic, `int` truncation of `LONG` indices, Java `int` wrap-around of
+`PACK` field lengths). The differences:
+
+- **`GROUPBY` order.** The groups come out in first-seen order of their keys. Java collects
+  them in a `HashMap`, so the order depends on the hash codes of the keys (and on the
+  table size); scripts that relied on that order were already relying on an unspecified
+  behaviour.
+- **Byte arrays are immutable.** `SET` and `REVERSE` on `BYTES` push a modified copy; Java
+  modifies the `byte[]` in place, which is observable when the same array is also referenced
+  from a variable or another collection. Lists, maps and sets are shared handles exactly like
+  in Java.
+- **Sorting mixed types.** `LSORT`, `MSORT` and `SORTBY` on elements (or keys) that are not
+  mutually comparable raise `LSORT cannot compare LONG and STRING.` / `LSORT cannot sort
+  elements of type LIST.`; Java lets the `ClassCastException` (or `NullPointerException`)
+  escape with the JVM text. Lists of fewer than two elements are never compared, as in Java.
+- **`SORTWITH` with 32 elements or more.** Java's `TimSort` comparison sequence is reproduced
+  exactly for fewer than 32 elements (binary insertion sort); beyond that a stable bottom-up
+  merge sort is used, so a comparator macro with side effects is called in a different order.
+  Inconsistent comparators never raise Java's `Comparison method violates its general
+  contract!`.
+- **`SET` with a path on `BYTES`** raises `SET expects a LONG key when operating on a byte
+  array.` (Java: a `ClassCastException` text).
+- **Vectors** are modelled as lists: `->V` (see §3) builds a list, `V->` copies it.
+- **Geo Time Series operands** are not modelled yet: `SIZE`, `REMOVE`, `INDEXOF`, `CLONE`,
+  `APPEND`, `SHRINK`, `PIVOT` and `PIVOTSTRICT` on a GTS (or a GTS encoder, matrix…) raise
+  the error Java raises for an unsupported operand type. `SORT` and `RSORT` (GTS-only
+  functions) and `IMMUTABLE` (containers carry no immutability flag yet) are not ported.
