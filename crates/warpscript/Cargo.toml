@@ -14,6 +14,7 @@ categories = ["science", "parser-implementations"]
 path = "src/lib.rs"
 
 [dependencies]
+getrandom = { workspace = true }
 indexmap = { workspace = true }
 serde_json = { workspace = true }
 

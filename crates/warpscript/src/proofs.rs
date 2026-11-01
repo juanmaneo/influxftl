@@ -6,6 +6,8 @@
 
 use crate::encoding::{OPB64_ALPHABET, opb64_value};
 use crate::format::{is_double, is_long};
+use crate::jmath::{abs_long, floor_div, floor_mod, max, min, signum};
+use crate::jrandom::JavaRandom;
 use crate::value::double_to_long;
 
 /// Any 3 ASCII characters: a string accepted by `is_long` is never accepted by `is_double`
@@ -64,4 +66,107 @@ fn double_to_long_matches_the_jvm() {
     } else if d <= -9_223_372_036_854_775_808.0 {
         assert!(l == i64::MIN);
     }
+}
+
+/// `Math.floorDiv` / `Math.floorMod` for any dividend and the divisor `$y`: no panic, the
+/// remainder has the sign of the divisor (or is zero) and is smaller than it in magnitude, and
+/// the pair satisfies `x == q * y + m`. A symbolic 64-bit divisor is out of reach of the SAT
+/// solver, hence one harness per (constant) divisor, covering both signs.
+macro_rules! floor_division_identity {
+    ($($name:ident => $y:literal;)*) => {
+        $(
+            #[kani::proof]
+            fn $name() {
+                let x: i64 = kani::any();
+                let (Ok(q), Ok(m)) = (floor_div(x, $y), floor_mod(x, $y)) else {
+                    unreachable!();
+                };
+                assert!(m == 0 || (m < 0) == ($y < 0));
+                assert!(m.unsigned_abs() < i64::unsigned_abs($y));
+                assert!(q.wrapping_mul($y).wrapping_add(m) == x);
+            }
+        )*
+    };
+}
+
+floor_division_identity! {
+    floor_division_identity_by_7 => 7;
+    floor_division_identity_by_minus_7 => -7;
+}
+
+/// `Math.floorDiv(Long.MIN_VALUE, -1)` overflows to `Long.MIN_VALUE` without panicking, like
+/// the JVM, and the remainder is zero: `-1` divides everything.
+#[kani::proof]
+fn floor_division_by_minus_one_wraps() {
+    let x: i64 = kani::any();
+    let (Ok(q), Ok(m)) = (floor_div(x, -1), floor_mod(x, -1)) else {
+        unreachable!();
+    };
+    assert!(m == 0);
+    assert!(q == x.wrapping_neg());
+}
+
+/// A division by zero is reported as an error, never as a panic.
+#[kani::proof]
+fn floor_division_by_zero_is_an_error() {
+    let x: i64 = kani::any();
+    assert!(floor_div(x, 0).is_err());
+    assert!(floor_mod(x, 0).is_err());
+}
+
+/// `Math.abs(long)` is non-negative except for `Long.MIN_VALUE`, which is its own absolute value.
+#[kani::proof]
+fn abs_long_matches_java() {
+    let l: i64 = kani::any();
+    let a = abs_long(l);
+    if l == i64::MIN {
+        assert!(a == i64::MIN);
+    } else {
+        assert!(a >= 0 && (a == l || a == -l));
+    }
+}
+
+/// `Math.max` / `Math.min`: a NaN operand is absorbing, otherwise the result is one of the two
+/// operands and compares as expected.
+#[kani::proof]
+fn max_and_min_match_java() {
+    let a: f64 = kani::any();
+    let b: f64 = kani::any();
+    let hi = max(a, b);
+    let lo = min(a, b);
+    if a.is_nan() || b.is_nan() {
+        assert!(hi.is_nan() && lo.is_nan());
+    } else {
+        assert!(hi >= a && hi >= b && (hi == a || hi == b));
+        assert!(lo <= a && lo <= b && (lo == a || lo == b));
+    }
+}
+
+/// `Math.signum` is `-1.0`, `1.0`, or the argument itself for zeros and NaN.
+#[kani::proof]
+fn signum_matches_java() {
+    let d: f64 = kani::any();
+    let s = signum(d);
+    if d.is_nan() {
+        assert!(s.is_nan());
+    } else if d == 0.0 {
+        assert!(s.to_bits() == d.to_bits());
+    } else {
+        assert!(s == if d > 0.0 { 1.0 } else { -1.0 });
+    }
+}
+
+/// `Random.next(bits)` keeps the state within 48 bits and returns at most `bits` bits; the
+/// doubles it produces are in `[0, 1)`.
+#[kani::proof]
+fn java_random_stays_in_range() {
+    let seed: i64 = kani::any();
+    let bits: u32 = kani::any();
+    kani::assume((1..=32).contains(&bits));
+    let mut r = JavaRandom::new(seed);
+    let v = r.next(bits);
+    assert!(r.state() >= 0 && r.state() < (1 << 48));
+    assert!(bits == 32 || (v >= 0 && (v as u32) < (1u32 << bits)));
+    let d = r.next_double();
+    assert!((0.0..1.0).contains(&d));
 }

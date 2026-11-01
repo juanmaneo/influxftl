@@ -62,7 +62,46 @@ remote WarpFleet fetching are a storage/deployment concern and are out of scope;
 unknown macro fails with `Unknown macro 'name'` as it would on an instance with no repositories
 configured.
 
-## 5. Concurrency of `TIMEBOX`
+## 5. Floating point mathematics
+
+### 5.1 Transcendental functions may differ from the JDK by one ulp
+
+`java.lang.Math` is allowed to deviate from the correctly rounded result by up to 1 ulp. On
+x86-64, HotSpot uses its own intrinsics for `sin`, `cos`, `tan`, `exp`, `log`, `log10` and
+`pow`, and delegates the other transcendental functions to `StrictMath` (fdlibm 5.3). The port
+currently calls the host C library through Rust's `f64` methods, so results may differ from
+the JDK by 1 ulp, and may differ between hosts. Measured against OpenJDK 27 on 100 000 random
+arguments with glibc, the results differ in 0.02 % (`TANH`), 0.03 % (`LOG`), 0.1–0.4 % (`SIN`,
+`COS`, `TAN`, `EXP`, `EXPM1`, `LOG1P`, `**`, `SINH`, `CBRT`), 2.4 % (`ATAN`), 8.6–8.8 % (`ATAN2`,
+`LOG10`) and 11.6–13.1 % (`HYPOT`, `COSH`, `ASIN`, `ACOS`) of the cases. `SQRT`, `FLOOR`,
+`CEIL`, `RINT`, `ROUND`, `ULP`, `NEXTUP`, `NEXTDOWN`, `NEXTAFTER`, `COPYSIGN`, `SCALB`,
+`GETEXPONENT`, `IEEEREMAINDER`, `SIGNUM`, `ABS`, `MAX`, `MIN`, `TORADIANS` and `TODEGREES` are
+exact and match the JDK bit for bit.
+
+The Commons Math `erfInv` used by `NBOUNDS` calls `FastMath.log`, ported as `f64::ln`; the
+bounds match the reference values we test bit for bit, but the same 1 ulp caveat applies.
+
+Planned: a pure Rust port of fdlibm (the `StrictMath` specification) will make the
+`StrictMath`-delegated functions bit-identical to the JDK and every result reproducible across
+hosts; the seven intrinsified functions will then be equal to `StrictMath`, which HotSpot's
+intrinsics match in about 90–97 % of the cases.
+
+### 5.2 `RANGE` with a step overflowing a `LONG`
+
+`[ 9223372036854775800 9223372036854775807 10 ] RANGE` wraps around in Java and keeps
+appending elements until the JVM runs out of memory. The port stops the sequence when the
+next element would overflow. Non-`LONG` list elements raise `RANGE expects a list of 1 to 3
+longs on top of the stack.` (Java raises a bare `ClassCastException`).
+
+### 5.3 Random numbers
+
+`RAND` / `RANDOM` draw 53 bits of operating-system entropy (`getrandom`) instead of
+`java.security.SecureRandom`; the distribution (uniform on the doubles of `[0, 1)` with a
+2^-53 granularity) is the same. `PRNG` / `SRAND` replay `java.util.Random` bit for bit; the
+generator state is stored in the `seeded.prng` stack attribute as a `LONG` rather than as a
+`Random` object.
+
+## 6. Concurrency of `TIMEBOX`
 
 Warp 10 runs the boxed macro on a separate thread and interrupts it on timeout. WarpScript
 values are not thread-safe in this port (they use `Rc`/`RefCell`), so `TIMEBOX` runs the macro

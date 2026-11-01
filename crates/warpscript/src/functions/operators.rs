@@ -9,10 +9,12 @@ use std::rc::Rc;
 
 use super::Entry;
 use super::args::fail;
+use super::numerical::{self, Binary};
 use crate::error::{Error, Result};
+use crate::jmath;
 use crate::macros::Macro;
 use crate::stack::Stack;
-use crate::value::Value;
+use crate::value::{Value, double_to_long};
 
 /// Platform time units per millisecond (microseconds).
 pub const TIME_UNITS_PER_MS: f64 = 1000.0;
@@ -188,95 +190,18 @@ fn modulo(stack: &mut Stack) -> Result<()> {
     }
 }
 
+/// `**` is a `NumericalBinaryFunction` built on `Math.pow`; the `LONG` form truncates the
+/// double result like Java's `(long)` cast.
 fn pow(stack: &mut Stack) -> Result<()> {
-    numerical_binary(
+    numerical::binary(
         stack,
         "**",
-        |a, b| crate::value::double_to_long((a as f64).powf(b as f64)),
-        f64::powf,
+        Binary::Both(
+            |a, b| double_to_long(jmath::pow(a as f64, b as f64)),
+            jmath::pow,
+        ),
+        false,
     )
-}
-
-/// Port of `NumericalBinaryFunction` (the `applyOnSingleList = false` form used by `**`):
-/// two numbers, a number on top of a list, or a list on top of a single number operand.
-pub fn numerical_binary(
-    stack: &mut Stack,
-    name: &str,
-    on_long: fn(i64, i64) -> i64,
-    on_double: fn(f64, f64) -> f64,
-) -> Result<()> {
-    let message = format!(
-        "{name} can only operate on 2 numerical values, or a numerical value and a list of numerical values, or a numerical value and a GTS of numerical values."
-    );
-    let op0 = stack.pop()?;
-    match op0 {
-        ref top if top.is_number() => {
-            let op1 = stack.pop()?;
-            match op1 {
-                ref n if n.is_number() => {
-                    stack.push(combine(n, top, on_long, on_double));
-                    Ok(())
-                }
-                Value::List(list) => {
-                    let out = map_list(&list.borrow(), top, true, on_long, on_double, &message)?;
-                    stack.push(Value::list(out));
-                    Ok(())
-                }
-                _ => Err(Error::new(message)),
-            }
-        }
-        Value::List(list) => {
-            let op1 = stack.pop()?;
-            if !op1.is_number() {
-                return Err(Error::new(message));
-            }
-            let out = map_list(&list.borrow(), &op1, false, on_long, on_double, &message)?;
-            stack.push(Value::list(out));
-            Ok(())
-        }
-        _ => Err(Error::new(message)),
-    }
-}
-
-/// `op(a, b)` with Java promotion (double when either is a double).
-fn combine(
-    a: &Value,
-    b: &Value,
-    on_long: fn(i64, i64) -> i64,
-    on_double: fn(f64, f64) -> f64,
-) -> Value {
-    match (a, b) {
-        (Value::Long(x), Value::Long(y)) => Value::Long(on_long(*x, *y)),
-        _ => Value::Double(on_double(
-            a.as_f64().unwrap_or(f64::NAN),
-            b.as_f64().unwrap_or(f64::NAN),
-        )),
-    }
-}
-
-/// Apply the operator between each element of `list` and `operand`. When `element_first`, the
-/// element is the left-hand side (numeric-on-top, list-under case); otherwise the operand is.
-fn map_list(
-    list: &[Value],
-    operand: &Value,
-    element_first: bool,
-    on_long: fn(i64, i64) -> i64,
-    on_double: fn(f64, f64) -> f64,
-    message: &str,
-) -> Result<Vec<Value>> {
-    let mut out = Vec::with_capacity(list.len());
-    for element in list {
-        if !element.is_number() {
-            return Err(Error::new(message.to_owned()));
-        }
-        let value = if element_first {
-            combine(element, operand, on_long, on_double)
-        } else {
-            combine(operand, element, on_long, on_double)
-        };
-        out.push(value);
-    }
-    Ok(out)
 }
 
 fn inplace_add(stack: &mut Stack) -> Result<()> {
@@ -844,16 +769,11 @@ fn unit(stack: &mut Stack, name: &str, factor_ms: f64) -> Result<()> {
     match stack.pop()? {
         ref n if n.is_number() => {
             let ms = n.as_f64().unwrap_or(f64::NAN) * factor_ms * TIME_UNITS_PER_MS;
-            stack.push(java_round(ms));
+            stack.push(jmath::round(ms));
             Ok(())
         }
         _ => Err(fail(name, "can only operate on numeric values.")),
     }
-}
-
-/// Java `Math.round(double)`: `floor(x + 0.5)`, returning a `long`.
-fn java_round(x: f64) -> i64 {
-    crate::value::double_to_long((x + 0.5).floor())
 }
 
 fn unit_week(stack: &mut Stack) -> Result<()> {

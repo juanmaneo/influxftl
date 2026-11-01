@@ -12,10 +12,13 @@
 //! assert_eq!(stack.pop().unwrap(), Value::Long(42));
 //! ```
 
+pub mod cmath;
 pub mod encoding;
 pub mod error;
 pub mod format;
 pub mod functions;
+pub mod jmath;
+pub mod jrandom;
 pub mod macros;
 pub mod snapshot;
 pub mod stack;
@@ -32,11 +35,17 @@ pub fn version() -> &'static str {
 }
 
 #[cfg(test)]
+mod cmath_tests;
+#[cfg(test)]
 mod encoding_tests;
 #[cfg(test)]
 mod error_tests;
 #[cfg(test)]
 mod format_tests;
+#[cfg(test)]
+mod jmath_tests;
+#[cfg(test)]
+mod jrandom_tests;
 #[cfg(test)]
 mod macros_tests;
 #[cfg(test)]
