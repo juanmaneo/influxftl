@@ -1,0 +1,20 @@
+[package]
+name = "influxftl"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+description = "WarpScript / WarpLib execution engine for InfluxDB 3 — CLI, HTTP exec endpoint and InfluxDB 3 datastore backend"
+default-run = "influxftl"
+
+[[bin]]
+name = "influxftl"
+path = "src/main.rs"
+
+[dependencies]
+warpscript = { workspace = true }
+
+[lints]
+workspace = true

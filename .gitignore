@@ -1,0 +1,18 @@
+# build output
+/target
+/target-*
+
+# coverage / proof artifacts produced by `cargo xtask`
+/coverage
+/lcov.info
+/*.profraw
+/*.profdata
+
+# read-only sparse checkout of the Warp 10 reference sources (see README §2)
+/reference
+
+# editors / OS
+.idea/
+.vscode/
+*.swp
+.DS_Store

@@ -1,0 +1,369 @@
+//! The dynamic value type held on the WarpScript stack.
+//!
+//! Warp 10 stacks hold arbitrary Java objects; [`Value`] is the closed set of types the Rust
+//! runtime knows. Containers (`LIST`, `MAP`, `SET`, GTS…) have **reference semantics** exactly
+//! like in Java: `DUP` yields another handle to the same list, `CLONE` deep-copies.
+//!
+//! Equality and hashing follow Java's `equals` / `hashCode` contracts (a `LONG` never equals a
+//! `DOUBLE`, `NaN` equals `NaN` as a map key…). The numeric comparison used by `==`, `<`… is a
+//! separate function in the function library.
+
+use std::cell::RefCell;
+use std::fmt;
+use std::hash::{Hash, Hasher};
+use std::rc::Rc;
+
+use indexmap::{IndexMap, IndexSet};
+
+use crate::format::java_double_to_string;
+use crate::macros::Macro;
+
+/// A shared, mutable list (`java.util.List`).
+pub type List = Rc<RefCell<Vec<Value>>>;
+/// A shared, mutable insertion-ordered map (`java.util.LinkedHashMap`).
+pub type Map = Rc<RefCell<IndexMap<Value, Value>>>;
+/// A shared, mutable insertion-ordered set (`java.util.LinkedHashSet`).
+pub type Set = Rc<RefCell<IndexSet<Value>>>;
+
+/// A function object that lives on the stack (mapper, reducer, filter, operator…), as opposed
+/// to a stack function which is executed immediately when encountered.
+pub trait FunctionObject {
+    /// WarpScript name of the object, e.g. `mapper.sum`.
+    fn name(&self) -> &str;
+
+    /// Type name reported by `TYPEOF` (`AGGREGATOR`, `FILTER`, `OPERATOR`, `FILLER`…).
+    fn type_name(&self) -> &'static str;
+
+    /// WarpScript snippet that recreates this object (Java `toString()`), e.g. `3 mapper.add`.
+    fn snapshot(&self) -> String {
+        self.name().to_owned()
+    }
+}
+
+/// A saved execution context (`SAVE` / `RESTORE`).
+#[derive(Clone)]
+pub struct Context {
+    /// Symbol table at the time of `SAVE`.
+    pub symbols: IndexMap<String, Value>,
+    /// Registers at the time of `SAVE`.
+    pub registers: Vec<Value>,
+    /// Functions redefined with `DEF` (or undefined with `UNDEF`) at the time of `SAVE`.
+    pub defined: IndexMap<String, Option<Rc<Macro>>>,
+}
+
+/// A WarpScript value.
+#[derive(Clone)]
+pub enum Value {
+    /// Java `null`.
+    Null,
+    /// `BOOLEAN`.
+    Boolean(bool),
+    /// `LONG` (Java `long`, 64-bit two's complement with wrapping arithmetic).
+    Long(i64),
+    /// `DOUBLE` (Java `double`).
+    Double(f64),
+    /// `STRING` (immutable, shared).
+    String(Rc<str>),
+    /// `BYTES` (Java `byte[]`).
+    Bytes(Rc<[u8]>),
+    /// `LIST`.
+    List(List),
+    /// `MAP`.
+    Map(Map),
+    /// `SET`.
+    Set(Set),
+    /// `MACRO`.
+    Macro(Rc<Macro>),
+    /// A function object (mapper, reducer, filter, operator…).
+    Function(Rc<dyn FunctionObject>),
+    /// The `MARK` pushed by `[`, `{`, `(` and `MARK`.
+    Mark,
+    /// A saved execution context (`SAVE`).
+    Context(Rc<Context>),
+}
+
+impl Value {
+    /// Build a string value.
+    pub fn string(s: impl AsRef<str>) -> Self {
+        Value::String(Rc::from(s.as_ref()))
+    }
+
+    /// Build a list value from a vector.
+    pub fn list(items: Vec<Value>) -> Self {
+        Value::List(Rc::new(RefCell::new(items)))
+    }
+
+    /// Build a map value.
+    pub fn map(entries: IndexMap<Value, Value>) -> Self {
+        Value::Map(Rc::new(RefCell::new(entries)))
+    }
+
+    /// Build a set value.
+    pub fn set(items: IndexSet<Value>) -> Self {
+        Value::Set(Rc::new(RefCell::new(items)))
+    }
+
+    /// Build a byte array value.
+    pub fn bytes(bytes: impl AsRef<[u8]>) -> Self {
+        Value::Bytes(Rc::from(bytes.as_ref()))
+    }
+
+    /// The type name reported by `TYPEOF`.
+    pub fn type_name(&self) -> &'static str {
+        match self {
+            Value::Null => "NULL",
+            Value::Boolean(_) => "BOOLEAN",
+            Value::Long(_) => "LONG",
+            Value::Double(_) => "DOUBLE",
+            Value::String(_) => "STRING",
+            Value::Bytes(_) => "BYTES",
+            Value::List(_) => "LIST",
+            Value::Map(_) => "MAP",
+            Value::Set(_) => "SET",
+            Value::Macro(_) => "MACRO",
+            Value::Function(f) => f.type_name(),
+            Value::Mark => "MARK",
+            Value::Context(_) => "CONTEXT",
+        }
+    }
+
+    /// `true` for `LONG` and `DOUBLE` (Java `Number`).
+    pub fn is_number(&self) -> bool {
+        matches!(self, Value::Long(_) | Value::Double(_))
+    }
+
+    /// `true` for `null`.
+    pub fn is_null(&self) -> bool {
+        matches!(self, Value::Null)
+    }
+
+    /// The value as a `f64` when it is a number (Java `Number.doubleValue()`).
+    pub fn as_f64(&self) -> Option<f64> {
+        match self {
+            Value::Long(l) => Some(*l as f64),
+            Value::Double(d) => Some(*d),
+            _ => None,
+        }
+    }
+
+    /// The value as an `i64` when it is a number (Java `Number.longValue()`, saturating for
+    /// doubles like the JVM's `d2l` conversion).
+    pub fn as_i64(&self) -> Option<i64> {
+        match self {
+            Value::Long(l) => Some(*l),
+            Value::Double(d) => Some(double_to_long(*d)),
+            _ => None,
+        }
+    }
+
+    /// The string content when the value is a `STRING`.
+    pub fn as_str(&self) -> Option<&str> {
+        match self {
+            Value::String(s) => Some(s),
+            _ => None,
+        }
+    }
+
+    /// The boolean when the value is a `BOOLEAN`.
+    pub fn as_bool(&self) -> Option<bool> {
+        match self {
+            Value::Boolean(b) => Some(*b),
+            _ => None,
+        }
+    }
+
+    /// `true` when both values are the same object (Java `==` on references), used by
+    /// identity-based equality of macros, functions and contexts.
+    pub fn same_object(&self, other: &Value) -> bool {
+        match (self, other) {
+            (Value::List(a), Value::List(b)) => Rc::ptr_eq(a, b),
+            (Value::Map(a), Value::Map(b)) => Rc::ptr_eq(a, b),
+            (Value::Set(a), Value::Set(b)) => Rc::ptr_eq(a, b),
+            (Value::Macro(a), Value::Macro(b)) => Rc::ptr_eq(a, b),
+            (Value::Function(a), Value::Function(b)) => Rc::ptr_eq(a, b),
+            (Value::Context(a), Value::Context(b)) => Rc::ptr_eq(a, b),
+            (Value::String(a), Value::String(b)) => Rc::ptr_eq(a, b),
+            (Value::Bytes(a), Value::Bytes(b)) => Rc::ptr_eq(a, b),
+            _ => false,
+        }
+    }
+}
+
+/// Java's `(long) d` conversion: `NaN` → 0, saturating at the `long` bounds.
+pub fn double_to_long(d: f64) -> i64 {
+    // Rust's `as` has exactly the JVM `d2l` semantics (NaN → 0, saturation).
+    d as i64
+}
+
+/// Java `Double.equals`: compares the canonical bit patterns, so `NaN` equals `NaN` and
+/// `0.0` differs from `-0.0`.
+fn double_bits(d: f64) -> u64 {
+    if d.is_nan() {
+        f64::NAN.to_bits()
+    } else {
+        d.to_bits()
+    }
+}
+
+impl PartialEq for Value {
+    /// Java `equals` semantics.
+    fn eq(&self, other: &Value) -> bool {
+        match (self, other) {
+            (Value::Null, Value::Null) | (Value::Mark, Value::Mark) => true,
+            (Value::Boolean(a), Value::Boolean(b)) => a == b,
+            (Value::Long(a), Value::Long(b)) => a == b,
+            (Value::Double(a), Value::Double(b)) => double_bits(*a) == double_bits(*b),
+            (Value::String(a), Value::String(b)) => a == b,
+            (Value::Bytes(a), Value::Bytes(b)) => a == b,
+            (Value::List(a), Value::List(b)) => Rc::ptr_eq(a, b) || *a.borrow() == *b.borrow(),
+            (Value::Map(a), Value::Map(b)) => Rc::ptr_eq(a, b) || *a.borrow() == *b.borrow(),
+            (Value::Set(a), Value::Set(b)) => Rc::ptr_eq(a, b) || *a.borrow() == *b.borrow(),
+            (Value::Macro(_), Value::Macro(_))
+            | (Value::Function(_), Value::Function(_))
+            | (Value::Context(_), Value::Context(_)) => self.same_object(other),
+            _ => false,
+        }
+    }
+}
+
+impl Eq for Value {}
+
+impl Hash for Value {
+    /// Consistent with [`PartialEq`]: equal values hash equally.
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        match self {
+            Value::Null => 0u8.hash(state),
+            Value::Boolean(b) => b.hash(state),
+            Value::Long(l) => l.hash(state),
+            Value::Double(d) => double_bits(*d).hash(state),
+            Value::String(s) => s.hash(state),
+            Value::Bytes(b) => b.hash(state),
+            Value::List(l) => {
+                for item in l.borrow().iter() {
+                    item.hash(state);
+                }
+            }
+            Value::Map(m) => {
+                for (k, v) in m.borrow().iter() {
+                    k.hash(state);
+                    v.hash(state);
+                }
+            }
+            Value::Set(s) => {
+                // Order independent, like `AbstractSet.hashCode`.
+                let mut sum = 0u64;
+                for item in s.borrow().iter() {
+                    let mut h = std::collections::hash_map::DefaultHasher::new();
+                    item.hash(&mut h);
+                    sum = sum.wrapping_add(h.finish());
+                }
+                sum.hash(state);
+            }
+            Value::Macro(m) => (Rc::as_ptr(m) as usize).hash(state),
+            Value::Function(f) => (Rc::as_ptr(f).cast::<()>() as usize).hash(state),
+            Value::Mark => 1u8.hash(state),
+            Value::Context(c) => (Rc::as_ptr(c) as usize).hash(state),
+        }
+    }
+}
+
+impl fmt::Display for Value {
+    /// Java `String.valueOf(o)` / `toString()` semantics.
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Value::Null => f.write_str("null"),
+            Value::Boolean(b) => write!(f, "{b}"),
+            Value::Long(l) => write!(f, "{l}"),
+            Value::Double(d) => f.write_str(&java_double_to_string(*d)),
+            Value::String(s) => f.write_str(s),
+            Value::Bytes(b) => write!(f, "[B@{:x}", b.len()),
+            Value::List(l) => {
+                f.write_str("[")?;
+                for (idx, item) in l.borrow().iter().enumerate() {
+                    if idx > 0 {
+                        f.write_str(", ")?;
+                    }
+                    write!(f, "{item}")?;
+                }
+                f.write_str("]")
+            }
+            Value::Set(s) => {
+                f.write_str("[")?;
+                for (idx, item) in s.borrow().iter().enumerate() {
+                    if idx > 0 {
+                        f.write_str(", ")?;
+                    }
+                    write!(f, "{item}")?;
+                }
+                f.write_str("]")
+            }
+            Value::Map(m) => {
+                f.write_str("{")?;
+                for (idx, (k, v)) in m.borrow().iter().enumerate() {
+                    if idx > 0 {
+                        f.write_str(", ")?;
+                    }
+                    write!(f, "{k}={v}")?;
+                }
+                f.write_str("}")
+            }
+            Value::Macro(m) => f.write_str(&m.snapshot(true)),
+            Value::Function(func) => f.write_str(&func.snapshot()),
+            Value::Mark => f.write_str("MARK"),
+            Value::Context(_) => f.write_str("CONTEXT"),
+        }
+    }
+}
+
+impl fmt::Debug for Value {
+    /// Type-tagged rendering used in test failures: `LONG(3)`, `STRING("a")`…
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Value::String(s) => write!(f, "STRING({s:?})"),
+            Value::Double(d) => write!(f, "DOUBLE({})", java_double_to_string(*d)),
+            other => write!(f, "{}({other})", other.type_name()),
+        }
+    }
+}
+
+impl From<bool> for Value {
+    fn from(b: bool) -> Self {
+        Value::Boolean(b)
+    }
+}
+
+impl From<i64> for Value {
+    fn from(l: i64) -> Self {
+        Value::Long(l)
+    }
+}
+
+impl From<f64> for Value {
+    fn from(d: f64) -> Self {
+        Value::Double(d)
+    }
+}
+
+impl From<&str> for Value {
+    fn from(s: &str) -> Self {
+        Value::string(s)
+    }
+}
+
+impl From<String> for Value {
+    fn from(s: String) -> Self {
+        Value::String(Rc::from(s))
+    }
+}
+
+impl From<Vec<Value>> for Value {
+    fn from(items: Vec<Value>) -> Self {
+        Value::list(items)
+    }
+}
+
+impl From<Rc<Macro>> for Value {
+    fn from(m: Rc<Macro>) -> Self {
+        Value::Macro(m)
+    }
+}

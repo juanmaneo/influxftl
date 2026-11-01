@@ -1,0 +1,19 @@
+[package]
+name = "xtask"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+description = "Developer automation for influxftl: security audit, lints, tests, coverage gate, Kani proofs"
+
+[[bin]]
+name = "xtask"
+path = "src/main.rs"
+
+[dependencies]
+serde_json = { workspace = true }
+warpscript = { workspace = true }
+
+[lints]
+workspace = true

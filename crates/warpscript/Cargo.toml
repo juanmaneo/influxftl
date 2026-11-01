@@ -1,0 +1,21 @@
+[package]
+name = "warpscript"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+description = "WarpScript language runtime and WarpLib function library — a Rust port of the Warp 10 analytics engine"
+keywords = ["warpscript", "warp10", "timeseries", "influxdb"]
+categories = ["science", "parser-implementations"]
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+indexmap = { workspace = true }
+serde_json = { workspace = true }
+
+[lints]
+workspace = true
