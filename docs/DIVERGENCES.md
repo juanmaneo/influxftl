@@ -214,3 +214,54 @@ Known gaps and differences:
 - Patterns that need catastrophic backtracking fail with `Error executing regex: Max limit for
   backtracking count exceeded` after one million backtracking steps instead of running for an
   unbounded time.
+
+## 9. JSON (`->JSON`, `JSON->`, `MAXJSON`)
+
+The serialiser and the parser reproduce Jackson 2.14.2 (the version Warp 10 pins) configured
+like `io.warp10.json.JsonUtils`: `->JSON` output is byte-for-byte what Warp 10 produces for
+`LONG`, `DOUBLE`, `BOOLEAN`, `STRING`, `BYTES`, `LIST`, `SET`, `MAP`, macros, named function
+objects and `NULL`, in strict and loose mode, compact and pretty. The differences:
+
+- **Line separator.** Pretty printing always uses `\n`; Jackson uses `System.lineSeparator()`
+  (`\r\n` on Windows hosts).
+- **Nesting depth.** Arrays and objects may be nested 1000 deep, when serialising and when
+  parsing (the defaults of Jackson 2.15+ `StreamReadConstraints` / 2.16+
+  `StreamWriteConstraints`). Warp 10 with Jackson 2.14 has no explicit limit and fails with a
+  `StackOverflowError` several thousand levels deeper, which `->JSON` reports as
+  `->JSON failed with to convert to JSON, the structure is too deep or it references itself.
+  (StackOverflowError)` — the port uses the same message for its depth limit (self-referencing
+  lists and maps hit it too). `JSON->` reports ``Document nesting depth (1001) exceeds the
+  maximum allowed (1000, from `StreamReadConstraints.getMaxNestingDepth()`)``. Both are
+  recursive: a document nested 1000 deep needs about 1.6 KB of stack per level in debug builds
+  (less than 0.5 KB in release builds), more than the 2 MB default stack of a non-main thread.
+- **Parser messages.** `JSON->` wraps the parser's message like Java (`JSON-> failed to parse
+  JSON (…)`), and the inner text follows Jackson's wording (`Unrecognized token 'x': was
+  expecting (JSON String, Number (or 'NaN'/'INF'/'+INF'), Array, Object or token 'null',
+  'true' or 'false')`, `Unexpected character ('}' (code 125)): was expecting double-quote to
+  start field name`, `Illegal unquoted character ((CTRL-CHAR, code 9)): has to be escaped using
+  backslash to be included in string value`…) followed by `\n at [line: L, column: C]`. Jackson
+  additionally quotes the document in the location (`[Source: (String)"…"; line: 1, column:
+  6]`), which the port leaves out. Columns follow Jackson's conventions (1-based, counted after
+  the offending character, after an unrecognized token, at the start of a trailing token) but
+  may differ by one in some number-literal errors; a character outside the BMP is described by
+  its code point (`'😀' (code 128512 / 0x1f600)`) where Java shows its first UTF-16 unit; the
+  extent of an unrecognized token uses an approximation of `Character.isJavaIdentifierPart`
+  (letters, digits, `_`, `$`, the common currency symbols and the "ignorable" control
+  characters).
+- **Integers beyond the `LONG` range.** `JSON->` turns `9223372036854775808` into the `DOUBLE`
+  `9.223372036854776E18`; Jackson yields a `BigInteger`, which WarpScript functions generally
+  cannot use.
+- **Lone surrogates.** A `\uD800` escape that is not part of a surrogate pair becomes U+FFFD;
+  Java keeps the unpaired UTF-16 unit in the string.
+- **Map keys** that are neither strings, `BYTES` (base64), `NULL` (`"null"`), numbers,
+  booleans, lists, maps, sets, bit sets, macros nor named functions (`MARK`, saved contexts,
+  `MATCHER` objects) are rendered with the runtime's `TOSTRING` text (`MARK`, `CONTEXT`,
+  `'re' MATCHER`) instead of Java's default `Object.toString()`.
+- **`MAXJSON`** does not check the `maxjson` / `limits` capabilities (there is no capability
+  system yet) and therefore never raises `MAXJSON missing capability 'maxjson' or 'limits'.`;
+  the ceiling is the hard limit (`warpscript.maxjson.hard` in Warp 10, `Stack::hard_limits` here)
+  with the Java message `MAXJSON cannot extend limit past <limit>`.
+- **Not ported yet.** The serializers of Geo Time Series, GTS encoders, `Metadata`,
+  `RealVector` / `RealMatrix` and audit statements (`io.warp10.json`), and the
+  `JsonUtils.addTransformer` extension point: objects without a serializer are written as
+  `null`, like Warp 10 does when no transformer handles them.

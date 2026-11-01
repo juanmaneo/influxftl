@@ -5,6 +5,7 @@
 
 pub mod args;
 pub mod control;
+pub mod json;
 pub mod math;
 pub mod misc;
 pub mod numerical;
@@ -42,6 +43,7 @@ const TABLES: &[&[(&str, Entry)]] = &[
     operators::FUNCTIONS,
     math::FUNCTIONS,
     strings::FUNCTIONS,
+    json::FUNCTIONS,
 ];
 
 static REGISTRY: OnceLock<HashMap<&'static str, &'static Entry>> = OnceLock::new();
@@ -123,6 +125,8 @@ pub fn call(stack: &mut Stack, name: &str) -> Result<()> {
 mod args_tests;
 #[cfg(test)]
 mod control_tests;
+#[cfg(test)]
+mod json_tests;
 #[cfg(test)]
 mod math_tests;
 #[cfg(test)]
