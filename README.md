@@ -156,11 +156,12 @@ curl --data-binary "[ 'TOKEN' 'temperature' {} NOW -10 ] FETCH" http://127.0.0.1
 Embedding the engine:
 
 ```rust
-use warpscript::{Engine, Value};
+use warpscript::{Stack, Value};
 
-let mut engine = Engine::new();
-engine.exec("1 2 +")?;
-assert_eq!(engine.stack().peek()?, &Value::Long(3));
+let mut stack = Stack::new();
+stack.exec("1 2 +")?;
+assert_eq!(stack.peek()?, &Value::Long(3));
+# Ok::<(), warpscript::Error>(())
 ```
 
 ---

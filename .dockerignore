@@ -1,0 +1,13 @@
+# Keep the build context small and reproducible: everything the build does not need.
+/target
+/target-*
+/coverage
+/lcov.info
+/reference
+*.profraw
+*.profdata
+.git
+.idea/
+.vscode/
+*.swp
+.DS_Store
