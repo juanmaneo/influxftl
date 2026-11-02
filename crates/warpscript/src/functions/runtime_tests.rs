@@ -1037,3 +1037,175 @@ fn snapshot_errors_on_deep_structures() {
     stack.store_register(0, nested).unwrap();
     assert!(stack.exec("SNAPSHOTALL").is_err());
 }
+
+// -----------------------------------------------------------------------------------------
+// TDESCRIBE / VARS / STDOUT / STDERR / SLEEP
+// -----------------------------------------------------------------------------------------
+
+#[test]
+fn tdescribe() {
+    assert_top("1 TDESCRIBE", "LONG");
+    assert_top("[ ] TDESCRIBE", "LIST []");
+    assert_top("[ 1 'a' ] TDESCRIBE", "LIST [ LONG ]");
+    assert_top("{ } TDESCRIBE", "MAP {}");
+    assert_top(
+        "{ 'a' 1 'b' [ 2.5 ] } TDESCRIBE",
+        "MAP { STRING : LIST [ DOUBLE ] } ",
+    );
+    assert_top(
+        "[ [ [ { 'k' true } ] ] ] TDESCRIBE",
+        "LIST [ LIST [ LIST [ MAP { STRING : BOOLEAN }  ] ] ]",
+    );
+    let mut nested = Value::Long(1);
+    for _ in 0..20 {
+        nested = Value::list(vec![nested]);
+    }
+    let mut stack = test_stack();
+    stack.push(nested);
+    stack.exec_checked("TDESCRIBE").unwrap();
+    let description = stack.pop().unwrap().to_string();
+    assert!(
+        description.ends_with("... (recursion limit reached) ] ] ] ] ] ] ] ] ] ] ] ] ] ] ] ] ]"),
+        "{description}"
+    );
+    assert_fails("TDESCRIBE", "Empty stack.");
+}
+
+#[test]
+fn vars_lists_the_symbols_of_a_macro() {
+    let strings_and_longs = |values: &[Value]| Value::list(values.to_vec());
+    assert_top(
+        "<% 1 'a' STORE $a $a + 2 'b' CSTORE %> VARS",
+        strings_and_longs(&[Value::from("a"), Value::from("b")]),
+    );
+    // Registers and list stores; most used first, then by name.
+    assert_top(
+        "<% 1 POPR3 PUSHR3 PUSHR3 2 3 [ 'x' 'y' ] STORE $y RUNR5 'z' RUN 1 2 [ 7 NULL ] STORE %> VARS",
+        strings_and_longs(&[
+            Value::Long(3),
+            Value::from("y"),
+            Value::Long(5),
+            Value::Long(7),
+            Value::from("x"),
+        ]),
+    );
+    // Stored names built with `[ … ]` inside the macro.
+    assert_top(
+        "<% 1 2 [ 'p' NULL 'q' ] STORE %> VARS",
+        strings_and_longs(&[Value::from("p"), Value::from("q")]),
+    );
+    // Only stored symbols.
+    assert_top(
+        "<% 1 'a' STORE $b PUSHR1 RUNR2 2 'c' CSTORE 3 POPR4 %> true VARS",
+        strings_and_longs(&[Value::Long(4), Value::from("a"), Value::from("c")]),
+    );
+    assert_top(
+        "<% 1 'a' STORE $b PUSHR1 RUNR2 2 'c' CSTORE 3 POPR4 %> false VARS",
+        strings_and_longs(&[
+            Value::Long(1),
+            Value::Long(2),
+            Value::Long(4),
+            Value::from("a"),
+            Value::from("b"),
+            Value::from("c"),
+        ]),
+    );
+    // Nested macros are scanned too.
+    assert_top(
+        "<% <% 1 'inner' STORE %> EVAL %> VARS",
+        strings_and_longs(&[Value::from("inner")]),
+    );
+    assert_top("<% 1 2 + %> VARS", Value::list(Vec::new()));
+    // Macros built from lists hold literal lists and NULLs.
+    assert_top(
+        "[ 1 2 [ 'p' NULL 'q' ] 'STORE' FUNCREF ] ->MACRO VARS",
+        strings_and_longs(&[Value::from("p"), Value::from("q")]),
+    );
+    assert_fails("[ 1 [ 1.5 ] 'STORE' FUNCREF ] ->MACRO VARS", "VARS failed.");
+    assert_top(
+        "[ 1 'MARK' FUNCREF 'a' NULL ']' FUNCREF 'STORE' FUNCREF ] ->MACRO VARS",
+        strings_and_longs(&[Value::from("a")]),
+    );
+    assert_fails("<% <% LOAD %> %> VARS", "VARS failed.");
+    // Non explicit symbols abort.
+    for script in [
+        "<% LOAD %>",
+        "<% 1 'a' + LOAD %>",
+        "<% STORE %>",
+        "<% 1 1.5 STORE %>",
+        "<% 1 [ 1.5 ] STORE %>",
+        "<% 1 [ 'a' 1.5 ] STORE %>",
+        "<% 'x' 'y' + RUN %>",
+    ] {
+        assert_fails(
+            &format!("{script} VARS"),
+            "VARS failed. (Encountered a LOAD/STORE or CSTORE operation with a non explicit symbol name.)",
+        );
+    }
+    let m = top("<% 1 'a' STORE %>");
+    let Value::Macro(m) = m else {
+        panic!("not a macro")
+    };
+    assert_eq!(
+        super::runtime::macro_vars(&m, false).unwrap(),
+        vec![Value::from("a")]
+    );
+    assert_fails("1 VARS", "VARS operates on a macro.");
+    assert_fails("1 true VARS", "VARS operates on a macro.");
+    assert_fails("VARS", "Empty stack.");
+    assert_fails("true VARS", "Empty stack.");
+}
+
+#[test]
+fn stdout_stderr_and_sleep() {
+    // Without the `debug` capability nothing is printed; with it the output goes to the
+    // process streams (not captured here).
+    assert_stack("'hello' STDOUT 'world' STDERR 1", &[Value::Long(1)]);
+    let mut stack = test_stack();
+    stack
+        .capabilities_mut()
+        .insert("debug".to_owned(), String::new());
+    stack
+        .exec_checked("'to stdout' STDOUT 'to stderr' STDERR")
+        .unwrap();
+    assert_eq!(stack.depth(), 0);
+    assert_fails("STDOUT", "Empty stack.");
+    assert_fails("STDERR", "Empty stack.");
+
+    assert_fails("1 SLEEP", "SLEEP requires capability sleep.maxtime.");
+    let mut stack = test_stack();
+    stack
+        .capabilities_mut()
+        .insert("sleep.maxtime".to_owned(), "10".to_owned());
+    stack.exec_checked("1000 SLEEP 0 SLEEP").unwrap();
+    let err = stack.exec("11000 SLEEP").unwrap_err().to_string();
+    assert!(
+        err.contains(
+            "SLEEP cannot sleep during more than 10 ms, as defined in sleep.maxtime capability."
+        ),
+        "{err}"
+    );
+    let err = stack.exec("'x' SLEEP").unwrap_err().to_string();
+    assert!(
+        err.contains("SLEEP expects a LONG period as parameter."),
+        "{err}"
+    );
+    let err = stack.exec("SLEEP").unwrap_err().to_string();
+    assert!(err.contains("Empty stack."), "{err}");
+    stack
+        .capabilities_mut()
+        .insert("sleep.maxtime".to_owned(), "0".to_owned());
+    let err = stack.exec("1 SLEEP").unwrap_err().to_string();
+    assert!(
+        err.contains("SLEEP requires capability sleep.maxtime to be set to a value strictly greater than 0 ms."),
+        "{err}"
+    );
+    stack
+        .capabilities_mut()
+        .insert("sleep.maxtime".to_owned(), "lots".to_owned());
+    let err = stack.exec("1 SLEEP").unwrap_err().to_string();
+    assert!(
+        err.contains("SLEEP cannot parse capability sleep.maxtime: 'lots' is not a valid LONG"),
+        "{err}"
+    );
+}

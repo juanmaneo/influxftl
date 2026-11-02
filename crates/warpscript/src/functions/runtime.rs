@@ -13,7 +13,7 @@ use std::time::{Instant, SystemTime, UNIX_EPOCH};
 use indexmap::IndexMap;
 
 use super::Entry;
-use super::args::{fail, pop_macro, pop_string};
+use super::args::{fail, fail_with_cause, pop_macro, pop_string};
 use super::misc::{ATTRIBUTE_INFOMODE, TIME_UNITS_PER_MS};
 use crate::encoding::opb64_encode;
 use crate::error::{Error, Result};
@@ -112,6 +112,11 @@ pub const FUNCTIONS: &[(&str, Entry)] = &[
     ("MAN", Entry::Stack(man)),
     ("EXTLOADED", Entry::Stack(extloaded)),
     ("REPORT", Entry::Stack(report)),
+    ("TDESCRIBE", Entry::Stack(tdescribe)),
+    ("VARS", Entry::Stack(vars)),
+    ("STDOUT", Entry::Stack(stdout)),
+    ("STDERR", Entry::Stack(stderr)),
+    ("SLEEP", Entry::Stack(sleep)),
 ];
 
 // -----------------------------------------------------------------------------------------
@@ -1176,4 +1181,236 @@ snapshot_functions! {
     snapshotcopyalltomark => "SNAPSHOTCOPYALLTOMARK", true, true, false, false, false;
     snapshotn => "SNAPSHOTN", false, false, true, true, false;
     snapshotcopyn => "SNAPSHOTCOPYN", false, false, false, true, false;
+}
+
+// -----------------------------------------------------------------------------------------
+// TDESCRIBE / VARS / STDOUT / STDERR / SLEEP
+// -----------------------------------------------------------------------------------------
+
+/// `TDESCRIBE.rtypeof`: the type of a value, with the type of the first element of lists
+/// and of the last entry of maps, down to the default recursion limit.
+fn recursive_type(value: &Value, level: usize) -> String {
+    if level > crate::stack::DEFAULT_MAX_RECURSION_LEVEL as usize {
+        return "... (recursion limit reached)".to_owned();
+    }
+    match value {
+        Value::List(list) => match list.borrow().first() {
+            None => "LIST []".to_owned(),
+            Some(first) => format!("LIST [ {} ]", recursive_type(first, level + 1)),
+        },
+        Value::Map(map) => match map.borrow().last() {
+            None => "MAP {}".to_owned(),
+            Some((key, entry)) => format!(
+                "MAP {{ {} : {} }} ",
+                recursive_type(key, level + 1),
+                recursive_type(entry, level + 1)
+            ),
+        },
+        other => other.type_name().to_owned(),
+    }
+}
+
+/// `TDESCRIBE`: the recursive type description of the value on top of the stack.
+fn tdescribe(stack: &mut Stack) -> Result<()> {
+    let value = stack.pop()?;
+    stack.push(Value::from(recursive_type(&value, 0)));
+    Ok(())
+}
+
+/// The variables and registers found while scanning macros (`VARS.getVars`).
+#[derive(Default)]
+struct VarScan {
+    symbols: Vec<Value>,
+    occurrences: IndexMap<Value, usize>,
+    pending: Vec<Rc<Macro>>,
+}
+
+impl VarScan {
+    /// Count one occurrence of `symbol`, adding it to the result when `keep` is set.
+    fn count(&mut self, symbol: &Value, keep: bool) {
+        if keep && !self.symbols.contains(symbol) {
+            self.symbols.push(symbol.clone());
+        }
+        *self.occurrences.entry(symbol.clone()).or_insert(0) += 1;
+    }
+
+    /// Scan the statements of one macro.
+    fn scan(&mut self, statements: &[Statement], only_store_and_popr: bool) -> Result<()> {
+        let abort = || {
+            Error::new(
+                "Encountered a LOAD/STORE or CSTORE operation with a non explicit symbol name.",
+            )
+        };
+        let register = |name: &str, prefix: &str| -> Option<Value> {
+            name.strip_prefix(prefix)
+                .and_then(|digits| digits.parse::<i64>().ok())
+                .map(Value::Long)
+        };
+        for (i, stmt) in statements.iter().enumerate() {
+            let Statement::Call(callable) = stmt else {
+                if let Statement::Push(Value::Macro(inner)) = stmt {
+                    self.pending.push(Rc::clone(inner));
+                }
+                continue;
+            };
+            let name = callable.name();
+            if let Some(reg) = register(name, "POPR").or_else(|| register(name, "CPOPR")) {
+                self.count(&reg, true);
+            } else if let Some(reg) = register(name, "PUSHR").or_else(|| register(name, "RUNR")) {
+                self.count(&reg, !only_store_and_popr);
+            } else if matches!(name, "LOAD" | "CSTORE" | "RUN") {
+                let Some(Statement::Push(previous @ (Value::String(_) | Value::Long(_)))) =
+                    i.checked_sub(1).map(|p| &statements[p])
+                else {
+                    return Err(abort());
+                };
+                // `RUN` symbols may name repository macros: they are never returned.
+                let keep = name == "CSTORE" || (name == "LOAD" && !only_store_and_popr);
+                self.count(previous, keep);
+            } else if name == "STORE" {
+                let Some(previous) = i.checked_sub(1).map(|p| &statements[p]) else {
+                    return Err(abort());
+                };
+                match previous {
+                    Statement::Push(Value::List(list)) => {
+                        for element in list.borrow().iter() {
+                            match element {
+                                Value::String(_) | Value::Long(_) => self.count(element, true),
+                                Value::Null => {}
+                                _ => return Err(abort()),
+                            }
+                        }
+                    }
+                    Statement::Call(end) if end.name() == "]" => {
+                        // Walk back to the matching `[`, collecting the names.
+                        let mut idx = i.checked_sub(2);
+                        while let Some(at) = idx {
+                            match &statements[at] {
+                                Statement::Call(c) if matches!(c.name(), "[" | "MARK") => break,
+                                Statement::Push(element @ (Value::String(_) | Value::Long(_))) => {
+                                    self.count(element, true);
+                                }
+                                Statement::Push(Value::Null) => {}
+                                Statement::Call(c) if c.name() == "NULL" => {}
+                                _ => return Err(abort()),
+                            }
+                            idx = at.checked_sub(1);
+                        }
+                    }
+                    Statement::Push(symbol @ (Value::String(_) | Value::Long(_))) => {
+                        self.count(symbol, true);
+                    }
+                    _ => return Err(abort()),
+                }
+            }
+        }
+        Ok(())
+    }
+}
+
+/// `VARS.getVars`: the variables and registers a macro (and its nested macros) uses, most
+/// used first (ties broken by name). With `only_store_and_popr` only the symbols written by
+/// `STORE`, `CSTORE` and `POPRn` are returned (the other uses still count as occurrences).
+pub fn macro_vars(m: &Macro, only_store_and_popr: bool) -> Result<Vec<Value>> {
+    let mut scan = VarScan::default();
+    scan.scan(&m.statements, only_store_and_popr)?;
+    let mut index = 0;
+    while index < scan.pending.len() {
+        let next = Rc::clone(&scan.pending[index]);
+        scan.scan(&next.statements, only_store_and_popr)?;
+        index += 1;
+    }
+    let VarScan {
+        mut symbols,
+        occurrences,
+        ..
+    } = scan;
+    symbols.sort_by(|a, b| {
+        let (oa, ob) = (
+            occurrences.get(a).copied().unwrap_or_default(),
+            occurrences.get(b).copied().unwrap_or_default(),
+        );
+        ob.cmp(&oa).then_with(|| a.to_string().cmp(&b.to_string()))
+    });
+    Ok(symbols)
+}
+
+/// `VARS`: the variables and registers used by a macro (optionally only those written to).
+fn vars(stack: &mut Stack) -> Result<()> {
+    const NAME: &str = "VARS";
+    let mut top = stack.pop()?;
+    let mut only_store_and_popr = false;
+    if let Value::Boolean(flag) = top {
+        only_store_and_popr = flag;
+        top = stack.pop()?;
+    }
+    let Value::Macro(m) = top else {
+        return Err(fail(NAME, "operates on a macro."));
+    };
+    let vars =
+        macro_vars(&m, only_store_and_popr).map_err(|err| fail_with_cause(NAME, "failed.", err))?;
+    stack.push(Value::list(vars));
+    Ok(())
+}
+
+/// `STDOUT` / `STDERR`: print the top of the stack to the process output when the `debug`
+/// capability is granted.
+fn print_to(stack: &mut Stack, stderr: bool) -> Result<()> {
+    let top = stack.pop()?;
+    if stack.capability("debug").is_some() {
+        if stderr {
+            eprintln!("{top}");
+        } else {
+            println!("{top}");
+        }
+    }
+    Ok(())
+}
+
+fn stdout(stack: &mut Stack) -> Result<()> {
+    print_to(stack, false)
+}
+
+fn stderr(stack: &mut Stack) -> Result<()> {
+    print_to(stack, true)
+}
+
+/// `SLEEP`: pause for a number of time units, bounded by the `sleep.maxtime` capability (in
+/// milliseconds).
+fn sleep(stack: &mut Stack) -> Result<()> {
+    const NAME: &str = "SLEEP";
+    const CAPABILITY: &str = "sleep.maxtime";
+    let Some(max) = stack.capability(CAPABILITY) else {
+        return Err(fail(NAME, &format!("requires capability {CAPABILITY}.")));
+    };
+    let max_ms: i64 = max.parse().map_err(|_| {
+        fail(
+            NAME,
+            &format!("cannot parse capability {CAPABILITY}: '{max}' is not a valid LONG"),
+        )
+    })?;
+    if max_ms <= 0 {
+        return Err(fail(
+            NAME,
+            &format!(
+                "requires capability {CAPABILITY} to be set to a value strictly greater than 0 ms."
+            ),
+        ));
+    }
+    let Value::Long(duration) = stack.pop()? else {
+        return Err(fail(NAME, "expects a LONG period as parameter."));
+    };
+    let millis = duration / TIME_UNITS_PER_MS;
+    if millis > max_ms {
+        return Err(fail(
+            NAME,
+            &format!(
+                "cannot sleep during more than {max_ms} ms, as defined in {CAPABILITY} capability."
+            ),
+        ));
+    }
+    if millis > 0 {
+        std::thread::sleep(std::time::Duration::from_millis(millis as u64));
+    }
+    Ok(())
 }
