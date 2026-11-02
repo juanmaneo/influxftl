@@ -1,3 +1,6 @@
+// Copyright 2026 The influxftl Authors. Licensed under the Apache License, Version 2.0.
+// Derived from Warp 10 (Copyright 2018-2026 SenX S.A.S., Apache-2.0), ported to Rust and modified.
+
 //! An immutable `java.util.BitSet`, the value type produced by `BYTESTOBITS`.
 //!
 //! The set is stored as the little-endian bytes of `BitSet.toByteArray()`: bit `i` lives in

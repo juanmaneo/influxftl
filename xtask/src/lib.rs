@@ -1,3 +1,5 @@
+// Copyright 2026 The influxftl Authors. Licensed under the Apache License, Version 2.0.
+
 //! Developer automation for `influxftl`, invoked as `cargo xtask <command>`.
 //!
 //! The commands are deliberately thin wrappers around the standard cargo tooling so that

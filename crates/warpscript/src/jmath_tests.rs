@@ -1,3 +1,5 @@
+// Copyright 2026 The influxftl Authors. Licensed under the Apache License, Version 2.0.
+
 #![allow(
     clippy::unwrap_used,
     clippy::expect_used,
@@ -40,6 +42,15 @@ fn round_matches_java() {
     assert_eq!(round(f64::NAN), 0);
     assert_eq!(round(1e-320), 0);
     assert_eq!(round(-0.0), 0);
+    // `-0.5 < a < 0` is the only range where `a - floor(a)` rounds: still 0.
+    assert_eq!(round(-0.499_999_999_999_999_94), 0);
+    assert_eq!(round(-0.1), 0);
+    assert_eq!(round(-f64::MIN_POSITIVE), 0);
+    assert_eq!(round(-1.0), -1);
+    assert_eq!(round(-0.999_999_999_999_999_9), -1);
+    assert_eq!(round(-9.007_199_254_740_993e15), -9_007_199_254_740_992);
+    assert_eq!(round(9.223_372_036_854_776e18), i64::MAX);
+    assert_eq!(round(-9.223_372_036_854_776e18), i64::MIN);
 }
 
 #[test]
@@ -145,6 +156,17 @@ fn scalb_matches_java() {
     assert_bits(scalb(3.0, -1076), MIN_VALUE);
     assert_bits(scalb(f64::MAX, -2098), MIN_VALUE);
     assert_bits(scalb(MIN_VALUE, 2000), 5.672_519_334_708_34e278);
+    assert_bits(scalb(MIN_VALUE, 2500), f64::INFINITY);
+    assert_bits(scalb(-0.0, 2500), -0.0);
+    assert_bits(scalb(-1.0, -2500), -0.0);
+    assert_bits(scalb(f64::MAX, -2099), 0.0);
+    assert_bits(scalb(f64::NAN, 10), f64::NAN);
+    assert_bits(scalb(f64::NEG_INFINITY, -10), f64::NEG_INFINITY);
+    assert_bits(scalb(1.0, i32::MAX), f64::INFINITY);
+    assert_bits(scalb(1.0, i32::MIN), 0.0);
+    assert_bits(scalb(0.75, -1023), f64::from_bits(0x0006_0000_0000_0000));
+    assert_bits(scalb(1.0, -1023), f64::from_bits(0x0008_0000_0000_0000));
+    assert_bits(scalb(1.5, 1023), f64::from_bits(0x7FE8_0000_0000_0000));
 }
 
 #[test]

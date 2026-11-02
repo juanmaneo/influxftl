@@ -1,3 +1,6 @@
+// Copyright 2026 The influxftl Authors. Licensed under the Apache License, Version 2.0.
+// Derived from Warp 10 (Copyright 2018-2026 SenX S.A.S., Apache-2.0), ported to Rust and modified.
+
 //! Collection functions of WarpLib: conversions between the stack and lists, sets and maps
 //! (`LIST->`, `UNLIST`, `MAP->`…), set algebra, element access and mutation (`GET`, `SET`,
 //! `PUT`, `REMOVE`, `SUBLIST`, `SUBMAP`…), structural helpers (`FLATTEN`, `ZIP`, `CLONE`,

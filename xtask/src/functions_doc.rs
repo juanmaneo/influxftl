@@ -1,3 +1,5 @@
+// Copyright 2026 The influxftl Authors. Licensed under the Apache License, Version 2.0.
+
 //! Rendering of `docs/FUNCTIONS.md`: the port status of every WarpLib function.
 //!
 //! The inventory (`docs/warplib-inventory.tsv`, one `name<TAB>JavaClass` per line) was

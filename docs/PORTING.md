@@ -137,3 +137,32 @@ cargo xtask dev-check          # security-audit → check → fmt → clippy →
 ```
 
 Commit locally once `dev-check` is green (one commit per function family). **Never push.**
+
+## 8. Licensing and provenance
+
+The project is Apache-2.0 and must stay redistributable under it (see `README.md` §8 and
+`NOTICE`). When porting:
+
+1. **Warp 10 code may be ported** (Apache-2.0). Every new source file starts with the two
+   header lines used everywhere:
+   ```
+   // Copyright 2026 The influxftl Authors. Licensed under the Apache License, Version 2.0.
+   // Derived from Warp 10 (Copyright 2018-2026 SenX S.A.S., Apache-2.0), ported to Rust and modified.
+   ```
+2. **Other Apache-2.0 or MIT/BSD-style libraries Warp 10 delegates to** (mustache.java,
+   Commons Math, Joda-Time, Jackson, Guava, Bouncy Castle, fdlibm…) may be ported too. Add a
+   `// Derived from …` line naming the work, its copyright holder and license to the file
+   header, and add the work to `NOTICE` (reproduce its own `NOTICE` attributions when it has
+   one, the full copyright/permission notice for MIT-style licenses). Note the Warp 10
+   `NOTICE` credits the FastDTW implementation (Stan Salvador, MIT): restore that paragraph
+   in `NOTICE` when `DTW` / `OPTDTW` are ported.
+3. **Never transliterate OpenJDK code** (GPLv2 + Classpath exception is not compatible with
+   redistribution under Apache-2.0). JDK behaviour (`java.lang.Math`, `java.util.Random`,
+   `java.util.Formatter`, `Double.toString`, collections, charsets…) is implemented from the
+   published specification (the Javadoc) and from black-box reference values generated with
+   `java` (see §1); do not read the JDK sources to write the Rust code. The same applies to any
+   GPL, LGPL, AGPL or source-available dependency of Warp 10.
+4. **Reference values and error texts are facts, not expression**: embedding JDK outputs,
+   exception messages or CLDR symbols in tests and code is fine.
+5. New crates must pass `cargo deny` (`deny.toml` allow-list); do not add exceptions for
+   copyleft licenses.

@@ -1,3 +1,5 @@
+// Copyright 2026 The influxftl Authors. Licensed under the Apache License, Version 2.0.
+
 //! Kani proof harnesses (compiled only under `cargo kani`).
 //!
 //! The harnesses are bounded and target the pure helpers of the runtime, which is where the

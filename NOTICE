@@ -1,47 +1,136 @@
 influxftl — WarpLib / WarpScript for InfluxDB 3
 Copyright 2026 The influxftl Authors
 
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
+This product is licensed under the Apache License, Version 2.0 (see the
+LICENSE file). It includes software developed by The influxftl Authors and
+software derived from the works listed below. Every source file carries a
+header naming the work(s) it derives from; files derived from third-party
+works are modified versions of those works (ports from Java to Rust).
 
-    http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
-
-------------------------------------------------------------------------
+========================================================================
+Warp 10 — Apache License, Version 2.0
+========================================================================
 
 This product is a port to Rust of WarpLib, the WarpScript function library
-of the Warp 10 platform.
+of the Warp 10 platform, derived from the Warp 10 sources at revision
+b5764364679f6ccc40a23632e352d134fab1c2eb
+(https://github.com/senx/warp10-platform; source headers: Copyright
+2018-2026 SenX S.A.S.). The attribution notices of the Warp 10 NOTICE file
+that pertain to this product are reproduced below:
 
-  Warp 10 - The Most Advanced Time Series Platform
-  Copyright 2018-2025 SenX S.A.S.
-  https://warp10.io  -  https://github.com/senx/warp10-platform
-  Licensed under the Apache License, Version 2.0.
+   Warp 10 Platform
 
-  Warp 10, WarpScript, WarpLib, WarpFleet, Geo Time Series and SenX are
-  trademarks of SenX S.A.S.
+   Copyright 2013-2020  SenX S.A.S.
 
-Function names, semantics, documentation and algorithms were derived from
-the Warp 10 sources at revision b5764364679f6ccc40a23632e352d134fab1c2eb.
+   This product includes software developed at SenX
 
-------------------------------------------------------------------------
+(The Warp 10 NOTICE also credits the Fast Dynamic Time Warping
+implementation by Stan Salvador, MIT License,
+https://code.google.com/p/fastdtw/, used by the DTW functions. Those
+functions are not ported yet; the attribution must be restored here when
+they are.)
 
-This product is designed to run on top of InfluxDB 3 Core.
-
-  InfluxDB 3 Core
-  Copyright 2020-2025 InfluxData, Inc.
-  https://github.com/influxdata/influxdb
-  Dual licensed under the MIT License and the Apache License, Version 2.0.
-
-  InfluxDB is a trademark of InfluxData, Inc.
-
-------------------------------------------------------------------------
+Function names, semantics, documentation, error messages and algorithms
+were derived from the Warp 10 sources. Warp 10, WarpScript, WarpLib,
+WarpFleet, Geo Time Series and SenX are trademarks of SenX S.A.S.; they are
+used here only to describe compatibility with the Warp 10 platform.
 
 The HHCode geo-indexing scheme used by the geo functions is derived from
 GeoXP (https://github.com/senx/geoxplib), Copyright SenX S.A.S., licensed
 under the Apache License, Version 2.0.
+
+========================================================================
+InfluxDB 3 Core — MIT License or Apache License, Version 2.0
+========================================================================
+
+This product is designed to run on top of InfluxDB 3 Core
+(https://github.com/influxdata/influxdb), Copyright (c) 2020 InfluxData,
+dual licensed under the MIT License and the Apache License, Version 2.0,
+at the user's choosing. InfluxDB 3 Core is a runtime dependency: no
+InfluxDB source code is included in this product. Should InfluxDB code be
+vendored later, it is taken under the Apache License, Version 2.0 and its
+copyright notice retained.
+
+InfluxDB is a trademark of InfluxData, Inc.; the name "influxftl" and this
+product are not endorsed by or affiliated with InfluxData, Inc.
+
+========================================================================
+mustache.java — Apache License, Version 2.0
+========================================================================
+
+The TEMPLATE function (crates/warpscript/src/functions/template.rs) is a
+port of the template compiler and renderer of mustache.java 0.9.6
+(https://github.com/spullara/mustache.java):
+
+   Copyright 2010 RightTime, Inc.
+
+========================================================================
+Apache Commons Math — Apache License, Version 2.0
+========================================================================
+
+Numerical routines (crates/warpscript/src/cmath.rs) are ports of Apache
+Commons Math 3.6.1. From its NOTICE file:
+
+   Apache Commons Math
+   Copyright 2001-2016 The Apache Software Foundation
+
+   This product includes software developed at
+   The Apache Software Foundation (http://www.apache.org/).
+
+========================================================================
+Bouncy Castle — MIT-style license
+========================================================================
+
+The Argon2 engine (crates/warpscript/src/argon2.rs) is a port of the
+Argon2BytesGenerator of the Bouncy Castle Crypto package for Java
+(https://www.bouncycastle.org), used under the following license:
+
+   Copyright (c) 2000-2023 The Legion of the Bouncy Castle Inc.
+   (https://www.bouncycastle.org)
+
+   Permission is hereby granted, free of charge, to any person obtaining a
+   copy of this software and associated documentation files (the
+   "Software"), to deal in the Software without restriction, including
+   without limitation the rights to use, copy, modify, merge, publish,
+   distribute, sublicense, and/or sell copies of the Software, and to
+   permit persons to whom the Software is furnished to do so, subject to
+   the following conditions:
+
+   The above copyright notice and this permission notice shall be included
+   in all copies or substantial portions of the Software.
+
+   THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+   OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+   MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+   IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY
+   CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
+   TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
+   SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+========================================================================
+fdlibm — Sun Microsystems permissive notice
+========================================================================
+
+The IEEE remainder of crates/warpscript/src/jmath.rs follows the algorithm
+of e_remainder.c from fdlibm (https://www.netlib.org/fdlibm/):
+
+   Copyright (C) 1993 by Sun Microsystems, Inc. All rights reserved.
+
+   Developed at SunSoft, a Sun Microsystems, Inc. business.
+   Permission to use, copy, modify, and distribute this
+   software is freely granted, provided that this notice
+   is preserved.
+
+========================================================================
+Behavioural compatibility with other libraries
+========================================================================
+
+To reproduce the results of Warp 10, this product re-implements, from their
+public specifications and by black-box comparison, the observable behaviour
+of components it does not include and whose code it does not reuse: the
+Java class library (java.lang.Math, java.util.Random, java.util.Formatter,
+java.util.BitSet, Double.toString…; OpenJDK is GPLv2 with the Classpath
+exception and no OpenJDK code is used), Joda-Time (Apache-2.0, "This
+product includes software developed by Joda.org (https://www.joda.org/)"),
+the Jackson JSON processor (Apache-2.0, originally written by Tatu
+Saloranta) and Google Guava (Apache-2.0).

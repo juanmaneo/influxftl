@@ -1,3 +1,6 @@
+// Copyright 2026 The influxftl Authors. Licensed under the Apache License, Version 2.0.
+// Derived from Warp 10 (Copyright 2018-2026 SenX S.A.S., Apache-2.0), ported to Rust and modified.
+
 //! Date and time functions of WarpLib: `ISO8601`, `TSELEMENTS` / `->TSELEMENTS`,
 //! `TSELEMENTS->`, `ADDDAYS`, `ADDMONTHS`, `ADDYEARS`, `ADDDURATION`, `DURATION`,
 //! `ISODURATION`, `HUMANDURATION`, `TOTIMESTAMP`, `NOTBEFORE` and `NOTAFTER`.

@@ -1,3 +1,6 @@
+// Copyright 2026 The influxftl Authors. Licensed under the Apache License, Version 2.0.
+// Derived from Warp 10 (Copyright 2018-2026 SenX S.A.S., Apache-2.0), ported to Rust and modified.
+
 //! Limit functions of WarpLib: `MAXDEPTH`, `MAXOPS`, `MAXLOOP`, `MAXBUCKETS`, `MAXGEOCELLS`,
 //! `MAXPIXELS`, `MAXRECURSION`, `MAXSYMBOLS`, `LIMIT`, `MAXGTS` (and `MAXJSON`, which lives
 //! with the JSON functions) raise or lower a soft limit of the stack, and `OPS` reports the

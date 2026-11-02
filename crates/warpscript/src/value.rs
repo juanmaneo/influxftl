@@ -1,3 +1,6 @@
+// Copyright 2026 The influxftl Authors. Licensed under the Apache License, Version 2.0.
+// Derived from Warp 10 (Copyright 2018-2026 SenX S.A.S., Apache-2.0), ported to Rust and modified.
+
 //! The dynamic value type held on the WarpScript stack.
 //!
 //! Warp 10 stacks hold arbitrary Java objects; [`Value`] is the closed set of types the Rust

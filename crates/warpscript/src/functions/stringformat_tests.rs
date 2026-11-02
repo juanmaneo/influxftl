@@ -1,3 +1,5 @@
+// Copyright 2026 The influxftl Authors. Licensed under the Apache License, Version 2.0.
+
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
 //! Tests of `STRINGFORMAT` against `String.format` (OpenJDK 27, `Locale.ROOT`).
@@ -55,6 +57,13 @@ fn integers() {
     assert_eq!(fmt("%,010d", &longs(&[1234])), "000001,234");
     assert_eq!(fmt("%d", &[Value::Null]), "null");
     assert_eq!(fmt("%3d|", &longs(&[12345])), "12345|");
+    assert_eq!(fmt("%+(d %+(d % (d", &longs(&[-5, 5, -5])), "(5) +5 (5)");
+    assert_eq!(fmt("%,d %,d", &longs(&[123, -12])), "123 -12");
+    assert_eq!(fmt("%+,010d", &longs(&[1234])), "+00001,234");
+    assert_eq!(fmt("%x %#o %#x", &longs(&[0, 0, 0])), "0 00 0x0");
+    assert_eq!(fmt("%05x", &longs(&[-1])), "ffffffffffffffff");
+    assert_eq!(fmt("%010o", &longs(&[8])), "0000000010");
+    assert_eq!(fmt("%+x", &[Value::Null]), "null");
 }
 
 #[test]
@@ -98,6 +107,28 @@ fn floats() {
         "    1.5|1.5    |"
     );
     assert_eq!(fmt("%f", &[Value::Null]), "null");
+    assert_eq!(fmt("%.1f %.1f", &doubles(&[0.95, 9.95])), "1.0 10.0");
+    assert_eq!(fmt("%.2f", &doubles(&[9.995])), "10.00");
+    assert_eq!(fmt("%.0f %.0f %.0f", &doubles(&[0.5, 1.5, 9.5])), "1 2 10");
+    assert_eq!(fmt("%f", &doubles(&[5e-324])), "0.000000");
+    assert_eq!(fmt("%#.0f", &doubles(&[0.0])), "0.");
+    assert_eq!(fmt("%,.0f", &doubles(&[1_234_567.5])), "1,234,568");
+    assert_eq!(fmt("%,015.2f", &doubles(&[-1234.5])), "-0000001,234.50");
+    assert_eq!(fmt("%,(015.2f", &doubles(&[-1234.5])), "(000001,234.50)");
+    assert_eq!(fmt("%(08.2f", &doubles(&[-1.5])), "(001.50)");
+    assert_eq!(
+        fmt(
+            "%08.3f|%+08.3f|% 08.3f",
+            &doubles(&[-1.2345, 1.2345, 1.2345])
+        ),
+        "-001.235|+001.235| 001.235"
+    );
+    assert_eq!(
+        fmt("%.2f", &doubles(&[1e300])),
+        format!("1{}.00", "0".repeat(300))
+    );
+    // The precision of a general conversion also cuts the `null` of a numeric one.
+    assert_eq!(fmt("%.1f|%.2e", &[Value::Null, Value::Null]), "n|nu");
 }
 
 #[test]
@@ -134,6 +165,75 @@ fn scientific_and_general() {
     assert_eq!(fmt("%a", &doubles(&[-2.5])), "-0x1.4p1");
     assert_eq!(fmt("%A", &doubles(&[1.5])), "0X1.8P0");
     assert_eq!(fmt("%a", &doubles(&[5e-324])), "0x0.0000000000001p-1022");
+    assert_eq!(fmt("%.3e", &doubles(&[0.0])), "0.000e+00");
+    assert_eq!(fmt("%#.0e", &doubles(&[0.0])), "0.e+00");
+    assert_eq!(fmt("%e", &doubles(&[5e-324])), "4.900000e-324");
+    assert_eq!(fmt("%(e", &doubles(&[-1.5])), "(1.500000e+00)");
+    assert_eq!(fmt("%(012.2e", &doubles(&[-1.5])), "(001.50e+00)");
+    assert_eq!(
+        fmt("%10.2e|%-10.2e|", &doubles(&[1.5, 1.5])),
+        "  1.50e+00|1.50e+00  |"
+    );
+    assert_eq!(
+        fmt("%e %+e %05e", &doubles(&[f64::NAN; 3])),
+        "NaN NaN   NaN"
+    );
+    assert_eq!(fmt("%(E", &doubles(&[f64::NEG_INFINITY])), "(INFINITY)");
+    assert_eq!(fmt("%g", &doubles(&[1e-300])), "1.00000e-300");
+    assert_eq!(fmt("%.0g", &doubles(&[0.0])), "0");
+    assert_eq!(fmt("%(g", &doubles(&[-1.5])), "(1.50000)");
+    assert_eq!(fmt("%.1g %.2g", &doubles(&[0.95, 95.0])), "1 95");
+    assert_eq!(fmt("%.2g %.1g", &doubles(&[99.5, 9.5])), "1.0e+02 1e+01");
+}
+
+#[test]
+fn hexadecimal_floats() {
+    assert_eq!(fmt("%010a", &doubles(&[-1.0])), "-0x001.0p0");
+    assert_eq!(fmt("%010a", &doubles(&[1.0])), "0x0001.0p0");
+    assert_eq!(fmt("%+010a", &doubles(&[1.0])), "+0x001.0p0");
+    assert_eq!(fmt("% 010a", &doubles(&[1.0])), " 0x001.0p0");
+    assert_eq!(fmt("%-10a|", &doubles(&[1.0])), "0x1.0p0   |");
+    assert_eq!(fmt("%10A|", &doubles(&[-1.0])), "  -0X1.0P0|");
+    assert_eq!(
+        fmt("%.1a %.3a", &doubles(&[0.1, 0.1])),
+        "0x1.ap-4 0x1.99ap-4"
+    );
+    assert_eq!(fmt("%.12a", &doubles(&[0.1])), "0x1.99999999999ap-4");
+    assert_eq!(fmt("%.13a", &doubles(&[0.1])), "0x1.999999999999ap-4");
+    assert_eq!(fmt("%.20a", &doubles(&[1.0])), "0x1.00000000000000000000p0");
+    assert_eq!(fmt("%.0a", &doubles(&[0.1])), "0x1.ap-4");
+    assert_eq!(fmt("%.1a", &doubles(&[5e-324])), "0x1.0p-1074");
+    assert_eq!(fmt("%.2a", &doubles(&[1e-310])), "0x1.27p-1030");
+    assert_eq!(
+        fmt("%.14a", &doubles(&[1e-310])),
+        "0x0.012688b70e62b0p-1022"
+    );
+    assert_eq!(fmt("%.3A", &doubles(&[1e-320])), "0X1.FA0P-1064");
+    assert_eq!(fmt("%.2a", &doubles(&[f64::MIN_POSITIVE])), "0x1.00p-1022");
+    // Ties to even: `1.f8` rounds up to the next binade, `1.08` down, `1.18` up.
+    assert_eq!(
+        fmt(
+            "%.1a %.1a %.1a %.1a",
+            &doubles(&[1.96875, 1.03125, 1.09375, 1.0625])
+        ),
+        "0x1.0p1 0x1.0p0 0x1.2p0 0x1.1p0"
+    );
+    assert_eq!(fmt("%.1a", &doubles(&[f64::MAX])), "0x1.0p1024");
+    assert_eq!(fmt("%.12a", &doubles(&[f64::MAX])), "0x1.000000000000p1024");
+    assert_eq!(
+        fmt("%a %.2a %.2a", &doubles(&[-0.0, 0.0, -0.0])),
+        "-0x0.0p0 0x0.00p0 -0x0.00p0"
+    );
+    assert_eq!(
+        fmt(
+            "%a %.2a %+a",
+            &doubles(&[f64::NAN, f64::INFINITY, f64::NEG_INFINITY])
+        ),
+        "NaN Infinity -Infinity"
+    );
+    assert_eq!(fmt("%a", &doubles(&[1e-310])), "0x0.012688b70e62bp-1022");
+    assert_eq!(fmt("%a", &doubles(&[f64::MIN_POSITIVE])), "0x1.0p-1022");
+    assert_eq!(fmt("%a", &doubles(&[1e-320])), "0x0.00000000007e8p-1022");
 }
 
 #[test]
@@ -189,6 +289,24 @@ fn strings_booleans_hashes() {
     assert_eq!(fmt("%.2s|", &strings(&["😀x"])), "😀|");
     assert_eq!(fmt("%3s|", &strings(&["😀"])), " 😀|");
     assert_eq!(fmt("%c", &[Value::Null]), "null");
+    assert_eq!(
+        fmt("%S|%-10S|", &[Value::Null, Value::from("a")]),
+        "NULL|A         |"
+    );
+    assert_eq!(fmt("%-3c|", &[Value::Null]), "null|");
+    assert_eq!(fmt("%.5s|%.0s|", &strings(&["ab", "abc"])), "ab||");
+    // The precision cuts every general conversion.
+    assert_eq!(
+        fmt(
+            "%.2b %.2B %.1h",
+            &[
+                Value::Boolean(true),
+                Value::Boolean(true),
+                Value::from("abc")
+            ]
+        ),
+        "tr TR 1"
+    );
 }
 
 #[test]
@@ -200,6 +318,10 @@ fn literals_indexes_and_locales() {
     assert_eq!(fmt("a%%b%nc", &[]), "a%b\nc");
     assert_eq!(fmt("%2$s %1$s", &strings(&["a", "b"])), "b a");
     assert_eq!(fmt("%s %<s", &strings(&["a"])), "a a");
+    // `<` wins over an explicit index.
+    assert_eq!(fmt("%s %1$<s", &strings(&["a"])), "a a");
+    assert_eq!(fmt("%2$d %<d %d", &longs(&[1, 2])), "2 2 1");
+    assert_eq!(fmt("%s %s %<s %s", &strings(&["a", "b", "c"])), "a b b c");
     assert_eq!(fmt("%d %d", &longs(&[1, 2, 3])), "1 2");
     assert_eq!(fmt("%1$d %1$d %d", &longs(&[7, 8])), "7 7 7");
     assert_eq!(fmt("%2$5d|%<-5d|", &longs(&[7, 8])), "    8|8    |");
@@ -255,13 +377,14 @@ fn errors_match_java() {
     assert_eq!(err("%d", &doubles(&[1.5])), "d != java.lang.Double");
     assert_eq!(err("%f", &longs(&[1])), "f != java.lang.Long");
     assert_eq!(err("%x", &doubles(&[1.5])), "x != java.lang.Double");
-    assert_eq!(err("%X", &strings(&["a"])), "X != java.lang.String");
+    // Java names the conversion in lower case whatever the case written.
+    assert_eq!(err("%X", &strings(&["a"])), "x != java.lang.String");
     assert_eq!(err("%c", &strings(&["ab"])), "c != java.lang.String");
     assert_eq!(err("%c", &longs(&[65])), "c != java.lang.Long");
     assert_eq!(err("%d", &[Value::Boolean(true)]), "d != java.lang.Boolean");
     assert_eq!(
         err("%E", &[Value::list(Vec::new())]),
-        "E != java.util.ArrayList"
+        "e != java.util.ArrayList"
     );
     assert_eq!(err("%-d", &longs(&[1])), "%-d");
     assert_eq!(err("%0d", &longs(&[1])), "%0d");
@@ -277,7 +400,7 @@ fn errors_match_java() {
     assert_eq!(err("%+%", &[]), "Flags = '+'");
     assert_eq!(err("%#s", &strings(&["a"])), "Conversion = s, Flags = #");
     assert_eq!(err("%#b", &strings(&["a"])), "Conversion = b, Flags = #");
-    assert_eq!(err("%#H", &strings(&["a"])), "Conversion = H, Flags = #");
+    assert_eq!(err("%#H", &strings(&["a"])), "Conversion = h, Flags = #");
     assert_eq!(err("%+s", &strings(&["a"])), "Conversion = s, Flags = +");
     assert_eq!(err("% s", &strings(&["a"])), "Conversion = s, Flags =  ");
     assert_eq!(err("%0s", &strings(&["a"])), "Conversion = s, Flags = 0");
@@ -307,6 +430,64 @@ fn errors_match_java() {
     assert_eq!(err("%-f", &doubles(&[1.0])), "%-f");
     assert_eq!(err("%-05f", &doubles(&[1.0])), "Flags = '-0'");
     assert_eq!(err("%+ e", &doubles(&[1.0])), "Flags = '+ '");
+    assert_eq!(err("%0-5d", &longs(&[1])), "Flags = '-0'");
+    assert_eq!(err("%-0d", &longs(&[1])), "%-0d");
+    assert_eq!(
+        err("%,15.3E|", &doubles(&[1.5])),
+        "Conversion = e, Flags = ,"
+    );
+    // Sign flags are rejected by the octal and hexadecimal conversions of a `LONG` only.
+    assert_eq!(err("%+x", &longs(&[1])), "Conversion = x, Flags = +");
+    assert_eq!(err("% o", &longs(&[1])), "Conversion = o, Flags =  ");
+    assert_eq!(err("%(x", &longs(&[1])), "Conversion = x, Flags = (");
+    // Upper case variants exist for `b h s c x e g a` only.
+    for format in ["%F", "%D", "%O", "%N", "%Q"] {
+        assert_eq!(
+            err(format, &longs(&[1])),
+            format!("Conversion = '{}'", &format[1..]),
+            "{format}"
+        );
+    }
+    // An unknown alphabetic conversion is named; any other failure names the character
+    // after the `%`.
+    assert_eq!(err("%5q", &longs(&[1])), "Conversion = 'q'");
+    assert_eq!(err("%1$5.2q", &longs(&[1])), "Conversion = 'q'");
+    assert_eq!(err("%5-d", &longs(&[1])), "Conversion = '5'");
+    assert_eq!(err("%-^s", &strings(&["a"])), "Conversion = '-'");
+    assert_eq!(err("%é", &longs(&[1])), "Conversion = 'é'");
+    assert_eq!(err("%5é", &longs(&[1])), "Conversion = '5'");
+    assert_eq!(err("%1$$s", &strings(&["a"])), "Conversion = '1'");
+    assert_eq!(err("%,,d", &longs(&[1])), "Flags = ','");
+    assert_eq!(err("%007d", &longs(&[1])), "Flags = '0'");
+    assert_eq!(err("%<<s", &strings(&["a"])), "Flags = '<'");
+    assert_eq!(
+        err("%00$s", &strings(&["a"])),
+        "Illegal format argument index = 0"
+    );
+    // The specifier is printed as Java rebuilds it: flags, index, width, precision.
+    assert_eq!(err("%1$<s", &strings(&["a"])), "Format specifier '%<s'");
+    assert_eq!(err("%<5d %d", &longs(&[1])), "Format specifier '%<5d'");
+    assert_eq!(err("%2$-d", &longs(&[1, 2])), "%-2$d");
+    assert_eq!(err("%2$-S", &strings(&["a"])), "%-2$S");
+    assert_eq!(err("%1$-.2s", &strings(&["a"])), "%-1$.2s");
+    assert_eq!(err("%-.2S", &strings(&["a"])), "%-.2S");
+    assert_eq!(err("%-.0s|", &strings(&["a"])), "%-.0s");
+    assert_eq!(err("%1$0d", &longs(&[1])), "%01$d");
+    // Date/time conversions are validated like Java does before being rejected.
+    assert_eq!(err("%t", &[]), "Conversion = 't'");
+    assert_eq!(err("%t5", &[]), "Conversion = 't'");
+    assert_eq!(err("%T", &[]), "Conversion = 'T'");
+    assert_eq!(err("%Tq", &longs(&[0])), "Conversion = 'tq'");
+    assert_eq!(err("%.1tY", &longs(&[0])), "1");
+    assert_eq!(err("%#tY", &longs(&[0])), "Conversion = Y, Flags = #");
+    assert_eq!(err("%-tY", &longs(&[0])), "%-tY");
+    assert_eq!(err("%1$-TY", &longs(&[0])), "%-1$TY");
+    assert_eq!(err("%tY", &[]), "Format specifier '%tY'");
+    assert_eq!(err("%<tY", &[]), "Format specifier '%<tY'");
+    assert_eq!(
+        err("%-5tY", &longs(&[0])),
+        "Date/time conversions (%t) are not supported."
+    );
     let classes = [
         ("( )", "java.util.HashSet"),
         ("<% %>", "io.warp10.script.WarpScriptStack$Macro"),

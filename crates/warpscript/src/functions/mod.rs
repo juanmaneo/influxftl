@@ -1,3 +1,6 @@
+// Copyright 2026 The influxftl Authors. Licensed under the Apache License, Version 2.0.
+// Derived from Warp 10 (Copyright 2018-2026 SenX S.A.S., Apache-2.0), ported to Rust and modified.
+
 //! The WarpLib function registry and the shared helpers used to implement functions.
 //!
 //! Every function group lives in its own module and exposes a `FUNCTIONS` table of
@@ -23,6 +26,7 @@ pub mod stack_ops;
 pub mod stringformat;
 pub mod strings;
 pub mod symbols;
+pub mod template;
 pub mod time;
 
 use std::collections::HashMap;
@@ -67,6 +71,7 @@ const TABLES: &[&[(&str, Entry)]] = &[
     time::FUNCTIONS,
     quaternions::FUNCTIONS,
     stringformat::FUNCTIONS,
+    template::FUNCTIONS,
 ];
 
 static REGISTRY: OnceLock<HashMap<&'static str, &'static Entry>> = OnceLock::new();
@@ -184,5 +189,7 @@ mod stringformat_tests;
 mod strings_tests;
 #[cfg(test)]
 mod symbols_tests;
+#[cfg(test)]
+mod template_tests;
 #[cfg(test)]
 mod time_tests;

@@ -1,3 +1,5 @@
+// Copyright 2026 The influxftl Authors. Licensed under the Apache License, Version 2.0.
+
 //! `cargo xtask` entry point. All logic lives in the library so that it can be unit tested.
 
 use std::process::ExitCode;

@@ -1,3 +1,6 @@
+// Copyright 2026 The influxftl Authors. Licensed under the Apache License, Version 2.0.
+// Derived from Warp 10 (Copyright 2018-2026 SenX S.A.S., Apache-2.0), ported to Rust and modified.
+
 //! Java-compatible textual conversions used all over the runtime.
 //!
 //! * [`java_double_to_string`] — `Double.toString` formatting (`1.0`, `1.0E7`, `NaN`…);

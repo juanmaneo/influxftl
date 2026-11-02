@@ -262,8 +262,52 @@ Build arguments: `RUST_VERSION` (default from `rust-toolchain.toml`), `DEBIAN_VE
 and [`NOTICE`](NOTICE).
 
 Apache-2.0 was chosen because it is the license of Warp 10 (the code being ported) and
-one of the two licenses of InfluxDB 3 Core (dual MIT / Apache-2.0), making this project
-compatible with both upstreams in both directions.
+one of the two licenses of InfluxDB 3 Core (MIT **or** Apache-2.0, at the user's choosing),
+so the project is compatible with both upstreams in both directions: Warp 10 code may be
+ported here and this code could be contributed back to either project.
+
+### Licensing of derived code
+
+The repository is a derivative work in the sense of the Apache License, and it follows the
+obligations of its section 4:
+
+- every source file carries a header stating what it derives from (`// Derived from Warp 10
+  (Copyright 2018-2026 SenX S.A.S., Apache-2.0), ported to Rust and modified.`), which is
+  the "prominent notice of modification" the license asks for;
+- [`NOTICE`](NOTICE) reproduces the attribution notices of the upstream `NOTICE` files that
+  pertain to this product and carries the full copyright / permission notices of the
+  permissively licensed works;
+- the original copyright notices are kept in those headers and in `NOTICE`.
+
+| Work | License | Use in `influxftl` |
+|---|---|---|
+| [Warp 10](https://github.com/senx/warp10-platform) (SenX S.A.S.) | Apache-2.0 | WarpLib ported to Rust: names, semantics, algorithms, error messages |
+| [GeoXP](https://github.com/senx/geoxplib) (SenX S.A.S.) | Apache-2.0 | HHCode geo-indexing scheme |
+| [InfluxDB 3 Core](https://github.com/influxdata/influxdb) (InfluxData) | MIT or Apache-2.0 | **Runtime dependency only** — no InfluxDB source code is included; it is used through its HTTP API |
+| [mustache.java 0.9.6](https://github.com/spullara/mustache.java) (RightTime, Inc.) | Apache-2.0 | `TEMPLATE` (template compiler and renderer) |
+| [Apache Commons Math 3.6.1](https://commons.apache.org/math/) (ASF) | Apache-2.0 | numerical routines of `cmath.rs` |
+| [Bouncy Castle](https://www.bouncycastle.org) (Legion of the Bouncy Castle) | MIT-style | Argon2 engine of `ARGON2` |
+| [fdlibm](https://www.netlib.org/fdlibm/) (Sun Microsystems) | permissive Sun notice | `IEEEREMAINDER` algorithm |
+
+Java behaviour that scripts can observe (`java.lang.Math`, `java.util.Random`,
+`java.util.Formatter`, `Double.toString`, Joda-Time, Jackson, Guava…) is **re-implemented
+from the public specifications and validated black-box against the JDK**; OpenJDK is
+GPLv2 with the Classpath exception, which is not compatible with redistribution under
+Apache-2.0, so no OpenJDK code is transliterated. `docs/PORTING.md` §8 states these rules
+for contributors.
+
+Dependencies are policed by `deny.toml`: only OSI licenses compatible with Apache-2.0 are
+allowed (`cargo deny check licenses` is part of `cargo xtask dev-check`).
+
+### Trademarks
+
+*Warp 10, WarpScript, WarpLib, WarpFleet, Geo Time Series and SenX* are trademarks of SenX
+S.A.S.; *InfluxDB* and *InfluxData* are trademarks of InfluxData, Inc. They are used here
+only to describe what this software is compatible with or runs on (nominative use). This
+project is **not** endorsed by, affiliated with or supported by SenX or InfluxData.
+Trademark permission is distinct from the software licenses: before publishing or
+distributing the project under a name containing "Influx", check InfluxData's trademark
+policy (and SenX's for "Warp") and consider renaming if you cannot comply with it.
 
 ---
 
@@ -274,19 +318,28 @@ This project would not exist without the work of others:
 - **[Warp 10](https://warp10.io) by [SenX S.A.S.](https://senx.io)** — the WarpScript
   language, the WarpLib function library and the Geo Time Series model were designed and
   implemented by the SenX team and the Warp 10 community. `influxftl` is a port of that
-  work; the function names, semantics, documentation and large parts of the algorithms
-  are theirs. Warp 10 is released under the Apache License 2.0
-  (<https://github.com/senx/warp10-platform>). *Warp 10, WarpScript, WarpLib, WarpFleet,
-  Geo Time Series and SenX are trademarks of SenX S.A.S.*
+  work; the function names, semantics, documentation, error messages and most of the
+  algorithms are theirs. Warp 10 is released under the Apache License 2.0
+  (<https://github.com/senx/warp10-platform>, Copyright 2018-2026 SenX S.A.S.). Thank you
+  to the SenX team for building and open-sourcing it.
 - **[InfluxDB 3 Core](https://github.com/influxdata/influxdb) by
   [InfluxData, Inc.](https://www.influxdata.com)** — the storage engine, query engine
   (Apache DataFusion / Arrow), write path and HTTP API that this project runs on.
-  InfluxDB 3 Core is dual-licensed MIT / Apache-2.0. *InfluxDB is a trademark of
-  InfluxData, Inc.*
+  InfluxDB 3 Core is Copyright (c) 2020 InfluxData and dual-licensed MIT / Apache-2.0.
+- **[mustache.java](https://github.com/spullara/mustache.java)** (Sam Pullara, RightTime,
+  Inc., Apache-2.0), whose compiler is ported for `TEMPLATE`.
+- **[Apache Commons Math](https://commons.apache.org/math/)** (The Apache Software
+  Foundation, Apache-2.0) for the numerical routines ported in `cmath.rs`.
+- **[The Legion of the Bouncy Castle](https://www.bouncycastle.org)** (MIT-style license)
+  for the Argon2 implementation ported for `ARGON2`.
+- **fdlibm** (Sun Microsystems) for the IEEE remainder algorithm.
 - **[GeoXP](https://github.com/senx/geoxplib)** (SenX, Apache-2.0) for the HHCode
   geo-indexing scheme reproduced in the geo functions.
-- The **Rust ecosystem**: Apache Arrow / DataFusion, `cargo-llvm-cov`, `cargo-deny`,
-  `cargo-audit` (RustSec) and the **Kani** model checker (AWS), which make the quality
-  gates of this repository possible.
+- **Joda-Time** (Joda.org), the **Jackson JSON processor** (Tatu Saloranta and
+  contributors) and **Google Guava**, whose documented behaviour is reproduced so that
+  dates, JSON and encodings come out exactly as in Warp 10.
+- The **Rust ecosystem**: Apache Arrow / DataFusion, the RustCrypto hashes, `chrono`,
+  `fancy-regex`, `cargo-llvm-cov`, `cargo-deny`, `cargo-audit` (RustSec) and the **Kani**
+  model checker (AWS), which make the quality gates of this repository possible.
 
 Thank you.

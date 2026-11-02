@@ -1,5 +1,10 @@
-//! A port of `java.util.Random`, the 48-bit linear congruential generator behind the seeded
-//! WarpScript functions (`PRNG` / `SRAND`…). A given seed yields the exact Java sequence.
+// Copyright 2026 The influxftl Authors. Licensed under the Apache License, Version 2.0.
+// Derived from Warp 10 (Copyright 2018-2026 SenX S.A.S., Apache-2.0), ported to Rust and modified.
+
+//! `java.util.Random`, the 48-bit linear congruential generator behind the seeded WarpScript
+//! functions (`PRNG` / `SRAND`…), implemented from the algorithm its specification publishes
+//! (multiplier, increment, seed scrambling and the derivation of each `next*` method), so that
+//! a given seed yields the exact Java sequence.
 
 const MULTIPLIER: i64 = 0x5_DEEC_E66D;
 const ADDEND: i64 = 0xB;

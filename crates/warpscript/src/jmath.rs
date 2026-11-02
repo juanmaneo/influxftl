@@ -1,13 +1,20 @@
+// Copyright 2026 The influxftl Authors. Licensed under the Apache License, Version 2.0.
+//
+// `ieee_remainder` follows the algorithm of fdlibm's e_remainder.c:
+//   Copyright (C) 1993 by Sun Microsystems, Inc. All rights reserved.
+//   Developed at SunSoft, a Sun Microsystems, Inc. business.
+//   Permission to use, copy, modify, and distribute this software is freely granted,
+//   provided that this notice is preserved.
+
 //! The `java.lang.Math` semantics that differ from, or are missing in, Rust's `f64` / `i64`.
 //!
 //! WarpScript programs observe the exact Java results of these functions (rounding of ties,
-//! the sign of zero, `NaN` propagation, overflow behaviour), so each one is a port of the JDK
-//! algorithm rather than a call to the nearest Rust method.
+//! the sign of zero, `NaN` propagation, overflow behaviour), so each one implements the
+//! contract documented for the Java method rather than calling the nearest Rust method.
 
 use crate::error::{Error, Result};
 
 const EXP_BIT_MASK: u64 = 0x7FF0_0000_0000_0000;
-const SIGNIF_BIT_MASK: u64 = 0x000F_FFFF_FFFF_FFFF;
 const SIGNIFICAND_WIDTH: i32 = 53;
 const EXP_BIAS: i32 = 1023;
 /// `Double.MAX_EXPONENT`.
@@ -27,20 +34,16 @@ pub const DIVISION_BY_ZERO: &str = "/ by zero";
 /// `Math.round(double)`: the closest `long` to `a`, ties rounding towards positive infinity;
 /// `NaN` gives 0 and out of range values saturate.
 pub fn round(a: f64) -> i64 {
-    let long_bits = a.to_bits() as i64;
-    let biased_exp = (long_bits & EXP_BIT_MASK as i64) >> (SIGNIFICAND_WIDTH - 1);
-    let shift = i64::from(SIGNIFICAND_WIDTH - 2 + EXP_BIAS) - biased_exp;
-    if (shift & -64) == 0 {
-        // A finite number such that 2^-64 <= ulp(a) < 1: round the significand by hand.
-        let mut r = (long_bits & SIGNIF_BIT_MASK as i64) | (SIGNIF_BIT_MASK as i64 + 1);
-        if long_bits < 0 {
-            r = -r;
-        }
-        ((r >> shift) + 1) >> 1
+    // `floor(a + 0.5)` without the rounding error of the addition: `a - floor(a)` is exact
+    // by the Sterbenz lemma whenever `|a| >= 0.5` (and trivially when the floor is zero),
+    // and for `-0.5 < a < 0` it rounds monotonically to a value that is still at least one
+    // half, so the comparison always decides like the exact computation. The `as` conversion
+    // saturates and maps `NaN` (for which the comparison is false) to 0, like the JVM's `d2l`.
+    let floor = a.floor();
+    if a - floor >= 0.5 {
+        (floor + 1.0) as i64
     } else {
-        // Either |a| < 2^-11 (rounds to zero), or ulp(a) >= 1 (a is an integer), or a is an
-        // infinity or NaN: the JVM `d2l` conversion does the right thing.
-        a as i64
+        floor as i64
     }
 }
 
@@ -102,28 +105,25 @@ pub fn get_exponent(d: f64) -> i32 {
     (((d.to_bits() & EXP_BIT_MASK) >> (SIGNIFICAND_WIDTH - 1)) as i32) - EXP_BIAS
 }
 
-/// `2^n` as a double, for `MIN_EXPONENT <= n <= MAX_EXPONENT` (`Math.powerOfTwoD`).
+/// The normal double `2^n`, for `MIN_EXPONENT <= n <= MAX_EXPONENT`.
 fn power_of_two(n: i32) -> f64 {
-    f64::from_bits(
-        ((i64::from(n) + i64::from(EXP_BIAS)) << (SIGNIFICAND_WIDTH - 1)) as u64 & EXP_BIT_MASK,
-    )
+    f64::from_bits(((n + EXP_BIAS) as u64) << (SIGNIFICAND_WIDTH - 1))
 }
 
-/// `Math.ulp(double)`: the distance to the next double of larger magnitude.
+/// `Math.ulp(double)`: the positive distance between `d` and the double of next larger
+/// magnitude; `NaN` for `NaN`, infinity for an infinity, `Double.MIN_VALUE` for zero.
 pub fn ulp(d: f64) -> f64 {
-    let exp = get_exponent(d);
-    if exp == MAX_EXPONENT + 1 {
-        return d.abs();
+    let magnitude = d.abs();
+    if !magnitude.is_finite() {
+        return magnitude;
     }
-    if exp == MIN_EXPONENT - 1 {
-        return MIN_VALUE;
-    }
-    let exp = exp - (SIGNIFICAND_WIDTH - 1);
-    if exp >= MIN_EXPONENT {
-        power_of_two(exp)
+    // Adjacent doubles subtract exactly. Above `Double.MAX_VALUE` there is no next double:
+    // the ulp is then the distance to the previous one, which is the same.
+    let next = magnitude.next_up();
+    if next.is_infinite() {
+        magnitude - magnitude.next_down()
     } else {
-        // The ulp is subnormal: build it directly from its bit pattern.
-        f64::from_bits(1_u64 << (exp - (MIN_EXPONENT - (SIGNIFICAND_WIDTH - 1))))
+        next - magnitude
     }
 }
 
@@ -138,25 +138,39 @@ pub fn next_after(start: f64, direction: f64) -> f64 {
     }
 }
 
-/// `Math.scalb(double, int)`: `d * 2^scale_factor` computed exactly, with a single rounding
-/// when the result is subnormal.
+/// `Math.scalb(double, int)`: `d * 2^scale_factor` rounded as a single correctly rounded
+/// multiplication (overflow gives an infinity, a subnormal result is rounded once).
 pub fn scalb(d: f64, scale_factor: i32) -> f64 {
-    const MAX_SCALE: i32 = MAX_EXPONENT - MIN_EXPONENT + SIGNIFICAND_WIDTH + 1;
-    let (scale_factor, scale_increment, exp_delta) = if scale_factor < 0 {
-        (scale_factor.max(-MAX_SCALE), -512, power_of_two(-512))
-    } else {
-        (scale_factor.min(MAX_SCALE), 512, power_of_two(512))
-    };
-    // The JDK computes `scaleFactor % 512` (sign of the dividend) with a Hacker's Delight trick;
-    // the remainder operator gives the same value.
-    let exp_adjust = scale_factor % 512;
-    let mut d = d * power_of_two(exp_adjust);
-    let mut scale_factor = scale_factor - exp_adjust;
-    while scale_factor != 0 {
-        d *= exp_delta;
-        scale_factor -= scale_increment;
+    // Multiplying by a power of two is exact as long as the result is normal, so the scaling
+    // is done in steps that keep every intermediate result normal (or already zero or
+    // infinite): only the final multiplication can round or overflow. Two steps are enough,
+    // because `MIN_VALUE * 2^2046` and `MAX_VALUE * 2^-1938` are normal: whatever exponent
+    // remains after them can only drive the result to infinity or to zero.
+    const UP: f64 = f64::from_bits(((2 * EXP_BIAS) as u64) << (SIGNIFICAND_WIDTH - 1));
+    const UP_EXPONENT: i32 = MAX_EXPONENT;
+    // 2^-969: the largest magnitude times it stays normal, and so does a normal number down
+    // to 2^-53, below which the result is zero anyway.
+    const DOWN_EXPONENT: i32 = MIN_EXPONENT + SIGNIFICAND_WIDTH;
+    const DOWN: f64 =
+        f64::from_bits(((DOWN_EXPONENT + EXP_BIAS) as u64) << (SIGNIFICAND_WIDTH - 1));
+    let mut d = d;
+    let mut n = scale_factor;
+    if n > MAX_EXPONENT {
+        d *= UP;
+        n -= UP_EXPONENT;
+        if n > MAX_EXPONENT {
+            d *= UP;
+            n = (n - UP_EXPONENT).min(MAX_EXPONENT);
+        }
+    } else if n < MIN_EXPONENT {
+        d *= DOWN;
+        n -= DOWN_EXPONENT;
+        if n < MIN_EXPONENT {
+            d *= DOWN;
+            n = (n - DOWN_EXPONENT).max(MIN_EXPONENT);
+        }
     }
-    d
+    d * power_of_two(n)
 }
 
 /// `Math.IEEEremainder` (fdlibm `__ieee754_remainder`): `x - n * p` where `n` is the integer

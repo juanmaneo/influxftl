@@ -1,3 +1,5 @@
+// Copyright 2026 The influxftl Authors. Licensed under the Apache License, Version 2.0.
+
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
 //! Tests of the Argon2 port against BouncyCastle 1.78.1 (`Argon2BytesGenerator`) and of the

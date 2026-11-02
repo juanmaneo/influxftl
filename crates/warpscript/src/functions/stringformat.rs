@@ -1,11 +1,22 @@
-//! `STRINGFORMAT`: `String.format(locale, format, args…)`, a port of `java.util.Formatter`
-//! for the conversions WarpScript values support (`%b %h %s %c %d %o %x %e %f %g %a %% %n`
-//! and their upper case forms), with Java's flags, width, precision, argument indexes,
-//! rounding (half-up on the shortest decimal representation) and error messages.
+// Copyright 2026 The influxftl Authors. Licensed under the Apache License, Version 2.0.
+// Behaviour of `STRINGFORMAT` derived from Warp 10 (Copyright 2018-2025 SenX S.A.S., Apache-2.0).
+
+//! `STRINGFORMAT`: `String.format(locale, format, args…)` for the conversions WarpScript
+//! values support (`%b %h %s %c %d %o %x %e %f %g %a %% %n` and their upper case forms), with
+//! Java's flags, width, precision, argument indexes, rounding (half-up on the shortest decimal
+//! representation) and error messages.
+//!
+//! The implementation follows the published specification of `java.util.Formatter` (the
+//! syntax of a specifier, the flags each conversion accepts, the number localisation
+//! algorithm, the rounding rules) and was validated black-box against OpenJDK's
+//! `String.format`; it does not reuse the JDK's code.
+
+use std::iter::repeat_n;
 
 use super::Entry;
 use super::args::{fail, fail_with_cause};
 use crate::error::{Error, Result};
+use crate::format::java_double_to_string;
 use crate::stack::Stack;
 use crate::value::Value;
 
@@ -61,7 +72,8 @@ impl Locale {
     }
 }
 
-/// The flags of a format specifier (`Formatter.Flags`).
+/// The flags of a format specifier. `^` is not written in a format string: it is the internal
+/// flag of an upper case conversion (`%S`, `%X`…), which Java lists with the others.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 struct Flags {
     left_justify: bool,
@@ -76,10 +88,9 @@ struct Flags {
 }
 
 impl Flags {
-    /// `Flags.toString()`: the flag characters in Java's order.
-    fn to_java_string(self) -> String {
-        let mut out = String::new();
-        for (set, c) in [
+    /// Every flag with its character, in the order Java prints them (`-^#+ 0,(<`).
+    fn entries(self) -> [(bool, char); 9] {
+        [
             (self.left_justify, '-'),
             (self.uppercase, '^'),
             (self.alternate, '#'),
@@ -89,16 +100,26 @@ impl Flags {
             (self.group, ','),
             (self.parentheses, '('),
             (self.previous, '<'),
-        ] {
-            if set {
-                out.push(c);
-            }
-        }
-        out
+        ]
     }
 
-    /// Set the flag of `c`; `Err` on a duplicate (`DuplicateFormatFlagsException`).
-    fn add(&mut self, c: char) -> Result<()> {
+    /// The characters of the set flags, as Java prints them in error messages.
+    fn to_java_string(self) -> String {
+        self.entries()
+            .into_iter()
+            .filter(|entry| entry.0)
+            .map(|entry| entry.1)
+            .collect()
+    }
+
+    /// Whether the flag written `c` is set.
+    fn has(self, c: char) -> bool {
+        self.entries().contains(&(true, c))
+    }
+
+    /// Set the flag written `c` (one of `-#+ 0,(<`); a flag given twice is an error
+    /// (`DuplicateFormatFlagsException`).
+    fn set(&mut self, c: char) -> Result<()> {
         let slot = match c {
             '-' => &mut self.left_justify,
             '#' => &mut self.alternate,
@@ -109,272 +130,270 @@ impl Flags {
             '(' => &mut self.parentheses,
             _ => &mut self.previous,
         };
-        if *slot {
-            return Err(Error::new(format!(
-                "Flags = '{}'",
-                Flags::default().with(c).to_java_string()
-            )));
+        if std::mem::replace(slot, true) {
+            return Err(Error::new(format!("Flags = '{c}'")));
         }
-        *slot = true;
         Ok(())
-    }
-
-    fn with(mut self, c: char) -> Flags {
-        let _ = self.add(c);
-        self
     }
 }
 
-/// One `%…` specifier.
-#[derive(Debug, Clone)]
+/// One `%…` specifier of a format string.
+#[derive(Debug)]
 struct Spec {
     /// Explicit argument index (`2$`), 1-based.
     index: Option<usize>,
     flags: Flags,
     width: Option<usize>,
     precision: Option<usize>,
-    /// Date/time conversion (`%tY`).
-    date_time: bool,
-    /// The conversion character, lower cased.
+    /// The conversion character, lower cased; `t` for a date/time conversion.
     conversion: char,
-    /// The original specifier text (`FormatSpecifier.toString()`).
-    text: String,
+    /// The character following a date/time `t` / `T`, as written.
+    suffix: Option<char>,
 }
 
-/// `FormatFlagsConversionMismatchException`.
+/// A validation step of a specifier. The steps of a conversion run in order and the first
+/// failure is reported, which decides which of Java's `IllegalFormatException`s wins when
+/// several apply.
+#[derive(Debug, Clone, Copy)]
+enum Rule {
+    /// These flags do not apply to the conversion (`FormatFlagsConversionMismatchException`).
+    Reject(&'static [char]),
+    /// These flags need a width (`MissingFormatWidthException`).
+    NeedWidth(&'static [char]),
+    /// These pairs of flags cannot be combined (`IllegalFormatFlagsException`).
+    Incompatible(&'static [[char; 2]]),
+    /// No flag outside this list is allowed (`IllegalFormatFlagsException`).
+    Only(&'static [char]),
+    /// A precision is not allowed (`IllegalFormatPrecisionException`).
+    NoPrecision,
+    /// A width is not allowed (`IllegalFormatWidthException`).
+    NoWidth,
+    /// The suffix of a date/time conversion must be one Java knows
+    /// (`UnknownFormatConversionException`).
+    DateTime,
+}
+
+/// The width requirement shared by the numeric conversions.
+const NUMERIC_WIDTH: Rule = Rule::NeedWidth(&['-', '0']);
+/// The flag combinations the numeric conversions forbid.
+const NUMERIC_FLAGS: Rule = Rule::Incompatible(&[['+', ' '], ['-', '0']]);
+
+/// The validation steps of each conversion, in Java's order.
+fn rules(conversion: char) -> &'static [Rule] {
+    use Rule::{DateTime, NeedWidth, NoPrecision, NoWidth, Only, Reject};
+    match conversion {
+        'b' | 'h' => &[
+            Reject(&['#']),
+            NeedWidth(&['-']),
+            Reject(&['+', ' ', '0', ',', '(']),
+        ],
+        's' => &[NeedWidth(&['-']), Reject(&['+', ' ', '0', ',', '('])],
+        'c' => &[
+            NoPrecision,
+            Reject(&['#', '+', ' ', '0', ',', '(']),
+            NeedWidth(&['-']),
+        ],
+        'd' => &[NUMERIC_WIDTH, NUMERIC_FLAGS, NoPrecision, Reject(&['#'])],
+        'o' | 'x' => &[NUMERIC_WIDTH, NUMERIC_FLAGS, NoPrecision, Reject(&[','])],
+        'e' => &[NUMERIC_WIDTH, NUMERIC_FLAGS, Reject(&[','])],
+        'f' => &[NUMERIC_WIDTH, NUMERIC_FLAGS],
+        'g' => &[NUMERIC_WIDTH, NUMERIC_FLAGS, Reject(&['#'])],
+        'a' => &[NUMERIC_WIDTH, NUMERIC_FLAGS, Reject(&['(', ','])],
+        '%' => &[NoPrecision, Only(&['-']), NeedWidth(&['-'])],
+        'n' => &[NoPrecision, NoWidth, Only(&[])],
+        // 't'
+        _ => &[
+            NoPrecision,
+            DateTime,
+            Reject(&['#', '+', ' ', '0', ',', '(']),
+            NeedWidth(&['-']),
+        ],
+    }
+}
+
+/// `FormatFlagsConversionMismatchException`: `Conversion = s, Flags = #`.
 fn mismatch(flag: char, conversion: char) -> Error {
     Error::new(format!("Conversion = {conversion}, Flags = {flag}"))
 }
 
+/// `IllegalFormatFlagsException`: `Flags = '+ '`.
+fn illegal_flags(flags: Flags) -> Error {
+    Error::new(format!("Flags = '{}'", flags.to_java_string()))
+}
+
 impl Spec {
-    /// Reject the flags of `bad` (`checkBadFlags`).
-    fn check_bad_flags(&self, bad: &[char]) -> Result<()> {
-        for &flag in bad {
-            let set = match flag {
-                '#' => self.flags.alternate,
-                '+' => self.flags.plus,
-                ' ' => self.flags.leading_space,
-                '0' => self.flags.zero_pad,
-                ',' => self.flags.group,
-                // Only `(` remains: `-` is validated separately.
-                _ => self.flags.parentheses,
-            };
-            if set {
-                return Err(mismatch(flag, self.conversion_char()));
-            }
-        }
-        Ok(())
+    /// The conversion named in error messages: the suffix of a date/time conversion.
+    fn shown_conversion(&self) -> char {
+        self.suffix.unwrap_or(self.conversion)
     }
 
-    /// The conversion as written (upper case when the `UPPERCASE` flag is set).
-    fn conversion_char(&self) -> char {
-        if self.flags.uppercase {
-            self.conversion.to_ascii_uppercase()
-        } else {
-            self.conversion
+    /// The specifier as Java prints it in error messages: `%`, the flags (without `^`), the
+    /// argument index (unless `<` is set), the width, `.precision` and the conversion in the
+    /// case it was written.
+    fn text(&self) -> String {
+        let mut text = String::from("%");
+        text.extend(
+            self.flags
+                .entries()
+                .into_iter()
+                .filter(|&(set, c)| set && c != '^')
+                .map(|(_, c)| c),
+        );
+        if let Some(index) = self.index.filter(|_| !self.flags.previous) {
+            text.push_str(&format!("{index}$"));
         }
+        if let Some(width) = self.width {
+            text.push_str(&width.to_string());
+        }
+        if let Some(precision) = self.precision {
+            text.push_str(&format!(".{precision}"));
+        }
+        for c in [Some(self.conversion), self.suffix].into_iter().flatten() {
+            text.push(if self.flags.uppercase {
+                c.to_ascii_uppercase()
+            } else {
+                c
+            });
+        }
+        text
     }
 
-    /// `checkNumeric`.
-    fn check_numeric(&self) -> Result<()> {
-        if self.width.is_none() && (self.flags.left_justify || self.flags.zero_pad) {
-            return Err(Error::new(self.text.clone()));
-        }
-        if (self.flags.plus && self.flags.leading_space)
-            || (self.flags.left_justify && self.flags.zero_pad)
-        {
-            return Err(Error::new(format!(
-                "Flags = '{}'",
-                self.flags.to_java_string()
-            )));
-        }
-        Ok(())
-    }
-
-    /// The validity checks of `FormatSpecifier`'s constructor.
+    /// Run the validation steps of the conversion.
     fn check(&self) -> Result<()> {
-        if self.date_time {
-            // Date/time conversions are rejected later with a dedicated message.
-            return Ok(());
+        for rule in rules(self.conversion) {
+            self.apply(*rule)?;
         }
-        match self.conversion {
-            'b' | 'h' | 's' => {
-                if self.conversion != 's' && self.flags.alternate {
-                    return Err(mismatch('#', self.conversion_char()));
-                }
-                if self.width.is_none() && self.flags.left_justify {
-                    return Err(Error::new(self.text.clone()));
-                }
-                self.check_bad_flags(&['+', ' ', '0', ',', '('])
-            }
-            'c' => {
-                if let Some(precision) = self.precision {
-                    return Err(Error::new(precision.to_string()));
-                }
-                self.check_bad_flags(&['#', '+', ' ', '0', ',', '('])?;
-                if self.width.is_none() && self.flags.left_justify {
-                    return Err(Error::new(self.text.clone()));
-                }
-                Ok(())
-            }
-            'd' | 'o' | 'x' => {
-                self.check_numeric()?;
-                if let Some(precision) = self.precision {
-                    return Err(Error::new(precision.to_string()));
-                }
-                if self.conversion == 'd' {
-                    self.check_bad_flags(&['#'])
+        Ok(())
+    }
+
+    /// Apply one validation step.
+    fn apply(&self, rule: Rule) -> Result<()> {
+        let flags = self.flags;
+        match rule {
+            Rule::Reject(list) => match list.iter().find(|&&c| flags.has(c)) {
+                Some(&flag) => Err(mismatch(flag, self.shown_conversion())),
+                None => Ok(()),
+            },
+            Rule::NeedWidth(list) => {
+                if self.width.is_none() && list.iter().any(|&c| flags.has(c)) {
+                    Err(Error::new(self.text()))
                 } else {
-                    self.check_bad_flags(&[','])
+                    Ok(())
                 }
             }
-            'e' | 'f' | 'g' | 'a' => {
-                self.check_numeric()?;
-                match self.conversion {
-                    'a' => self.check_bad_flags(&['(', ',']),
-                    'e' => self.check_bad_flags(&[',']),
-                    'g' => self.check_bad_flags(&['#']),
-                    _ => Ok(()),
+            Rule::Incompatible(pairs) => {
+                if pairs.iter().any(|[a, b]| flags.has(*a) && flags.has(*b)) {
+                    Err(illegal_flags(flags))
+                } else {
+                    Ok(())
                 }
             }
-            '%' => {
-                if let Some(precision) = self.precision {
-                    return Err(Error::new(precision.to_string()));
+            Rule::Only(list) => {
+                if flags
+                    .entries()
+                    .iter()
+                    .any(|&(set, c)| set && !list.contains(&c))
+                {
+                    Err(illegal_flags(flags))
+                } else {
+                    Ok(())
                 }
-                let plain = Flags {
-                    left_justify: false,
-                    ..self.flags
-                };
-                if plain != Flags::default() {
-                    return Err(Error::new(format!(
-                        "Flags = '{}'",
-                        self.flags.to_java_string()
-                    )));
-                }
-                if self.width.is_none() && self.flags.left_justify {
-                    return Err(Error::new(self.text.clone()));
-                }
-                Ok(())
             }
-            // 'n'
-            _ => {
-                if let Some(precision) = self.precision {
-                    return Err(Error::new(precision.to_string()));
+            Rule::NoPrecision => match self.precision {
+                Some(precision) => Err(Error::new(precision.to_string())),
+                None => Ok(()),
+            },
+            Rule::NoWidth => match self.width {
+                Some(width) => Err(Error::new(width.to_string())),
+                None => Ok(()),
+            },
+            Rule::DateTime => {
+                let suffix = self.shown_conversion();
+                if "HIklMSLNpzZsQBbhAaCYyjmdeRTrDFc".contains(suffix) {
+                    Ok(())
+                } else {
+                    Err(Error::new(format!("Conversion = 't{suffix}'")))
                 }
-                if let Some(width) = self.width {
-                    return Err(Error::new(width.to_string()));
-                }
-                if self.flags != Flags::default() {
-                    return Err(Error::new(format!(
-                        "Flags = '{}'",
-                        self.flags.to_java_string()
-                    )));
-                }
-                Ok(())
             }
         }
     }
 }
 
-/// Parse the specifier starting after the `%` at `start`; returns the specifier and the
-/// position after it.
+/// Parse the specifier that follows the `%` at `start`; returns it with the position after it.
+///
+/// A malformed specifier is an `UnknownFormatConversionException` naming either the
+/// conversion character (when there is one) or the first character after the `%`.
 fn parse_spec(format: &str, start: usize) -> Result<(Spec, usize)> {
     let bytes = format.as_bytes();
-    let mut pos = start;
-    let digits = |pos: &mut usize| -> Option<usize> {
+    let unknown = |c: char| Error::new(format!("Conversion = '{c}'"));
+    let first = format[start..].chars().next().unwrap_or('%');
+    let number = |pos: &mut usize| -> Option<usize> {
         let begin = *pos;
-        while matches!(bytes.get(*pos), Some(b) if b.is_ascii_digit()) {
+        while bytes.get(*pos).is_some_and(u8::is_ascii_digit) {
             *pos += 1;
         }
-        if *pos > begin {
-            format[begin..*pos].parse().ok()
-        } else {
-            None
-        }
+        format[begin..*pos].parse().ok()
     };
-    // Argument index or width: digits followed by `$` are an index.
+    let mut pos = start;
+    // An argument index is a number followed by `$`.
     let mut index = None;
-    let mut width = None;
     let mut probe = pos;
-    if let Some(number) = digits(&mut probe)
+    if let Some(n) = number(&mut probe)
         && bytes.get(probe) == Some(&b'$')
     {
-        index = Some(number);
+        if n == 0 {
+            return Err(Error::new("Illegal format argument index = 0"));
+        }
+        index = Some(n);
         pos = probe + 1;
     }
     let mut flags = Flags::default();
-    while let Some(&c) = bytes.get(pos) {
-        if b"-#+ 0,(<".contains(&c) {
-            flags.add(char::from(c))?;
-            pos += 1;
-        } else {
-            break;
-        }
+    while let Some(&c) = bytes.get(pos)
+        && b"-#+ 0,(<".contains(&c)
+    {
+        flags.set(char::from(c))?;
+        pos += 1;
     }
-    if index.is_none() {
-        if let Some(number) = digits(&mut pos) {
-            width = Some(number);
-        }
-    } else if let Some(number) = digits(&mut pos) {
-        width = Some(number);
-    }
+    let width = number(&mut pos);
     let mut precision = None;
     if bytes.get(pos) == Some(&b'.') {
-        let mut after = pos + 1;
-        match digits(&mut after) {
-            Some(number) => {
-                precision = Some(number);
-                pos = after;
-            }
-            None => {
-                return Err(Error::new(format!(
-                    "Conversion = '{}'",
-                    format[start..].chars().next().unwrap_or('%')
-                )));
-            }
-        }
-    }
-    // An incomplete specifier is reported with the character following the `%`.
-    let incomplete = || {
-        Error::new(format!(
-            "Conversion = '{}'",
-            format[start..].chars().next().unwrap_or('%')
-        ))
-    };
-    let mut date_time = false;
-    let Some(&c) = bytes.get(pos) else {
-        return Err(incomplete());
-    };
-    let mut conversion = char::from(c);
-    if conversion == 't' || conversion == 'T' {
-        date_time = true;
         pos += 1;
-        conversion = format[pos..].chars().next().unwrap_or('%');
+        precision = Some(number(&mut pos).ok_or_else(|| unknown(first))?);
     }
-    if !conversion.is_ascii_alphabetic() && conversion != '%' {
-        return Err(Error::new(format!("Conversion = '{conversion}'")));
-    }
-    pos += 1;
-    if conversion.is_ascii_uppercase() {
-        flags.uppercase = true;
-    }
-    let text = format!("%{}", &format[start..pos]);
+    let Some(c) = format[pos..].chars().next() else {
+        return Err(unknown(first));
+    };
+    pos += c.len_utf8();
+    let (conversion, suffix) = match c {
+        't' | 'T' => {
+            // A date/time conversion has a second, alphabetic, character.
+            let suffix = format[pos..]
+                .chars()
+                .next()
+                .filter(char::is_ascii_alphabetic)
+                .ok_or_else(|| unknown(c))?;
+            pos += suffix.len_utf8();
+            ('t', Some(suffix))
+        }
+        c if "bBhHsScCdoxXeEfgGaA%n".contains(c) => (c.to_ascii_lowercase(), None),
+        c if c.is_ascii_alphabetic() => return Err(unknown(c)),
+        _ => return Err(unknown(first)),
+    };
+    flags.uppercase = c.is_ascii_uppercase();
     let spec = Spec {
         index,
         flags,
         width,
         precision,
-        date_time,
-        conversion: conversion.to_ascii_lowercase(),
-        text,
+        conversion,
+        suffix,
     };
-    if !date_time && !"bhscdoxefga%n".contains(spec.conversion) {
-        return Err(Error::new(format!(
-            "Conversion = '{}'",
-            spec.conversion_char()
-        )));
-    }
     Ok((spec, pos))
+}
+
+/// `MissingFormatArgumentException`: `Format specifier '%s'`.
+fn missing_argument(spec: &Spec) -> Error {
+    Error::new(format!("Format specifier '{}'", spec.text()))
 }
 
 /// `String.format(locale, format, args)`; the error is the message of the
@@ -382,16 +401,14 @@ fn parse_spec(format: &str, start: usize) -> Result<(Spec, usize)> {
 pub fn java_format(locale: Locale, format: &str, args: &[Value]) -> Result<String> {
     let mut out = String::new();
     let mut pos = 0;
-    let mut last_ordinary: Option<usize> = None;
-    let mut last_index: Option<usize> = None;
+    // The index of the last argument taken in sequence, and of the last argument used.
+    let mut ordinary: Option<usize> = None;
+    let mut last: Option<usize> = None;
     while let Some(offset) = format[pos..].find('%') {
         out.push_str(&format[pos..pos + offset]);
         let (spec, next) = parse_spec(format, pos + offset + 1)?;
         spec.check()?;
         pos = next;
-        if spec.date_time {
-            return Err(Error::new("Date/time conversions (%t) are not supported."));
-        }
         match spec.conversion {
             '%' => {
                 out.push_str(&justify("%", spec.width, spec.flags.left_justify));
@@ -403,22 +420,22 @@ pub fn java_format(locale: Locale, format: &str, args: &[Value]) -> Result<Strin
             }
             _ => {}
         }
-        // Argument selection.
+        // Argument selection: `<` reuses the previous argument, `n$` picks one, otherwise the
+        // next argument in sequence is taken.
         let index = if spec.flags.previous {
-            last_index.ok_or_else(|| Error::new(format!("Format specifier '{}'", spec.text)))?
+            last.ok_or_else(|| missing_argument(&spec))?
         } else if let Some(explicit) = spec.index {
-            explicit
-                .checked_sub(1)
-                .ok_or_else(|| Error::new("Illegal format argument index = 0"))?
+            explicit - 1
         } else {
-            let next = last_ordinary.map_or(0, |i| i + 1);
-            last_ordinary = Some(next);
+            let next = ordinary.map_or(0, |i| i + 1);
+            ordinary = Some(next);
             next
         };
-        last_index = Some(index);
-        let arg = args
-            .get(index)
-            .ok_or_else(|| Error::new(format!("Format specifier '{}'", spec.text)))?;
+        last = Some(index);
+        let arg = args.get(index).ok_or_else(|| missing_argument(&spec))?;
+        if spec.conversion == 't' {
+            return Err(Error::new("Date/time conversions (%t) are not supported."));
+        }
         out.push_str(&format_arg(locale, &spec, arg)?);
     }
     out.push_str(&format[pos..]);
@@ -438,6 +455,17 @@ fn justify(text: &str, width: Option<usize>, left: bool) -> String {
             }
         }
         _ => text.to_owned(),
+    }
+}
+
+/// The first `precision` UTF-16 units of `text` (the precision of a general conversion).
+fn cut(text: &str, precision: Option<usize>) -> String {
+    match precision {
+        Some(precision) => {
+            let units: Vec<u16> = text.encode_utf16().take(precision).collect();
+            String::from_utf16_lossy(&units)
+        }
+        None => text.to_owned(),
     }
 }
 
@@ -478,67 +506,38 @@ fn java_hash(value: &Value) -> i32 {
 
 /// `IllegalFormatConversionException`: `d != java.lang.Double`.
 fn conversion_error(spec: &Spec, value: &Value) -> Error {
-    Error::new(format!(
-        "{} != {}",
-        spec.conversion_char(),
-        value.java_class()
-    ))
+    Error::new(format!("{} != {}", spec.conversion, value.java_class()))
 }
 
 /// Format one argument with `spec`.
 fn format_arg(locale: Locale, spec: &Spec, arg: &Value) -> Result<String> {
     let flags = spec.flags;
-    let text = match spec.conversion {
-        'b' => match arg {
-            Value::Null => "false".to_owned(),
-            Value::Boolean(b) => b.to_string(),
-            _ => "true".to_owned(),
-        },
-        'h' => match arg {
-            Value::Null => "null".to_owned(),
-            other => format!("{:x}", java_hash(other) as u32),
-        },
-        's' => {
-            if flags.alternate {
-                return Err(mismatch('#', spec.conversion_char()));
-            }
-            let text = match arg {
-                Value::Null => "null".to_owned(),
-                other => other.to_string(),
-            };
-            match spec.precision {
-                Some(precision) => {
-                    let units: Vec<u16> = text.encode_utf16().take(precision).collect();
-                    String::from_utf16_lossy(&units)
-                }
-                None => text,
-            }
-        }
-        'c' => match arg {
-            Value::Null => "null".to_owned(),
-            other => return Err(conversion_error(spec, other)),
-        },
-        'd' | 'o' | 'x' => match arg {
-            Value::Null => "null".to_owned(),
-            Value::Long(value) => format_integer(locale, spec, *value),
-            other => return Err(conversion_error(spec, other)),
-        },
-        _ => match arg {
-            Value::Null => "null".to_owned(),
-            Value::Double(value) => format_double(locale, spec, *value),
-            other => return Err(conversion_error(spec, other)),
-        },
+    // Only a `Formattable` argument accepts `#` with `%s`, and no WarpScript value is one.
+    if spec.conversion == 's' && flags.alternate {
+        return Err(mismatch('#', 's'));
+    }
+    // The general conversions (and `null` for any conversion) print a string cut to the
+    // precision; the numeric conversions need an argument of the matching type.
+    let text = match (spec.conversion, arg) {
+        ('d' | 'o' | 'x', Value::Long(value)) => format_integer(locale, spec, *value)?,
+        ('e' | 'f' | 'g' | 'a', Value::Double(value)) => format_double(locale, spec, *value),
+        ('b', Value::Null | Value::Boolean(false)) => cut("false", spec.precision),
+        ('b', _) => cut("true", spec.precision),
+        (_, Value::Null) => cut("null", spec.precision),
+        ('h', _) => cut(&format!("{:x}", java_hash(arg) as u32), spec.precision),
+        ('s', _) => cut(&arg.to_string(), spec.precision),
+        (_, value) => return Err(conversion_error(spec, value)),
     };
     let text = if flags.uppercase {
         text.to_uppercase()
     } else {
         text
     };
-    // Numbers with the zero pad flag were padded already.
     Ok(justify(&text, spec.width, flags.left_justify))
 }
 
-/// The sign (or opening parenthesis) in front of a number (`leadingSign`).
+/// The sign written in front of a number: `-` or `(` when negative, else `+` or a space when
+/// the corresponding flag is set.
 fn leading_sign(flags: Flags, negative: bool) -> &'static str {
     if negative {
         if flags.parentheses { "(" } else { "-" }
@@ -551,209 +550,192 @@ fn leading_sign(flags: Flags, negative: bool) -> &'static str {
     }
 }
 
-/// `localizedMagnitude`: group the integer part of `magnitude` (digits with an optional
-/// decimal point), localise the decimal separator and zero pad to `width` (including `sign`).
-fn localized_magnitude(
+/// The `)` closing a negative number written between parentheses.
+fn closing_paren(flags: Flags, negative: bool) -> &'static str {
+    if negative && flags.parentheses {
+        ")"
+    } else {
+        ""
+    }
+}
+
+/// The number localisation algorithm of the `Formatter` specification, applied to a magnitude
+/// written `ddd[.ddd]`: grouping separators every three digits of the integer part when the
+/// `,` flag is set, the locale's decimal separator, the sign (see [`leading_sign`]) and, when
+/// the `0` flag is set, zeros between the sign and the digits up to `width`. The closing
+/// parenthesis of a negative number, which the caller appends, counts towards the width.
+fn localize(
     locale: Locale,
     flags: Flags,
     width: Option<usize>,
-    sign: &str,
+    negative: bool,
     magnitude: &str,
 ) -> String {
-    let (integer, fraction) = match magnitude.find('.') {
-        Some(dot) => (&magnitude[..dot], Some(&magnitude[dot + 1..])),
-        None => (magnitude, None),
-    };
-    let mut body = String::new();
+    let (integer, fraction) = magnitude
+        .split_once('.')
+        .map_or((magnitude, None), |(integer, fraction)| {
+            (integer, Some(fraction))
+        });
+    let mut number = String::new();
     if flags.group {
-        let digits: Vec<char> = integer.chars().collect();
-        for (i, c) in digits.iter().enumerate() {
-            if i > 0 && (digits.len() - i).is_multiple_of(3) {
-                body.push(locale.grouping);
+        for (n, group) in integer.as_bytes().rchunks(3).rev().enumerate() {
+            if n > 0 {
+                number.push(locale.grouping);
             }
-            body.push(*c);
+            number.push_str(std::str::from_utf8(group).unwrap_or_default());
         }
     } else {
-        body.push_str(integer);
+        number.push_str(integer);
     }
     if let Some(fraction) = fraction {
-        body.push(locale.decimal);
-        body.push_str(fraction);
+        number.push(locale.decimal);
+        number.push_str(fraction);
     }
+    let sign = leading_sign(flags, negative);
     let mut out = String::from(sign);
     if flags.zero_pad
         && let Some(width) = width
     {
-        let width = if flags.parentheses && sign == "(" {
-            width - 1
-        } else {
-            width
-        };
-        let length = out.len() + body.chars().count();
-        if width > length {
-            out.push_str(&"0".repeat(width - length));
-        }
+        let used = sign.len() + number.chars().count() + closing_paren(flags, negative).len();
+        out.extend(repeat_n('0', width.saturating_sub(used)));
     }
-    out.push_str(&body);
+    out.push_str(&number);
     out
 }
 
 /// `%d`, `%o`, `%x` of a `LONG`.
-fn format_integer(locale: Locale, spec: &Spec, value: i64) -> String {
+fn format_integer(locale: Locale, spec: &Spec, value: i64) -> Result<String> {
     let flags = spec.flags;
-    match spec.conversion {
-        'd' => {
-            let negative = value < 0;
-            let magnitude = value.unsigned_abs().to_string();
-            let sign = leading_sign(flags, negative);
-            let mut out = localized_magnitude(locale, flags, spec.width, sign, &magnitude);
-            if negative && flags.parentheses {
-                out.push(')');
-            }
-            out
-        }
-        radix => {
-            let mut out = String::new();
-            if flags.alternate {
-                out.push_str(if radix == 'o' { "0" } else { "0x" });
-            }
-            let digits = if radix == 'o' {
-                format!("{:o}", value as u64)
-            } else {
-                format!("{:x}", value as u64)
+    if spec.conversion == 'd' {
+        let negative = value < 0;
+        let magnitude = value.unsigned_abs().to_string();
+        let mut out = localize(locale, flags, spec.width, negative, &magnitude);
+        out.push_str(closing_paren(flags, negative));
+        return Ok(out);
+    }
+    // Octal and hexadecimal print the two's complement of a negative value and take no sign
+    // flag; the radix indicator of `#` is part of the zero padded width.
+    spec.apply(Rule::Reject(&['(', ' ', '+']))?;
+    let (radix, digits) = if spec.conversion == 'o' {
+        ("0", format!("{:o}", value as u64))
+    } else {
+        ("0x", format!("{:x}", value as u64))
+    };
+    let mut out = String::from(if flags.alternate { radix } else { "" });
+    if flags.zero_pad
+        && let Some(width) = spec.width
+    {
+        out.extend(repeat_n(
+            '0',
+            width.saturating_sub(out.len() + digits.len()),
+        ));
+    }
+    out.push_str(&digits);
+    Ok(out)
+}
+
+/// A finite, non-negative double as decimal digits: `d₁.d₂…dₙ × 10^exponent`.
+///
+/// `digits` is empty when rounding left nothing (the value is then zero).
+#[derive(Debug)]
+struct Decimal {
+    digits: Vec<u8>,
+    exponent: i32,
+}
+
+impl Decimal {
+    /// The digits of `Double.toString(value)`: the shortest decimal that identifies the double
+    /// (with Java's two-digit minimum for the tiniest subnormals), which is what Java rounds
+    /// when a precision is given.
+    fn shortest(value: f64) -> Decimal {
+        let text = java_double_to_string(value);
+        let (mantissa, exponent) = text.split_once('E').unwrap_or((&text, "0"));
+        let exponent: i32 = exponent.parse().unwrap_or_default();
+        let (integer, fraction) = mantissa.split_once('.').unwrap_or((mantissa, ""));
+        let mut digits: Vec<u8> = integer
+            .bytes()
+            .chain(fraction.bytes())
+            .map(|b| b - b'0')
+            .collect();
+        // The decimal point sits after the digits of `integer`: dropping the leading zeros
+        // shifts it, dropping the trailing zeros changes nothing.
+        let leading = digits.iter().take_while(|&&d| d == 0).count();
+        if leading == digits.len() {
+            return Decimal {
+                digits: vec![0],
+                exponent: 0,
             };
-            if flags.zero_pad
-                && let Some(width) = spec.width
-            {
-                let length = out.len() + digits.len();
-                if width > length {
-                    out.push_str(&"0".repeat(width - length));
+        }
+        digits.drain(..leading);
+        while digits.len() > 1 && digits.last() == Some(&0) {
+            digits.pop();
+        }
+        Decimal {
+            digits,
+            exponent: integer.len() as i32 - leading as i32 - 1 + exponent,
+        }
+    }
+
+    /// Round half-up to `keep` significant digits; with `keep < 0` the value becomes zero.
+    fn round(&mut self, keep: i32) {
+        if keep >= self.digits.len() as i32 {
+            return;
+        }
+        let round_up = usize::try_from(keep).is_ok_and(|k| self.digits[k] >= 5);
+        self.digits.truncate(keep.max(0) as usize);
+        if round_up {
+            // Add one unit in the last kept place, carrying through the nines.
+            let mut carry = true;
+            for digit in self.digits.iter_mut().rev() {
+                if *digit == 9 {
+                    *digit = 0;
+                } else {
+                    *digit += 1;
+                    carry = false;
+                    break;
                 }
             }
-            out.push_str(&digits);
-            out
-        }
-    }
-}
-
-/// The shortest decimal digits of a positive finite double and its decimal exponent
-/// (`FloatingDecimal`: value = 0.d1d2… × 10^exp).
-fn shortest_digits(value: f64) -> (Vec<u8>, i32) {
-    let text = format!("{value:e}");
-    let (mantissa, exponent) = text.split_once('e').unwrap_or((&text, "0"));
-    let digits: Vec<u8> = mantissa
-        .bytes()
-        .filter(u8::is_ascii_digit)
-        .map(|b| b - b'0')
-        .collect();
-    let exponent: i32 = exponent.parse().unwrap_or_default();
-    (digits, exponent + 1)
-}
-
-/// `FormattedFloatingDecimal.applyPrecision`: round `digits` half-up to `prec` digits;
-/// returns the (possibly incremented) decimal exponent.
-fn apply_precision(dec_exp: i32, digits: &mut [u8], prec: i32) -> i32 {
-    let n = digits.len() as i32;
-    if prec >= n || prec < 0 {
-        return dec_exp;
-    }
-    if prec == 0 {
-        if digits[0] >= 5 {
-            digits[0] = 1;
-            digits[1..].fill(0);
-            return dec_exp + 1;
-        }
-        digits.fill(0);
-        return dec_exp;
-    }
-    let prec = prec as usize;
-    if digits[prec] >= 5 {
-        let mut i = prec;
-        loop {
-            i -= 1;
-            if digits[i] != 9 {
-                digits[i] += 1;
-                digits[i + 1..].fill(0);
-                return dec_exp;
-            }
-            if i == 0 {
-                digits[0] = 1;
-                digits[1..].fill(0);
-                return dec_exp + 1;
+            if carry {
+                self.digits.insert(0, 1);
+                self.exponent += 1;
             }
         }
     }
-    digits[prec..].fill(0);
-    dec_exp
-}
 
-fn digit_chars(digits: &[u8]) -> String {
-    digits.iter().map(|d| char::from(b'0' + d)).collect()
-}
-
-/// `fillDecimal`: the plain decimal mantissa with at most `precision` fraction digits.
-fn fill_decimal(precision: i32, digits: &[u8], exp: i32) -> String {
-    let n = digits.len() as i32;
-    if exp > 0 {
-        let exp = exp as usize;
-        if n < exp as i32 {
-            let mut out = digit_chars(digits);
-            out.push_str(&"0".repeat(exp - digits.len()));
-            out
-        } else {
-            let t = (n - exp as i32).min(precision);
-            let mut out = digit_chars(&digits[..exp]);
-            if t > 0 {
-                out.push('.');
-                out.push_str(&digit_chars(&digits[exp..exp + t as usize]));
-            }
-            out
-        }
-    } else {
-        let zeros = (-exp).min(precision).max(0);
-        let t = n.min(precision + exp).max(0);
-        if zeros > 0 || t > 0 {
-            let mut out = String::from("0.");
-            out.push_str(&"0".repeat(zeros as usize));
-            out.push_str(&digit_chars(&digits[..t as usize]));
-            out
-        } else {
-            "0".to_owned()
-        }
+    /// The digit at decimal position `p` (`0` is the units digit, `-1` the tenths), zero
+    /// beyond the stored digits.
+    fn digit_at(&self, p: i32) -> char {
+        let digit = usize::try_from(self.exponent - p)
+            .ok()
+            .and_then(|i| self.digits.get(i))
+            .copied()
+            .unwrap_or(0);
+        char::from(b'0' + digit)
     }
-}
 
-/// `fillScientific`: the mantissa `d.ddd` with at most `precision` fraction digits and the
-/// exponent text (`+03`).
-fn fill_scientific(precision: i32, digits: &[u8], exp: i32) -> (String, String) {
-    let t = (digits.len() as i32 - 1).min(precision).max(0) as usize;
-    let mut mantissa = digit_chars(&digits[..1]);
-    if t > 0 {
-        mantissa.push('.');
-        mantissa.push_str(&digit_chars(&digits[1..=t]));
-    }
-    let (sign, e) = if exp <= 0 {
-        ('-', -exp + 1)
-    } else {
-        ('+', exp - 1)
-    };
-    (mantissa, format!("{sign}{e:02}"))
-}
-
-/// `addZeros`: pad the fraction of `mantissa` with zeros up to `prec` digits.
-fn add_zeros(mantissa: &mut String, prec: i32) {
-    let prec = prec.max(0) as usize;
-    let existing = match mantissa.find('.') {
-        Some(dot) => mantissa.len() - dot - 1,
-        None => {
-            if prec > 0 {
-                mantissa.push('.');
-            }
-            0
+    /// Plain notation with exactly `places` fraction digits.
+    fn fixed(&self, places: usize) -> String {
+        let mut text: String = (0..=self.exponent.max(0))
+            .rev()
+            .map(|p| self.digit_at(p))
+            .collect();
+        if places > 0 {
+            text.push('.');
+            text.extend((1..=places as i32).map(|k| self.digit_at(-k)));
         }
-    };
-    if prec > existing {
-        mantissa.push_str(&"0".repeat(prec - existing));
+        text
+    }
+
+    /// Scientific notation: the mantissa `d.ddd` with exactly `places` fraction digits and the
+    /// exponent as Java prints it (`+03`, `-100`).
+    fn scientific(&self, places: usize) -> (String, String) {
+        let mut mantissa = String::from(self.digit_at(self.exponent));
+        if places > 0 {
+            mantissa.push('.');
+            mantissa.extend((1..=places as i32).map(|k| self.digit_at(self.exponent - k)));
+        }
+        let sign = if self.exponent < 0 { '-' } else { '+' };
+        (mantissa, format!("{sign}{:02}", self.exponent.abs()))
     }
 }
 
@@ -764,108 +746,123 @@ fn format_double(locale: Locale, spec: &Spec, value: f64) -> String {
         return "NaN".to_owned();
     }
     let negative = value.is_sign_negative();
-    let sign = leading_sign(flags, negative);
     let magnitude = value.abs();
-    let mut out = String::new();
+    let closing = closing_paren(flags, negative);
     if magnitude.is_infinite() {
-        out.push_str(sign);
-        out.push_str("Infinity");
-    } else {
-        let precision = spec.precision.map_or(6, |p| p as i32);
-        let (mut digits, dec_exp) = shortest_digits(magnitude);
-        let body = match spec.conversion {
-            'e' => {
-                let exp = apply_precision(dec_exp, &mut digits, precision + 1);
-                let (mut mantissa, exponent) = fill_scientific(precision, &digits, exp);
-                add_zeros(&mut mantissa, precision);
-                if flags.alternate && precision == 0 {
-                    mantissa.push('.');
-                }
-                let mut text = localized_magnitude(
-                    locale,
-                    flags,
-                    spec.width.map(|w| w.saturating_sub(exponent.len() + 1)),
-                    sign,
-                    &mantissa,
-                );
-                text.push('e');
-                text.push_str(&exponent);
-                text
-            }
-            'f' => {
-                let exp = apply_precision(dec_exp, &mut digits, dec_exp + precision);
-                let mut mantissa = fill_decimal(precision, &digits, exp);
-                add_zeros(&mut mantissa, precision);
-                if flags.alternate && precision == 0 {
-                    mantissa.push('.');
-                }
-                localized_magnitude(locale, flags, spec.width, sign, &mantissa)
-            }
-            'g' => {
-                let prec = match spec.precision {
-                    None => 6,
-                    Some(0) => 1,
-                    Some(p) => p as i32,
-                };
-                if magnitude == 0.0 {
-                    let mut mantissa = "0".to_owned();
-                    add_zeros(&mut mantissa, prec - 1);
-                    localized_magnitude(locale, flags, spec.width, sign, &mantissa)
-                } else {
-                    let exp = apply_precision(dec_exp, &mut digits, prec);
-                    // Java: `exp - 1 < -4 || exp - 1 >= prec`.
-                    if exp - 1 < -4 || exp > prec {
-                        let (mut mantissa, exponent) = fill_scientific(prec - 1, &digits, exp);
-                        add_zeros(&mut mantissa, prec - 1);
-                        let mut text = localized_magnitude(
-                            locale,
-                            flags,
-                            spec.width.map(|w| w.saturating_sub(exponent.len() + 1)),
-                            sign,
-                            &mantissa,
-                        );
-                        text.push('e');
-                        text.push_str(&exponent);
-                        text
-                    } else {
-                        let mut mantissa = fill_decimal(prec - exp, &digits, exp);
-                        add_zeros(&mut mantissa, prec - exp);
-                        localized_magnitude(locale, flags, spec.width, sign, &mantissa)
-                    }
-                }
-            }
-            // 'a': `Double.toHexString` style, without zero padding or precision handling.
-            _ => {
-                let mut text = String::from(sign);
-                text.push_str(&hex_float(magnitude));
-                text
-            }
-        };
+        return format!("{}Infinity{closing}", leading_sign(flags, negative));
+    }
+    if spec.conversion == 'a' {
+        // Zeros go between the radix indicator and the digits; `(` is not allowed here.
+        let body = hex_float(magnitude, spec.precision);
+        let mut out = format!("{}0x", leading_sign(flags, negative));
+        if flags.zero_pad
+            && let Some(width) = spec.width
+        {
+            out.extend(repeat_n('0', width.saturating_sub(out.len() + body.len())));
+        }
         out.push_str(&body);
+        return out;
     }
-    if negative && flags.parentheses {
-        out.push(')');
+    let mut decimal = Decimal::shortest(magnitude);
+    let precision = spec.precision.map_or(6, |p| p as i32);
+    let (mut mantissa, places, exponent) = match spec.conversion {
+        'e' => {
+            decimal.round(precision + 1);
+            let (mantissa, exponent) = decimal.scientific(precision as usize);
+            (mantissa, precision, Some(exponent))
+        }
+        'f' => {
+            decimal.round(decimal.exponent + 1 + precision);
+            (decimal.fixed(precision as usize), precision, None)
+        }
+        _ => {
+            // `%g`: `precision` significant digits (at least one), in plain notation when the
+            // rounded magnitude lies in `[10^-4, 10^precision)`.
+            let significant = precision.max(1);
+            decimal.round(significant);
+            if (-4..significant).contains(&decimal.exponent) {
+                let places = significant - 1 - decimal.exponent;
+                (decimal.fixed(places as usize), places, None)
+            } else {
+                let (mantissa, exponent) = decimal.scientific((significant - 1) as usize);
+                (mantissa, significant - 1, Some(exponent))
+            }
+        }
+    };
+    if flags.alternate && places == 0 {
+        mantissa.push('.');
     }
+    // The exponent and its `e` take room from the width.
+    let room = spec.width.map(|width| {
+        exponent
+            .as_ref()
+            .map_or(width, |e| width.saturating_sub(e.len() + 1))
+    });
+    let mut out = localize(locale, flags, room, negative, &mantissa);
+    if let Some(exponent) = exponent {
+        out.push('e');
+        out.push_str(&exponent);
+    }
+    out.push_str(closing);
     out
 }
 
-/// `Double.toHexString` for a positive finite double (`%a`).
-fn hex_float(value: f64) -> String {
-    if value == 0.0 {
-        return "0x0.0p0".to_owned();
-    }
-    let bits = value.to_bits();
-    let exponent = ((bits >> 52) & 0x7ff) as i32;
-    let mantissa = bits & 0x000f_ffff_ffff_ffff;
-    let (lead, exp) = if exponent == 0 {
-        ('0', -1022)
-    } else {
-        ('1', exponent - 1023)
+/// The hexadecimal notation of a finite non-negative double for `%a`, without the `0x`:
+/// `d.hhhp±e`. Without a precision, or with one beyond the 13 digits of a significand, these
+/// are the shortest digits (`Double.toHexString`), zero padded to the precision; otherwise the
+/// significand is rounded to the precision (at least one digit, ties to even), subnormals being
+/// normalised first.
+fn hex_float(value: f64, precision: Option<usize>) -> String {
+    let (mut mantissa, exponent) = match precision {
+        Some(digits) if digits <= 12 && value != 0.0 => rounded_hex(value, digits.max(1)),
+        _ => shortest_hex(value),
     };
-    let hex = format!("{mantissa:013x}");
-    let hex = hex.trim_end_matches('0');
-    let hex = if hex.is_empty() { "0" } else { hex };
-    format!("0x{lead}.{hex}p{exp}")
+    if let Some(digits) = precision {
+        let fraction = mantissa.len() - 2;
+        mantissa.extend(repeat_n('0', digits.saturating_sub(fraction)));
+    }
+    format!("{mantissa}p{exponent}")
+}
+
+/// `Double.toHexString` without the `0x`: `1.h…` for a normal number, `0.h…` with the
+/// exponent `-1022` for a subnormal one, with the trailing zeros of the fraction removed
+/// (keeping at least one digit).
+fn shortest_hex(value: f64) -> (String, i32) {
+    let bits = value.to_bits();
+    let biased = ((bits >> 52) & 0x7ff) as i32;
+    let fraction = format!("{:013x}", bits & 0x000f_ffff_ffff_ffff);
+    let fraction = fraction.trim_end_matches('0');
+    let fraction = if fraction.is_empty() { "0" } else { fraction };
+    if biased == 0 {
+        let exponent = if value == 0.0 { 0 } else { -1022 };
+        (format!("0.{fraction}"), exponent)
+    } else {
+        (format!("1.{fraction}"), biased - 1023)
+    }
+}
+
+/// The significand of a finite positive double rounded to `digits` (1 to 12) hexadecimal
+/// digits, ties to even: `1.h…` and the exponent. A subnormal is scaled up by `2^54` first (an
+/// exact operation), the exponent being scaled back; a carry out of the significand gives
+/// `1.0` with the next exponent (`1.0p1024` beyond `Double.MAX_VALUE`).
+fn rounded_hex(value: f64, digits: usize) -> (String, i32) {
+    let (value, scale) = if value < f64::MIN_POSITIVE {
+        (value * 2f64.powi(54), 54)
+    } else {
+        (value, 0)
+    };
+    let bits = value.to_bits();
+    let dropped = 52 - 4 * digits as u32;
+    let half = 1u64 << (dropped - 1);
+    let rest = bits & ((1u64 << dropped) - 1);
+    let mut kept = bits >> dropped;
+    if rest > half || (rest == half && kept & 1 == 1) {
+        kept += 1;
+    }
+    let rounded = kept << dropped;
+    let biased = ((rounded >> 52) & 0x7ff) as i32;
+    let fraction = format!("{:013x}", rounded & 0x000f_ffff_ffff_ffff);
+    (format!("1.{}", &fraction[..digits]), biased - 1023 - scale)
 }
 
 /// `STRINGFORMAT`: `String.format` of a format string with a list of arguments, optionally

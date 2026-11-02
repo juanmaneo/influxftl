@@ -1,3 +1,5 @@
+// Copyright 2026 The influxftl Authors. Licensed under the Apache License, Version 2.0.
+
 //! The 100 % coverage gate.
 //!
 //! Input: the `llvm-cov export --summary-only` JSON produced by `cargo llvm-cov report --json`.

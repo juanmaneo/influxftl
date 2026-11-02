@@ -1,3 +1,6 @@
+// Copyright 2026 The influxftl Authors. Licensed under the Apache License, Version 2.0.
+// Derived from Warp 10 (Copyright 2018-2026 SenX S.A.S., Apache-2.0), ported to Rust and modified.
+
 //! Cryptographic functions of WarpLib: the message digests of the `DIGEST` family (`MD5`,
 //! `SHA256`, `KECCAK.256`, `GOST`…), `SHA256HMAC` / `SHA1HMAC`, the SipHash `HASH`, the
 //! Base58 conversions (`->B58`, `->B58C`, `B58->`, `B58C->`), the AES key wrap (`AESWRAP`,

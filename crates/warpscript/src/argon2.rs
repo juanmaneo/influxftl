@@ -1,3 +1,6 @@
+// Copyright 2026 The influxftl Authors. Licensed under the Apache License, Version 2.0.
+// Derived from BouncyCastle `Argon2BytesGenerator` (Copyright (c) 2000-2023 The Legion of the Bouncy Castle Inc., MIT-style license), ported to Rust and modified; BLAKE2b implemented from RFC 7693.
+
 //! Argon2 (RFC 9106) as implemented by BouncyCastle's `Argon2BytesGenerator`, the engine
 //! behind WarpLib's `ARGON2`.
 //!

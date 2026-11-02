@@ -1,3 +1,6 @@
+// Copyright 2026 The influxftl Authors. Licensed under the Apache License, Version 2.0.
+// Derived from Apache Commons Math 3.6.1 (Copyright 2001-2016 The Apache Software Foundation, Apache-2.0), ported to Rust and modified.
+
 //! Ports of the Apache Commons Math 3 numerics that WarpLib relies on.
 //!
 //! Warp 10 delegates its statistical functions to Commons Math; reproducing the same

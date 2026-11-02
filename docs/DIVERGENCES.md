@@ -412,9 +412,10 @@ to 10000, fixed offsets, historical LMT offsets (`+00:09:21`) and every daylight
 
 ## 15. `STRINGFORMAT` and counters
 
-`STRINGFORMAT` is a port of `java.util.Formatter` verified against OpenJDK's `String.format`
-(flags, widths, precisions, argument indexes, half-up rounding of the shortest decimal
-representation, and the `IllegalFormatException` messages). The differences:
+`STRINGFORMAT` implements the `java.util.Formatter` specification and is verified against
+OpenJDK's `String.format` (flags, widths, precisions, argument indexes, half-up rounding of
+the shortest decimal representation, the `IllegalFormatException` messages and the way Java
+rebuilds a specifier in them, e.g. `%-2$d`). The differences:
 
 - **Locales.** The locale argument selects the decimal and grouping separators of the CLDR
   data for the common European and Asian languages (`fr` → `1 234,5` with a narrow no-break
@@ -431,7 +432,37 @@ representation, and the `IllegalFormatException` messages). The differences:
   where `LONG`s are not `Character`s.
 - **`%.1s` cutting a surrogate pair** yields U+FFFD where the JVM writes `?` when encoding the
   lone surrogate.
+
 - **Counters** (`COUNTER`, `COUNTERVALUE`, `COUNTERDELTA`, `COUNTERSET`) are accepted by
   `TOSTRING`, `STRINGFORMAT` and `->JSON` like Java `AtomicLong`s, but the arithmetic and
   comparison operators do not treat them as numbers (Java would silently convert them to
   doubles through `Number.doubleValue()`).
+
+## 16. `TEMPLATE`
+
+`TEMPLATE` is a port of the subset of mustache.java 0.9.6 that Warp 10 exposes (the
+`DefaultMustacheFactory` with inclusion disabled): variables, escaped and unescaped (`{{{x}}}`
+and `{{& x}}`), sections, inverted sections, comments, delimiter changes and dotted names,
+with the HTML escaping and the `Iterable`/`Boolean`/empty-string truthiness rules of
+`BaseObjectHandler.iterate`. The differences:
+
+- **Reflection is emulated for a fixed set of members.** mustache.java resolves a name that
+  is not a map key by reflecting on the Java object (`ReflectionObjectHandler`). The port
+  recognises the members a template may reasonably use: on strings `length`, `isEmpty`
+  / `empty`, `toUpperCase`, `toLowerCase`, `trim`, `toString`; on `LONG`s and counters
+  `intValue`, `longValue`, `doubleValue`, `toString`; on `DOUBLE`s the same plus `isNaN` /
+  `naN` and `isInfinite` / `infinite`; on booleans `booleanValue`, `toString`; on lists `size`,
+  `isEmpty` / `empty`, `toString`. Any other member name resolves to nothing (rendered as the
+  empty string, exactly like an unknown name in Java). Maps are only ever queried by string
+  key, never reflected: `{{m.size}}` is empty unless the map has a `size` key.
+- **Partials and parents** (`{{> name}}`, `{{< name}}`) fail with `TEMPLATE failed.
+  (Template inclusion is disabled.)` like Warp 10, whose resolver rejects every inclusion.
+- **Accepted scope types.** Only strings, numbers (`LONG`, `DOUBLE`, counters), booleans,
+  lists and maps (keys and values, recursively) may appear in the scope; anything else fails
+  with `TEMPLATE failed. (Invalid type for template substitution.)`.
+- **Error messages** of the mustache.java parser are reproduced, including the JDK 27 texts
+  of the exceptions it lets escape (`Index 1 out of bounds for length 1` for a one-character
+  delimiter used with `{{{`, `Range [0, -1) out of bounds for length 0` for an empty
+  unescaped variable name); the `@[:line]` position suffix of `MustacheException` messages
+  (an empty template name, as Warp 10 compiles the template from a string) is reproduced
+  with the line number Java computes.

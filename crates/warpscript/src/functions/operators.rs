@@ -1,3 +1,6 @@
+// Copyright 2026 The influxftl Authors. Licensed under the Apache License, Version 2.0.
+// Derived from Warp 10 (Copyright 2018-2026 SenX S.A.S., Apache-2.0), ported to Rust and modified.
+
 //! Arithmetic, comparison, bitwise and logical operators, and the scalar type conversions.
 //!
 //! The Geo Time Series, matrix, vector and `BIGDECIMAL` operand types of Warp 10 are not
