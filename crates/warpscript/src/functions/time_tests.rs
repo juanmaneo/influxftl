@@ -422,7 +422,7 @@ fn add_units_to_elements() {
     );
     assert_fails(
         "[ 2021 NULL ] 1 ADDYEARS",
-        "class java.lang.Object cannot be cast to class java.lang.Number",
+        "class null cannot be cast to class java.lang.Number",
     );
 }
 

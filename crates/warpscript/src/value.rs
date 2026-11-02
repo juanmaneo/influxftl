@@ -9,7 +9,7 @@
 //! separate function in the function library.
 
 use std::any::Any;
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::fmt;
 use std::hash::{Hash, Hasher};
 use std::rc::Rc;
@@ -91,6 +91,8 @@ pub enum Value {
     Mark,
     /// A saved execution context (`SAVE`).
     Context(Rc<Context>),
+    /// A mutable counter (`COUNTER`, a `java.util.concurrent.atomic.AtomicLong`).
+    Counter(Rc<Cell<i64>>),
 }
 
 impl Value {
@@ -136,6 +138,29 @@ impl Value {
             Value::Function(f) => f.type_name(),
             Value::Mark => "MARK",
             Value::Context(_) => "CONTEXT",
+            Value::Counter(_) => "COUNTER",
+        }
+    }
+
+    /// The Java class name of the value (`getClass().getName()`), for the error messages that
+    /// mention it (`ClassCastException`, `IllegalFormatConversionException`…).
+    pub fn java_class(&self) -> &'static str {
+        match self {
+            Value::Null => "null",
+            Value::Boolean(_) => "java.lang.Boolean",
+            Value::Long(_) => "java.lang.Long",
+            Value::Double(_) => "java.lang.Double",
+            Value::String(_) => "java.lang.String",
+            Value::Bytes(_) => "[B",
+            Value::BitSet(_) => "java.util.BitSet",
+            Value::List(_) => "java.util.ArrayList",
+            Value::Map(_) => "java.util.LinkedHashMap",
+            Value::Set(_) => "java.util.HashSet",
+            Value::Macro(_) => "io.warp10.script.WarpScriptStack$Macro",
+            Value::Function(_) => "io.warp10.script.NamedWarpScriptFunction",
+            Value::Mark => "io.warp10.script.WarpScriptStack$Mark",
+            Value::Context(_) => "io.warp10.script.MemoryWarpScriptStack$StackContext",
+            Value::Counter(_) => "java.util.concurrent.atomic.AtomicLong",
         }
     }
 
@@ -194,6 +219,7 @@ impl Value {
             (Value::Macro(a), Value::Macro(b)) => Rc::ptr_eq(a, b),
             (Value::Function(a), Value::Function(b)) => Rc::ptr_eq(a, b),
             (Value::Context(a), Value::Context(b)) => Rc::ptr_eq(a, b),
+            (Value::Counter(a), Value::Counter(b)) => Rc::ptr_eq(a, b),
             (Value::String(a), Value::String(b)) => Rc::ptr_eq(a, b),
             (Value::Bytes(a), Value::Bytes(b)) => Rc::ptr_eq(a, b),
             _ => false,
@@ -233,7 +259,8 @@ impl PartialEq for Value {
             (Value::Set(a), Value::Set(b)) => Rc::ptr_eq(a, b) || *a.borrow() == *b.borrow(),
             (Value::Macro(_), Value::Macro(_))
             | (Value::Function(_), Value::Function(_))
-            | (Value::Context(_), Value::Context(_)) => self.same_object(other),
+            | (Value::Context(_), Value::Context(_))
+            | (Value::Counter(_), Value::Counter(_)) => self.same_object(other),
             _ => false,
         }
     }
@@ -277,6 +304,7 @@ impl Hash for Value {
             Value::Function(f) => (Rc::as_ptr(f).cast::<()>() as usize).hash(state),
             Value::Mark => 1u8.hash(state),
             Value::Context(c) => (Rc::as_ptr(c) as usize).hash(state),
+            Value::Counter(c) => (Rc::as_ptr(c) as usize).hash(state),
         }
     }
 }
@@ -326,6 +354,7 @@ impl fmt::Display for Value {
             Value::Function(func) => f.write_str(&func.snapshot()),
             Value::Mark => f.write_str("MARK"),
             Value::Context(_) => f.write_str("CONTEXT"),
+            Value::Counter(c) => write!(f, "{}", c.get()),
         }
     }
 }

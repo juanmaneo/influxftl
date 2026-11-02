@@ -409,3 +409,29 @@ to 10000, fixed offsets, historical LMT offsets (`+00:09:21`) and every daylight
 - **Non-numeric tselements** raise `class java.lang.String cannot be cast to class
   java.lang.Number`, the first part of the JVM's `ClassCastException` message (the JVM adds the
   class loader details).
+
+## 15. `STRINGFORMAT` and counters
+
+`STRINGFORMAT` is a port of `java.util.Formatter` verified against OpenJDK's `String.format`
+(flags, widths, precisions, argument indexes, half-up rounding of the shortest decimal
+representation, and the `IllegalFormatException` messages). The differences:
+
+- **Locales.** The locale argument selects the decimal and grouping separators of the CLDR
+  data for the common European and Asian languages (`fr` → `1 234,5` with a narrow no-break
+  space, `de` → `1.234,5`, `ru` → `1 234,5`…); other languages are rejected with
+  `STRINGFORMAT expects a valid locale.`, and languages with non-Latin digits (`ar`, `fa`…)
+  are not supported. Without a locale the root symbols apply (Warp 10: the JVM default
+  locale).
+- **`%t` / `%T` date-time conversions** are not supported and fail with `Date/time conversions
+  (%t) are not supported.`; use `ISO8601` / `TSELEMENTS` instead.
+- **`%h`** reproduces Java's `hashCode()` for strings, numbers, booleans, lists, maps and sets;
+  objects whose Java hash code is an identity hash (macros, functions, byte arrays…) are
+  reported as `0`.
+- **`%c`** fails for every WarpScript value (`c != java.lang.Long`), exactly like Warp 10
+  where `LONG`s are not `Character`s.
+- **`%.1s` cutting a surrogate pair** yields U+FFFD where the JVM writes `?` when encoding the
+  lone surrogate.
+- **Counters** (`COUNTER`, `COUNTERVALUE`, `COUNTERDELTA`, `COUNTERSET`) are accepted by
+  `TOSTRING`, `STRINGFORMAT` and `->JSON` like Java `AtomicLong`s, but the arithmetic and
+  comparison operators do not treat them as numbers (Java would silently convert them to
+  doubles through `Number.doubleValue()`).

@@ -39,7 +39,55 @@ pub const FUNCTIONS: &[(&str, Entry)] = &[
     ("SECURE", Entry::Stack(secure)),
     ("UNSECURE", Entry::Stack(unsecure)),
     ("EVALSECURE", Entry::Stack(evalsecure)),
+    ("COUNTER", Entry::Stack(counter)),
+    ("COUNTERVALUE", Entry::Stack(countervalue)),
+    ("COUNTERDELTA", Entry::Stack(counterdelta)),
+    ("COUNTERSET", Entry::Stack(counterset)),
 ];
+
+/// `COUNTER`: a new counter (an `AtomicLong`) set to 0.
+fn counter(stack: &mut Stack) -> Result<()> {
+    stack.push(Value::Counter(std::rc::Rc::new(std::cell::Cell::new(0))));
+    Ok(())
+}
+
+/// `COUNTERVALUE`: the value of a counter.
+fn countervalue(stack: &mut Stack) -> Result<()> {
+    let Value::Counter(counter) = stack.pop()? else {
+        return Err(fail("COUNTERVALUE", "can only operate on a counter."));
+    };
+    stack.push(Value::Long(counter.get()));
+    Ok(())
+}
+
+/// `COUNTERDELTA` / `COUNTERSET`: modify a counter in place and leave it on the stack.
+fn counter_update(stack: &mut Stack, name: &str, what: &str, set: bool) -> Result<()> {
+    let Value::Long(value) = stack.pop()? else {
+        return Err(fail(
+            name,
+            &format!("expects a {what} (LONG) on top of the stack."),
+        ));
+    };
+    let top = stack.pop()?;
+    let Value::Counter(counter) = &top else {
+        return Err(fail(name, &format!("expects a counter below the {what}.")));
+    };
+    if set {
+        counter.set(value);
+    } else {
+        counter.set(counter.get().wrapping_add(value));
+    }
+    stack.push(top);
+    Ok(())
+}
+
+fn counterdelta(stack: &mut Stack) -> Result<()> {
+    counter_update(stack, "COUNTERDELTA", "delta", false)
+}
+
+fn counterset(stack: &mut Stack) -> Result<()> {
+    counter_update(stack, "COUNTERSET", "value", true)
+}
 
 fn null(stack: &mut Stack) -> Result<()> {
     stack.push(Value::Null);

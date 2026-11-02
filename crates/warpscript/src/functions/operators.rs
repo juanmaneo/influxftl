@@ -636,7 +636,12 @@ fn toboolean(stack: &mut Stack) -> Result<()> {
 
 fn tostring(stack: &mut Stack) -> Result<()> {
     match stack.pop()? {
-        value @ (Value::Long(_) | Value::Double(_) | Value::Boolean(_) | Value::String(_)) => {
+        // A counter is a `Number` (`AtomicLong`) in Java.
+        value @ (Value::Long(_)
+        | Value::Double(_)
+        | Value::Boolean(_)
+        | Value::String(_)
+        | Value::Counter(_)) => {
             stack.push(Value::from(value.to_string()));
             Ok(())
         }

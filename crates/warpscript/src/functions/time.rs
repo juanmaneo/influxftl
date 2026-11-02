@@ -395,20 +395,9 @@ fn int_element(elements: &[Value], index: usize) -> Result<i32> {
     int_value(value).ok_or_else(|| {
         Error::new(format!(
             "class {} cannot be cast to class java.lang.Number",
-            java_class(value)
+            value.java_class()
         ))
     })
-}
-
-/// The Java class name of a value, for cast error messages.
-fn java_class(value: &Value) -> &'static str {
-    match value {
-        Value::String(_) => "java.lang.String",
-        Value::Boolean(_) => "java.lang.Boolean",
-        Value::List(_) => "java.util.ArrayList",
-        Value::Map(_) => "java.util.LinkedHashMap",
-        _ => "java.lang.Object",
-    }
 }
 
 /// `TSELEMENTS->`: the timestamp of a list of components (year, month, day, hour, minute,

@@ -141,6 +141,8 @@ impl Serializer {
             }
             Value::Boolean(b) => self.out.push_str(if *b { "true" } else { "false" }),
             Value::Long(l) => self.out.push_str(&l.to_string()),
+            // Jackson writes an `AtomicLong` as its number.
+            Value::Counter(c) => self.out.push_str(&c.get().to_string()),
             Value::Double(d) => self.write_double(*d),
             Value::String(s) => self.write_string(s.chars()),
             // `BytesSerializer`: the ISO-8859-1 decoding of the bytes.

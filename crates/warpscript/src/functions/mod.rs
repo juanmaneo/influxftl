@@ -20,6 +20,7 @@ pub mod pack;
 pub mod quaternions;
 pub mod runtime;
 pub mod stack_ops;
+pub mod stringformat;
 pub mod strings;
 pub mod symbols;
 pub mod time;
@@ -65,6 +66,7 @@ const TABLES: &[&[(&str, Entry)]] = &[
     runtime::SNAPSHOT_FUNCTIONS,
     time::FUNCTIONS,
     quaternions::FUNCTIONS,
+    stringformat::FUNCTIONS,
 ];
 
 static REGISTRY: OnceLock<HashMap<&'static str, &'static Entry>> = OnceLock::new();
@@ -176,6 +178,8 @@ mod quaternions_tests;
 mod runtime_tests;
 #[cfg(test)]
 mod stack_ops_tests;
+#[cfg(test)]
+mod stringformat_tests;
 #[cfg(test)]
 mod strings_tests;
 #[cfg(test)]

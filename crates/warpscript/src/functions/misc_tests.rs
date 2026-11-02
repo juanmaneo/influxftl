@@ -297,3 +297,52 @@ fn evalsecure() {
         "Line #1 (Exception at ''k|<%25 DROP %25> EVAL' =>EVALSECURE<=' in section [TOP] (Line #1 (Exception at '<% DROP %> =>EVAL<=' in section [TOP] (Empty stack.))))"
     );
 }
+
+#[test]
+fn counters() {
+    assert_top("COUNTER COUNTERVALUE", 0);
+    assert_top("COUNTER TYPEOF", "COUNTER");
+    assert_top("COUNTER 5 COUNTERDELTA -2 COUNTERDELTA COUNTERVALUE", 3);
+    assert_top("COUNTER 7 COUNTERSET 1 COUNTERDELTA COUNTERVALUE", 8);
+    // Counters are shared objects.
+    assert_top(
+        "COUNTER 'c' STORE $c 4 COUNTERDELTA DROP $c COUNTERVALUE",
+        4,
+    );
+    assert_top("COUNTER DUP ==", true);
+    assert_top("COUNTER COUNTER ==", false);
+    assert_top(
+        "COUNTER 9223372036854775807 COUNTERSET 1 COUNTERDELTA COUNTERVALUE",
+        i64::MIN,
+    );
+    assert_top("COUNTER 3 COUNTERSET TOSTRING", "3");
+    assert_top("COUNTER 3 COUNTERSET ->JSON", "3");
+    assert_top("COUNTER SNAPSHOT", "COUNTER ");
+    assert_top("COUNTER 3 COUNTERSET SNAPSHOT", "COUNTER 3 COUNTERSET ");
+    assert_top("COUNTER 3 COUNTERSET SNAPSHOT EVAL COUNTERVALUE", 3);
+    assert_top("{ COUNTER 1 } SIZE", 1);
+    assert_fails(
+        "1 COUNTERVALUE",
+        "COUNTERVALUE can only operate on a counter.",
+    );
+    assert_fails(
+        "COUNTER 'x' COUNTERDELTA",
+        "COUNTERDELTA expects a delta (LONG) on top of the stack.",
+    );
+    assert_fails(
+        "1 2 COUNTERDELTA",
+        "COUNTERDELTA expects a counter below the delta.",
+    );
+    assert_fails(
+        "COUNTER 'x' COUNTERSET",
+        "COUNTERSET expects a value (LONG) on top of the stack.",
+    );
+    assert_fails(
+        "1 2 COUNTERSET",
+        "COUNTERSET expects a counter below the value.",
+    );
+    for f in ["COUNTERVALUE", "COUNTERDELTA", "COUNTERSET"] {
+        assert_fails(f, "Empty stack.");
+    }
+    assert_fails("1 COUNTERSET", "Empty stack.");
+}
