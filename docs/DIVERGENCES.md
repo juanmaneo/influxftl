@@ -466,3 +466,25 @@ with the HTML escaping and the `Iterable`/`Boolean`/empty-string truthiness rule
   unescaped variable name); the `@[:line]` position suffix of `MustacheException` messages
   (an empty template name, as Warp 10 compiles the template from a string) is reproduced
   with the line number Java computes.
+
+## 17. `ASREGS`
+
+`ASREGS` follows the three passes of Warp 10 (inspection of the registers in use, breadth
+first through the nested macros; assignment of the lowest free registers; rewriting), with
+the same rules on what aborts the conversion, Java's 32-bit truncation of register numbers
+(`4294967296 LOAD` becomes `PUSHR0`) and its `bitIndex < 0: -1` error on negative ones. The
+differences:
+
+- **A new macro is returned** (as for `DEREF`); Warp 10 rewrites the macro and its nested
+  macros in place, which was observable through other references to the same macro, and it
+  also modified list values (`[ 'a' 'b' ] 'STORE' FUNCREF 2 ->LIST ->MACRO`) shared with the
+  rest of the script. Macro names are preserved.
+- **Register numbers out of range** (`300 LOAD`, `[ 300 ] STORE`) keep their `n LOAD` /
+  `n STORE` form instead of becoming a `PUSHR300` / `POPR300` that does not exist as a
+  function; both fail identically at run time (`Invalid register number…`).
+- **`] STORE` without an opening mark** fails with `ASREGS was unable to convert variables to
+  registers.`; Warp 10 either leaves it alone or dies with an internal
+  `ArrayIndexOutOfBoundsException`, depending on the elements.
+- **A `null` value pushed by a list literal** (only possible through `->MACRO`) is treated
+  like the `NULL` function, i.e. the corresponding value is `DROP`ped; Warp 10 keeps such a
+  list as a `[ … ] STORE`.

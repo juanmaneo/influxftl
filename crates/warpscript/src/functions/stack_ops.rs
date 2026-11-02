@@ -83,7 +83,7 @@ fn swap(stack: &mut Stack) -> Result<()> {
     Ok(())
 }
 
-fn drop(stack: &mut Stack) -> Result<()> {
+pub(crate) fn drop(stack: &mut Stack) -> Result<()> {
     stack.pop().map(|_| ())
 }
 
