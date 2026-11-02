@@ -56,7 +56,6 @@ pub const FUNCTIONS: &[(&str, Entry)] = &[
     ("KEYLIST", Entry::Stack(keylist)),
     ("VALUELIST", Entry::Stack(valuelist)),
     ("SIZE", Entry::Stack(size)),
-    ("SHRINK", Entry::Stack(shrink)),
     ("REMOVE", Entry::Stack(remove)),
     ("INDEXOF", Entry::Stack(indexof)),
     ("UNIQUE", Entry::Stack(unique)),
@@ -782,7 +781,7 @@ fn valuelist(stack: &mut Stack) -> Result<()> {
 }
 
 // -----------------------------------------------------------------------------------------
-// SIZE, SHRINK, REMOVE, INDEXOF
+// SIZE, REMOVE, INDEXOF
 // -----------------------------------------------------------------------------------------
 
 /// `SIZE`: number of entries of a map, elements of a collection, UTF-16 units of a string,
@@ -805,29 +804,6 @@ fn size(stack: &mut Stack) -> Result<()> {
         }
     };
     stack.push(n as i64);
-    Ok(())
-}
-
-/// The recursive step of `SHRINK`: only (nested) lists of Geo Time Series are accepted, and
-/// Geo Time Series are not modelled, so only nested empty lists go through.
-fn shrink_value(value: &Value) -> Result<Value> {
-    let Value::List(list) = value else {
-        return Err(fail("SHRINK", "can only handle GTS and list thereof."));
-    };
-    let items = list.borrow().clone();
-    let mut result = Vec::with_capacity(items.len());
-    for item in &items {
-        result.push(shrink_value(item)?);
-    }
-    Ok(Value::list(result))
-}
-
-/// `SHRINK`: shrink Geo Time Series (or lists thereof) to a number of values.
-fn shrink(stack: &mut Stack) -> Result<()> {
-    pop_long(stack, "SHRINK", "expects a size on top of the stack.")?;
-    let value = stack.pop()?;
-    let result = shrink_value(&value)?;
-    stack.push(result);
     Ok(())
 }
 

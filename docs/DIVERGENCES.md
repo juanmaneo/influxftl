@@ -519,3 +519,20 @@ unstable, order), `GeoTimeSerie.toString` and `dump` (`TOSTRING`), and the JSON 
 - **`[ value ] ADDVALUE`** (a one-element datapoint list) adds the value at tick `0` as
   `MACROMAPPER.listToObjects` intends; Warp 10 dies with a `ClassCastException` on the
   `Integer` tick that method builds.
+- **`MERGE` with a boolean** (the sorted merge) produces a GTS Encoder in Warp 10; it fails
+  with `MERGE encountered an error while merging. (GTS Encoders are not supported.)` until
+  encoders are modelled. The plain `MERGE` is a port of `mergeViaEncoders` (every datapoint
+  appended to a new series carrying the metadata of the first one).
+- **`CHUNK` with a chunk width of `0`** fails with `/ by zero` on every path; Warp 10 only
+  divides by the width when it has to align the last chunk or skip empty chunks, and loops
+  over up to 2³¹ empty chunks otherwise. A non bucketized series **without datapoint**, with
+  `keepempty` false and an explicit last chunk, yields an empty list; Warp 10 overflows on
+  `Long.MIN_VALUE` and loops almost forever.
+- **`CROP` of a bucketized series without datapoint on a bucket boundary** fails with the
+  JDK message of the `NullPointerException` Warp 10 dies with (`Cannot load from long array
+  because "cropped.ticks" is null`).
+- **Operators on series** (`==`, `!=`, `+`, `*`… with Geo Time Series operands, the `GTSHelper`
+  *ops* family) are not ported yet: `==` / `!=` compare series by identity and the arithmetic
+  operators reject them, where Warp 10 computes a new series tick by tick.
+- **`CLONE` and the functions returning a copy** (`TIMESHIFT`, `TIMESCALE`, `CROP`…) reset the
+  `renamed` flag like `GeoTimeSerie.clone`; the flag is only read by `UPDATE`.

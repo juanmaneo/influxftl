@@ -52,7 +52,10 @@ pub const FUNCTIONS: &[(&str, Entry)] = &[
 
 /// `ElementOrListStackFunction.apply`: apply `f` to the top of the stack or, when it is a
 /// list, to each of its elements (pushing the list of results).
-fn element_or_list(stack: &mut Stack, f: impl Fn(&Value) -> Result<Value>) -> Result<()> {
+pub(super) fn element_or_list(
+    stack: &mut Stack,
+    f: impl Fn(&Value) -> Result<Value>,
+) -> Result<()> {
     let top = stack.pop()?;
     let result = match &top {
         Value::List(list) => {
@@ -67,10 +70,19 @@ fn element_or_list(stack: &mut Stack, f: impl Fn(&Value) -> Result<Value>) -> Re
 
 /// `GTSStackFunction.apply`: apply `f` to the Geo Time Series on top of the stack or to each
 /// element of a list of Geo Time Series; anything else is pushed back before failing.
-fn gts_or_list(stack: &mut Stack, name: &str, f: impl Fn(&Gts) -> Value) -> Result<()> {
+pub(super) fn gts_or_list(stack: &mut Stack, name: &str, f: impl Fn(&Gts) -> Value) -> Result<()> {
+    gts_or_list_try(stack, name, |gts| Ok(f(gts)))
+}
+
+/// [`gts_or_list`] for an operation that can fail.
+pub(super) fn gts_or_list_try(
+    stack: &mut Stack,
+    name: &str,
+    f: impl Fn(&Gts) -> Result<Value>,
+) -> Result<()> {
     let top = stack.pop()?;
     let result = match &top {
-        Value::Gts(gts) => f(gts),
+        Value::Gts(gts) => f(gts)?,
         Value::List(list) => {
             let mut results = Vec::with_capacity(list.borrow().len());
             for element in list.borrow().iter() {
@@ -78,7 +90,7 @@ fn gts_or_list(stack: &mut Stack, name: &str, f: impl Fn(&Gts) -> Value) -> Resu
                     stack.push(top.clone());
                     return Err(fail(name, "can only operate on Geo Time Series instances."));
                 };
-                results.push(f(gts));
+                results.push(f(gts)?);
             }
             Value::list(results)
         }
@@ -92,7 +104,7 @@ fn gts_or_list(stack: &mut Stack, name: &str, f: impl Fn(&Gts) -> Value) -> Resu
 }
 
 /// Java `((Number) o).longValue()`.
-fn long_value(value: &Value) -> Option<i64> {
+pub(super) fn long_value(value: &Value) -> Option<i64> {
     value.as_i64()
 }
 

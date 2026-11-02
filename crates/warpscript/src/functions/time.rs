@@ -1210,6 +1210,17 @@ fn unparsed(text: &str, index: usize) -> Error {
     ))
 }
 
+/// `TOTIMESTAMP.parseTimestamp`: the timestamp of an ISO 8601 date-time string with a time
+/// zone, the parse error wrapped in the message Warp 10 adds.
+pub fn parse_iso8601(text: &str) -> Result<i64> {
+    parse_timestamp(text).map_err(|err| {
+        Error::with_cause(
+            "Can only parse an ISO8601 timestamp (YYYY-MM-DDThh:mm:ss.sssssssss) with a specified time zone.",
+            err,
+        )
+    })
+}
+
 /// `TOTIMESTAMP`: the timestamp of an ISO 8601 date-time string with a time zone.
 fn totimestamp(stack: &mut Stack) -> Result<()> {
     const NAME: &str = "TOTIMESTAMP";
@@ -1219,12 +1230,7 @@ fn totimestamp(stack: &mut Stack) -> Result<()> {
             "expects an ISO8601 timestamp or a Date instance on top of the stack.",
         ));
     };
-    let ts = parse_timestamp(&text).map_err(|err| {
-        Error::with_cause(
-            "Can only parse an ISO8601 timestamp (YYYY-MM-DDThh:mm:ss.sssssssss) with a specified time zone.",
-            err,
-        )
-    })?;
+    let ts = parse_iso8601(&text)?;
     stack.push(Value::Long(ts));
     Ok(())
 }
@@ -1234,12 +1240,7 @@ fn totimestamp(stack: &mut Stack) -> Result<()> {
 fn not_before_after(stack: &mut Stack, name: &str, before: bool) -> Result<()> {
     let top = stack.pop()?;
     let instant = match &top {
-        Value::String(text) => parse_timestamp(text).map_err(|err| {
-            Error::with_cause(
-                "Can only parse an ISO8601 timestamp (YYYY-MM-DDThh:mm:ss.sssssssss) with a specified time zone.",
-                err,
-            )
-        })?,
+        Value::String(text) => parse_iso8601(text)?,
         Value::Long(ts) => *ts,
         _ => {
             return Err(fail(

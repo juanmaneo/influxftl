@@ -544,7 +544,7 @@ fn sublist_with_start_end_step() {
 }
 
 // -----------------------------------------------------------------------------------------
-// SIZE, SHRINK, REMOVE, INDEXOF
+// SIZE, REMOVE, INDEXOF
 // -----------------------------------------------------------------------------------------
 
 #[test]
@@ -564,26 +564,6 @@ fn size_of_everything() {
         "SIZE operates on a MAP, a collection, a STRING, a byte array, a GTS or GTS Encoder, a GEOSHAPE or a Macro.",
     );
     empty_stack("SIZE", &[""]);
-}
-
-#[test]
-fn shrink_only_handles_nested_empty_lists() {
-    assert_eq!(show("[ ] 2 SHRINK"), "[]");
-    assert_eq!(show("[ [ ] [ [ ] ] ] -1 SHRINK"), "[[], [[]]]");
-    let mut stack = exec("[ [ ] ] DUP 1 SHRINK");
-    let shrunk = stack.pop().unwrap();
-    let original = stack.pop().unwrap();
-    assert!(!shrunk.same_object(&original));
-    assert_fails(
-        "[ 1 ] 1 SHRINK",
-        "SHRINK can only handle GTS and list thereof.",
-    );
-    assert_fails("1 1 SHRINK", "SHRINK can only handle GTS and list thereof.");
-    assert_fails(
-        "[ ] 'a' SHRINK",
-        "SHRINK expects a size on top of the stack.",
-    );
-    empty_stack("SHRINK", &["", "1"]);
 }
 
 #[test]

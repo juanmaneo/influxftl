@@ -15,6 +15,7 @@ pub mod control;
 pub mod crypto;
 pub mod functional;
 pub mod gts;
+pub mod gts_time;
 pub mod json;
 pub mod limits;
 pub mod math;
@@ -76,6 +77,7 @@ const TABLES: &[&[(&str, Entry)]] = &[
     template::FUNCTIONS,
     asregs::FUNCTIONS,
     gts::FUNCTIONS,
+    gts_time::FUNCTIONS,
 ];
 
 static REGISTRY: OnceLock<HashMap<&'static str, &'static Entry>> = OnceLock::new();
@@ -171,6 +173,8 @@ mod crypto_tests;
 mod functional_tests;
 #[cfg(test)]
 mod gts_tests;
+#[cfg(test)]
+mod gts_time_tests;
 #[cfg(test)]
 mod json_tests;
 #[cfg(test)]

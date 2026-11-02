@@ -100,10 +100,11 @@ fn addvalue_takes_a_tick_a_location_an_elevation_and_a_value() {
         Value::list(vec![Value::Boolean(true)]),
     );
     // The series is modified in place and left on the stack.
-    assert_stack(
-        "NEWGTS 'g' STORE $g 1 NaN NaN NaN 1 ADDVALUE $g == $g SIZE",
-        &[Value::Boolean(true), Value::Long(1)],
-    );
+    let mut stack = exec("NEWGTS 'g' STORE $g 1 NaN NaN NaN 1 ADDVALUE $g SIZE");
+    assert_eq!(stack.pop().unwrap(), Value::Long(1));
+    let returned = stack.pop().unwrap();
+    stack.exec_checked("$g").unwrap();
+    assert!(returned.same_object(&stack.pop().unwrap()));
     // Datapoints keep their insertion order, `SETVALUE` overwrites an existing tick.
     assert_top(
         "NEWGTS 2 NaN NaN NaN 'b' ADDVALUE 1 NaN NaN NaN 'a' ADDVALUE 2 NaN NaN NaN 'c' ADDVALUE \
@@ -526,8 +527,8 @@ fn sort_and_rsort_order_the_datapoints_in_place() {
         ]),
     );
     assert_stack(
-        &format!("{UNSORTED} 'g' STORE $g SORT $g == $g TICKLIST"),
-        &[Value::Boolean(true), longs(&[1, 1, 2, 3])],
+        &format!("{UNSORTED} 'g' STORE $g SORT DROP $g TICKLIST"),
+        &[longs(&[1, 1, 2, 3])],
     );
     assert_top(
         &format!("[ {UNSORTED} {UNSORTED} RSORT ] SORT TICKLIST"),
@@ -822,15 +823,11 @@ fn series_as_values() {
         &format!("[ {SERIES} ] ->JSON"),
         "[{\"c\":\"g\",\"l\":{\"l\":\"v\"},\"a\":{},\"la\":0,\"v\":[[10,1],[20,47.99999998882413,1.9999999646097422,35,2],[30,5,3]]}]",
     );
-    // Series are compared and hashed by identity.
+    // Series are hashed by identity (sets, map keys); `==` on series is a GTS operator
+    // (not ported yet) rather than an identity test.
     assert_stack(
-        "NEWGTS 'a' STORE $a $a == $a NEWGTS == [ $a $a NEWGTS ] ->SET SIZE { $a 1 } $a GET",
-        &[
-            Value::Boolean(true),
-            Value::Boolean(false),
-            Value::Long(2),
-            Value::Long(1),
-        ],
+        "NEWGTS 'a' STORE [ $a $a NEWGTS ] ->SET SIZE { $a 1 } $a GET",
+        &[Value::Long(2), Value::Long(1)],
     );
     // The snapshot rebuilds the series (in the readable form on request); the string form
     // of the value is its `toString`.

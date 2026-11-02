@@ -98,6 +98,13 @@ impl Values {
         }
     }
 
+    /// Keep the values at indexes `start..end` only.
+    fn keep_range(&mut self, start: usize, end: usize) {
+        if let Some(column) = self.column() {
+            column.keep_range(start, end);
+        }
+    }
+
     /// Store `value` at `idx` (appending when `idx` is the length), converting it to the type
     /// of the series like `GTSHelper.setValue`; the first value fixes the type.
     fn store(&mut self, idx: usize, value: &Scalar) {
@@ -143,6 +150,19 @@ impl Column<'_> {
             Column::Double(v) => v.reverse(),
             Column::Boolean(v) => v.reverse(),
             Column::String(v) => v.reverse(),
+        }
+    }
+
+    fn keep_range(self, start: usize, end: usize) {
+        fn keep<T>(v: &mut Vec<T>, start: usize, end: usize) {
+            v.truncate(end);
+            v.drain(..start);
+        }
+        match self {
+            Column::Long(v) => keep(v, start, end),
+            Column::Double(v) => keep(v, start, end),
+            Column::Boolean(v) => keep(v, start, end),
+            Column::String(v) => keep(v, start, end),
         }
     }
 }
@@ -272,7 +292,7 @@ fn apply_changes(map: &mut IndexMap<String, String>, changes: &[(Option<&str>, O
 }
 
 /// A Geo Time Series.
-#[derive(Clone, Debug, Default)]
+#[derive(Debug, Default)]
 pub struct GeoTimeSerie {
     /// Name, labels and attributes.
     pub metadata: Metadata,
@@ -298,10 +318,134 @@ pub struct GeoTimeSerie {
     pub renamed: bool,
 }
 
+impl Clone for GeoTimeSerie {
+    /// `GeoTimeSerie.clone`: everything but the `renamed` flag.
+    fn clone(&self) -> Self {
+        GeoTimeSerie {
+            metadata: self.metadata.clone(),
+            ticks: self.ticks.clone(),
+            locations: self.locations.clone(),
+            elevations: self.elevations.clone(),
+            values: self.values.clone(),
+            bucketspan: self.bucketspan,
+            bucketcount: self.bucketcount,
+            lastbucket: self.lastbucket,
+            sorted: self.sorted,
+            reversed: self.reversed,
+            renamed: false,
+        }
+    }
+}
+
 impl GeoTimeSerie {
     /// An empty, unnamed series (`new GeoTimeSerie()`).
     pub fn new() -> Self {
         GeoTimeSerie::default()
+    }
+
+    /// An empty, unnamed series with bucketization parameters
+    /// (`new GeoTimeSerie(lastbucket, bucketcount, bucketspan, sizehint)`).
+    pub fn with_buckets(lastbucket: i64, bucketcount: i64, bucketspan: i64) -> Self {
+        GeoTimeSerie {
+            bucketspan,
+            bucketcount,
+            lastbucket,
+            ..GeoTimeSerie::default()
+        }
+    }
+
+    /// Append datapoint `idx` of `source` (`GTSHelper.setValue` with the tick, location,
+    /// elevation and value at that index).
+    pub fn copy_datapoint(&mut self, source: &GeoTimeSerie, idx: usize) {
+        self.set_value(
+            source.tick_at(idx),
+            source.location_at(idx),
+            source.elevation_at(idx),
+            &source.value_at(idx),
+            false,
+        );
+    }
+
+    /// Keep the datapoints at indexes `start..end` only.
+    pub fn keep_range(&mut self, start: usize, end: usize) {
+        self.ticks.truncate(end);
+        self.ticks.drain(..start);
+        if let Some(locations) = &mut self.locations {
+            locations.truncate(end);
+            locations.drain(..start);
+        }
+        if let Some(elevations) = &mut self.elevations {
+            elevations.truncate(end);
+            elevations.drain(..start);
+        }
+        self.values.keep_range(start, end);
+    }
+
+    /// `GTSHelper.subSerie(gts, start, stop, false)`: a new series with the datapoints whose
+    /// tick lies in `[start, stop]`, carrying the name, labels and attributes but not the
+    /// bucketization. The series is sorted (ascending) in place beforehand.
+    #[must_use]
+    pub fn subserie(&mut self, start: i64, stop: i64) -> GeoTimeSerie {
+        let (first, end) = if self.ticks.is_empty() || start > stop {
+            (0, 0)
+        } else {
+            self.sort(false);
+            self.index_range(start, stop)
+        };
+        let mut sub = GeoTimeSerie {
+            metadata: Metadata {
+                name: self.metadata.name.clone(),
+                labels: self.metadata.labels.clone(),
+                attributes: self.metadata.attributes.clone(),
+                ..Metadata::default()
+            },
+            ..self.clone()
+        };
+        sub.bucketspan = 0;
+        sub.bucketcount = 0;
+        sub.lastbucket = 0;
+        sub.keep_range(first, end);
+        if first == end {
+            // An empty result is a fresh series in Warp 10, not flagged as sorted.
+            sub.sorted = false;
+            sub.reversed = false;
+        }
+        sub
+    }
+
+    /// The indexes `first..end` of the datapoints of a sorted series whose tick lies in
+    /// `[start, stop]`, searched like `subSerie` does (binary searches then scans over the
+    /// duplicates of the bounds); `(0, 0)` when there is none.
+    fn index_range(&self, start: i64, stop: i64) -> (usize, usize) {
+        let n = self.ticks.len() as i64;
+        let mut lastidx = java_binary_search_range(&self.ticks, 0, n, stop);
+        if lastidx == -1 {
+            return (0, 0);
+        } else if lastidx < 0 {
+            lastidx = -lastidx - 2;
+        } else if lastidx < n - 1 {
+            let mut lastlastidx = lastidx + 1;
+            while lastlastidx < n && self.ticks[lastlastidx as usize] == stop {
+                lastlastidx += 1;
+            }
+            lastidx = lastlastidx - 1;
+        }
+        let mut firstidx = java_binary_search_range(&self.ticks, 0, lastidx + 1, start);
+        if firstidx == -n - 1 {
+            return (0, 0);
+        } else if firstidx < 0 {
+            firstidx = -firstidx - 1;
+        } else if firstidx > 0 {
+            let mut firstfirstidx = firstidx - 1;
+            while firstfirstidx >= 0 && self.ticks[firstfirstidx as usize] == start {
+                firstfirstidx -= 1;
+            }
+            firstidx = firstfirstidx + 1;
+        }
+        if firstidx > lastidx {
+            return (0, 0);
+        }
+        (firstidx as usize, lastidx as usize + 1)
     }
 
     /// A shared handle on `self`.
@@ -638,17 +782,23 @@ impl GeoTimeSerie {
 /// `Arrays.binarySearch`: the index of `key` in the sorted `ticks` (whichever of equal ticks
 /// Java's loop lands on), `None` when absent.
 pub fn java_binary_search(ticks: &[i64], key: i64) -> Option<usize> {
-    let mut low = 0i64;
-    let mut high = ticks.len() as i64 - 1;
+    usize::try_from(java_binary_search_range(ticks, 0, ticks.len() as i64, key)).ok()
+}
+
+/// `Arrays.binarySearch(ticks, from, to, key)`: the index of `key` in `ticks[from..to]`, or
+/// `-(insertion point) - 1` when absent.
+pub fn java_binary_search_range(ticks: &[i64], from: i64, to: i64, key: i64) -> i64 {
+    let mut low = from;
+    let mut high = to - 1;
     while low <= high {
         let mid = (low + high) >> 1;
         match ticks[mid as usize].cmp(&key) {
             std::cmp::Ordering::Less => low = mid + 1,
             std::cmp::Ordering::Greater => high = mid - 1,
-            std::cmp::Ordering::Equal => return Some(mid as usize),
+            std::cmp::Ordering::Equal => return mid,
         }
     }
-    None
+    -(low + 1)
 }
 
 /// Strict ordering of two ticks in the requested direction.
