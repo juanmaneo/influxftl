@@ -8,12 +8,26 @@
 pub mod basic;
 #[cfg(test)]
 mod basic_tests;
+pub mod join;
+#[cfg(test)]
+mod join_tests;
+pub mod order;
+#[cfg(test)]
+mod order_tests;
+pub mod stats;
+#[cfg(test)]
+mod stats_tests;
+#[cfg(test)]
+mod tests;
 
+use std::cmp::Ordering;
 use std::rc::Rc;
 
 use indexmap::IndexMap;
 
-use crate::error::Result;
+use crate::error::{Error, Result};
+use crate::functions::functional::java_double_compare;
+use crate::functions::operators::compare_long_double;
 use crate::gts::{NO_ELEVATION, NO_LOCATION};
 use crate::value::{FunctionObject, Value};
 
@@ -94,6 +108,13 @@ pub trait Aggregator {
 
     /// Aggregate a window of datapoints.
     fn apply(&self, args: &AggregatorArgs) -> Result<Aggregated>;
+
+    /// The WarpScript source of the parameters a builder consumed to produce this aggregator
+    /// (`true` for `true bucketizer.var`), which the snapshot puts before the name like the
+    /// Java `toString()`; `None` for the parameterless aggregators (`'name' FUNCREF`).
+    fn parameters(&self) -> Option<String> {
+        None
+    }
 }
 
 /// A registered aggregator: the name it was registered under and its implementation.
@@ -118,8 +139,21 @@ impl<A: Aggregator + 'static> FunctionObject for Named<A> {
         "AGGREGATOR"
     }
 
+    fn snapshot(&self) -> String {
+        named_snapshot(self.name, self.aggregator.parameters())
+    }
+
     fn as_aggregator(&self) -> Option<&dyn Aggregator> {
         Some(&self.aggregator)
+    }
+}
+
+/// The snapshot of the aggregator `name` built with `parameters` (`true bucketizer.var`), or
+/// the reference snapshot of a parameterless one (`'bucketizer.sum' FUNCREF`).
+fn named_snapshot(name: &str, parameters: Option<String>) -> String {
+    match parameters {
+        Some(parameters) => format!("{parameters} {name}"),
+        None => format!("'{}' FUNCREF", crate::format::url_encode(name)),
     }
 }
 
@@ -128,5 +162,91 @@ pub fn aggregator_of(value: &Value) -> Option<&dyn Aggregator> {
     match value {
         Value::Function(function) => function.as_aggregator(),
         _ => None,
+    }
+}
+
+/// Java `((Number) value).longValue()` / `doubleValue()` on a datapoint value: the
+/// `ClassCastException` of a non numeric value.
+pub(crate) fn class_cast(value: &Value) -> Error {
+    Error::new(format!(
+        "class {} cannot be cast to class java.lang.Number",
+        value.java_class()
+    ))
+}
+
+/// `((Number) value).longValue()`.
+pub(crate) fn long_value(value: &Value) -> Result<i64> {
+    value.as_i64().ok_or_else(|| class_cast(value))
+}
+
+/// `((Number) value).doubleValue()`.
+pub(crate) fn double_value(value: &Value) -> Result<f64> {
+    value.as_f64().ok_or_else(|| class_cast(value))
+}
+
+/// The location and elevation of the most recent datapoint of the window (the way `Sum`,
+/// `Count`, `RMS`, `Join`… pick theirs).
+pub(crate) fn latest(args: &AggregatorArgs) -> (i64, i64) {
+    let mut location = NO_LOCATION;
+    let mut elevation = NO_ELEVATION;
+    let mut timestamp = i64::MIN;
+    for i in 0..args.values.len() {
+        if args.ticks[i] > timestamp {
+            location = args.locations[i];
+            elevation = args.elevations[i];
+            timestamp = args.ticks[i];
+        }
+    }
+    (location, elevation)
+}
+
+/// A numeric datapoint value (`Long` or `Double`), for the comparisons of `EQ.compare`.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) enum Num {
+    /// A `LONG`.
+    Long(i64),
+    /// A `DOUBLE`.
+    Double(f64),
+}
+
+impl Num {
+    /// The numeric value, `None` for `null` and non numeric values.
+    pub(crate) fn of(value: &Value) -> Option<Num> {
+        match value {
+            Value::Long(l) => Some(Num::Long(*l)),
+            Value::Double(d) => Some(Num::Double(*d)),
+            _ => None,
+        }
+    }
+
+    /// The value as a `f64` (`Number.doubleValue()`).
+    pub(crate) fn as_f64(self) -> f64 {
+        match self {
+            Num::Long(l) => l as f64,
+            Num::Double(d) => d,
+        }
+    }
+
+    /// `EQ.compare(Number, Number)`: `Long.compare` on two `LONG`s, `Double.compareTo` on two
+    /// `DOUBLE`s (`-0.0 < 0.0`, `NaN` greatest) and the exact `BigDecimal` comparison of a
+    /// `LONG` with a `DOUBLE`. Warp 10 fails on a `LONG` compared with a `NaN` or infinite
+    /// `DOUBLE` (`Infinite or NaN`); here infinities order naturally and `NaN` is the greatest
+    /// value, so that the comparison is a total order.
+    pub(crate) fn compare(self, other: Num) -> Ordering {
+        match (self, other) {
+            (Num::Long(x), Num::Long(y)) => x.cmp(&y),
+            (Num::Double(x), Num::Double(y)) => java_double_compare(x, y),
+            (Num::Long(l), Num::Double(d)) => compare_long_nan_double(l, d),
+            (Num::Double(d), Num::Long(l)) => compare_long_nan_double(l, d).reverse(),
+        }
+    }
+}
+
+/// A `LONG` against a `DOUBLE` that may be `NaN` (then the greatest).
+fn compare_long_nan_double(l: i64, d: f64) -> Ordering {
+    if d.is_nan() {
+        Ordering::Less
+    } else {
+        compare_long_double(l, d)
     }
 }

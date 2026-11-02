@@ -16,6 +16,10 @@ use crate::value::{FunctionObject, Value};
 /// Signature of a native stack function: it consumes and produces values on the stack.
 pub type StackFn = fn(&mut Stack) -> Result<()>;
 
+/// Signature of a native stack function that is told the name it was registered under (the
+/// builders of parameterized function objects, `bucketizer.var`, `mapper.percentile`…).
+pub type BuilderFn = fn(&mut Stack, &'static str) -> Result<()>;
+
 /// Something that can be invoked as a stack function.
 #[derive(Clone, Debug)]
 pub enum Callable {
@@ -25,6 +29,13 @@ pub enum Callable {
         name: &'static str,
         /// Implementation.
         func: StackFn,
+    },
+    /// A WarpLib builder implemented in Rust, invoked with its registered name.
+    Builder {
+        /// WarpScript name, e.g. `bucketizer.var`.
+        name: &'static str,
+        /// Implementation.
+        func: BuilderFn,
     },
     /// A function (re)defined with `DEF`: the macro is executed when the name is invoked.
     Defined {
@@ -45,7 +56,7 @@ impl Callable {
     /// The WarpScript name of this callable.
     pub fn name(&self) -> &str {
         match self {
-            Callable::Native { name, .. } => name,
+            Callable::Native { name, .. } | Callable::Builder { name, .. } => name,
             Callable::Defined { name, .. } | Callable::Undefined { name } => name,
         }
     }
@@ -54,6 +65,7 @@ impl Callable {
     pub fn apply(&self, stack: &mut Stack) -> Result<()> {
         match self {
             Callable::Native { func, .. } => func(stack),
+            Callable::Builder { name, func } => func(stack, name),
             Callable::Defined { body, .. } => stack.exec_macro(body),
             Callable::Undefined { name } => Err(Error::new(format!("{name} is undefined."))),
         }

@@ -568,14 +568,42 @@ unstable, order), `GeoTimeSerie.toString` and `dump` (`TOSTRING`), and the JSON 
 bucket aligns the last tick on the span, a `0` span derives from the count and a `-1` span
 makes the first tick start the first bucket) with the aggregator and macro bucketizers. The
 aggregators (`bucketizer.*`, `mapper.*`, `reducer.*`) are the shared `WarpScriptAggregatorFunction`
-classes of Warp 10 (`Sum`, `Mean`, `Min`, `Max`, `First`, `Last`, `Count`, `And`, `Or` so far),
-each registered name keeping its `ignoreNulls` flag. The differences:
+classes of Warp 10 (`Sum`, `Mean`, `Min`, `Max`, `First`, `Last`, `Count`, `And`, `Or`, `RMS`,
+`Variance` / `VarianceWelford`, `StandardDeviation`, `CircularMean`, `Median`, `MAD`,
+`Percentile`, `Join` so far), each registered name keeping its `ignoreNulls` / `forbidNulls`
+flag; the parameterized ones (`true bucketizer.var`, `50 'type7' mapper.percentile`,
+`'-' reducer.join`, `360 bucketizer.mean.circular`) are built by the same stack functions
+as in Warp 10 and snapshot as that builder call. The differences:
 
 - **A macro bucketizer receives a copy of the result's metadata** with each bucket's
   datapoints; Warp 10 shares the metadata object, so a macro renaming or relabelling the
   sub-series would alter the bucketized series.
 - **A `null` result** (alone or as the last element of a list) is left on the stack, like
   Warp 10 does — scripts relying on that garbage behave identically.
-- **`MAP`, `REDUCE`, `APPLY`, `FILTER`** and the other aggregators (`median`, `join`,
-  `percentile`, `delta`, `rate`…) are not ported yet; `bucketizer.*` names that are not
-  listed in `docs/FUNCTIONS.md` are unknown functions.
+- **Java runtime exceptions are reproduced by message**: a non numeric value after a numeric
+  first one raises the `ClassCastException` text (`class java.lang.String cannot be cast to
+  class java.lang.Number`), `MAD` on a window of booleans or strings fails like Java's
+  `Arrays.sort` / `(double)` casts (`class java.lang.Boolean cannot be cast to class
+  java.lang.Double`, `Unable to compute median on an even number of non numeric values.`),
+  and `median` of no value at all (`Index -1 out of bounds for length 0`) or `mad` of an
+  empty window (`Index 0 out of bounds for length 0`) report the JDK 11+
+  `ArrayIndexOutOfBoundsException` texts. The `RuntimeException` of a non numeric
+  `median` window propagates bare (`bucketizer.median can only operate on numeric Geo Time
+  Series.`) while `percentile` wraps it (`java.lang.RuntimeException: … (…)`), as in Warp 10.
+- **`median` and `percentile` on mixed `LONG` / `DOUBLE` windows** (only reducers produce
+  them) compare the values exactly like `EQ.compare`; Warp 10 fails with `Infinite or NaN`
+  when a `LONG` meets a `NaN` or infinite `DOUBLE` in its `BigDecimal` comparison, the port
+  orders infinities naturally and puts `NaN` last. `MAD` on such a window fails like Java's
+  `Arrays.sort` (`class java.lang.Long cannot be cast to class java.lang.Double`, naming the
+  class of the first value and the first other class).
+- **Warp 10 quirks reproduced**: the Welford variance divides by the index in the window
+  (nulls included), so a skipped `null` skews `reducer.var.welford`; `MAD` keeps the
+  `NO_LOCATION` / `NO_ELEVATION` markers that `Arrays.binarySearch` does not land on in its
+  location and elevation medians (the median elevation of two elevated datapoints among six
+  is `(100 + Long.MIN_VALUE) / 2`); `join` counts a skipped `null` as a first element
+  (`-1-2` for `null 1 2`); a `NaN` percentile rank is accepted (and selects the lowest
+  value). `MAD` sorts copies of the window's locations and elevations where Warp 10 sorts
+  the framework's arrays in place, with no observable difference.
+- **`MAP`, `REDUCE`, `APPLY`, `FILTER`** and the mapper-only aggregators (`delta`, `rate`,
+  `mapper.add`…) are not ported yet; names that are not listed in `docs/FUNCTIONS.md` are
+  unknown functions.

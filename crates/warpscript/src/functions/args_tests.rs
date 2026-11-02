@@ -135,4 +135,12 @@ fn registry_lookup_and_call() {
         call(&mut stack, "test.object").unwrap_err().to_string(),
         "Unknown function 'test.object'"
     );
+    // A builder is called with its registered name.
+    assert!(matches!(
+        lookup("bucketizer.var"),
+        Some(("bucketizer.var", Entry::Builder(_)))
+    ));
+    let mut stack = exec("true");
+    call(&mut stack, "bucketizer.var").unwrap();
+    assert_eq!(stack.pop().unwrap().type_name(), "AGGREGATOR");
 }

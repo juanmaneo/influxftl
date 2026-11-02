@@ -40,7 +40,7 @@ use std::rc::Rc;
 use std::sync::OnceLock;
 
 use crate::error::{Error, Result};
-use crate::macros::StackFn;
+use crate::macros::{BuilderFn, StackFn};
 use crate::stack::Stack;
 use crate::value::FunctionObject;
 
@@ -51,6 +51,10 @@ pub type ObjectFn = fn(&'static str) -> Rc<dyn FunctionObject>;
 pub enum Entry {
     /// A stack function: executed as soon as it is encountered (or compiled into a macro).
     Stack(StackFn),
+    /// A stack function that needs its registered name (the `Builder`s of parameterized
+    /// function objects such as `bucketizer.var`: `true bucketizer.var` pushes an object
+    /// named after the builder).
+    Builder(BuilderFn),
     /// A function object: pushed onto the stack when encountered (`mapper.sum`…).
     Object(ObjectFn),
 }
@@ -85,6 +89,9 @@ const TABLES: &[&[(&str, Entry)]] = &[
     gts_stats::FUNCTIONS,
     gts_frameworks::FUNCTIONS,
     crate::aggregators::basic::FUNCTIONS,
+    crate::aggregators::stats::FUNCTIONS,
+    crate::aggregators::order::FUNCTIONS,
+    crate::aggregators::join::FUNCTIONS,
 ];
 
 static REGISTRY: OnceLock<HashMap<&'static str, &'static Entry>> = OnceLock::new();
@@ -180,6 +187,7 @@ pub fn registered_names() -> Vec<&'static str> {
 pub fn call(stack: &mut Stack, name: &str) -> Result<()> {
     match lookup(name) {
         Some((_, Entry::Stack(func))) => func(stack),
+        Some((name, Entry::Builder(func))) => func(stack, name),
         _ => Err(Error::new(format!("Unknown function '{name}'"))),
     }
 }

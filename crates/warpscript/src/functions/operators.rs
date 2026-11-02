@@ -231,7 +231,7 @@ fn inplace_add(stack: &mut Stack) -> Result<()> {
 
 /// Exact comparison of a `LONG` and a `DOUBLE` (Java `EQ.compare` via `BigDecimal`), avoiding
 /// the precision loss of casting the long to a double.
-fn compare_long_double(l: i64, d: f64) -> Ordering {
+pub(crate) fn compare_long_double(l: i64, d: f64) -> Ordering {
     // `d` is finite and non-NaN here (callers screen NaN first).
     if d >= 9_223_372_036_854_775_808.0 {
         return Ordering::Less;

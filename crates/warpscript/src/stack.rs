@@ -1169,6 +1169,9 @@ impl Stack {
             Some((name, Entry::Stack(func))) => {
                 Ok(Found::Stack(Callable::Native { name, func: *func }))
             }
+            Some((name, Entry::Builder(func))) => {
+                Ok(Found::Stack(Callable::Builder { name, func: *func }))
+            }
             Some((name, Entry::Object(build))) => Ok(Found::Object(Value::Function(build(name)))),
             None => Err(Error::new(format!("Unknown function '{name}'"))),
         }

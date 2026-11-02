@@ -201,19 +201,21 @@ The project is Apache-2.0 and must stay redistributable under it (see `README.md
 
 ## 9. Status and next steps
 
-1575 / 2094 functions are ported (`docs/FUNCTIONS.md`). The Geo Time Series model, the
-`GTSHelper` transforms (time, datapoints, statistics) and `BUCKETIZE` with the elementary
-aggregators are in. The remaining work, in the order that unlocks the most:
+1616 / 2193 functions are ported (`docs/FUNCTIONS.md`; the inventory includes the names
+Warp 10 registers through `Builder`s and constants). The Geo Time Series model, the
+`GTSHelper` transforms (time, datapoints, statistics) and `BUCKETIZE` with the shared
+aggregators (`sum`, `mean`, `min`, `max`, `first`, `last`, `count`, `and`, `or`, `rms`,
+`var` / `sd` and their `.welford` forms, `mean.circular`, `median`, `mad`, `percentile`,
+`join`) are in. The remaining work, in the order that unlocks the most:
 
-1. **The other aggregators** (`io.warp10.script.aggregator`): `Median`, `MAD`, `Join`,
-   `Percentile`, `CircularMean`, `RMS`, `Variance` / `StandardDeviation` (and their
-   `.welford` forms), then the mapper-only ones (`Delta`, `Rate`, `Argminmax`, `Highest`,
-   `Lowest`, `HDist`, `VDist`, `HSpeed`, `VSpeed`, `TrueCourse`, `ShannonEntropy`,
-   `CompareTo`, `ResetCounter`) and the `io.warp10.script.mapper` package (84 mappers:
-   `mapper.add`, `mapper.mul`, `mapper.abs`, `mapper.tick`, `mapper.year`, `mapper.geo.*`…).
-   Builders with parameters (`50 bucketizer.percentile`) are stack functions pushing a
-   configured object whose `snapshot()` reproduces Java's `toString()`
-   (`50.0 'type1' bucketizer.percentile `).
+1. **The mapper-only aggregators** (`io.warp10.script.aggregator`: `Delta`, `Rate`,
+   `Argminmax`, `Highest`, `Lowest`, `HDist`, `VDist`, `HSpeed`, `VSpeed`, `TrueCourse`,
+   `ShannonEntropy`, `CompareTo`, `ResetCounter`) and the `io.warp10.script.mapper` package
+   (`mapper.add`, `mapper.mul`, `mapper.abs`, `mapper.tick`, `mapper.year`, `mapper.geo.*`…).
+   Builders with parameters (`50 bucketizer.percentile`) are `Entry::Builder` stack functions
+   (they receive their registered name) pushing a configured object whose `parameters()`
+   make `snapshot()` reproduce Java's `toString()` (`50.0 'type1' bucketizer.percentile `);
+   see `aggregators/stats.rs` and `aggregators/order.rs`.
 2. **`MAP`** (`GTSHelper.map`: pre/post windows, occurrences, step, overrideTick, the
    `MACROMAPPER` protocol and multi-output maps), then **`REDUCE`** (`GTSHelper.reduce`:
    partitioning by labels, `null` filling across series, `reducer.*`), **`APPLY`** with the

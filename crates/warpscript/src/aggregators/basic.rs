@@ -6,7 +6,9 @@
 
 use std::cmp::Ordering;
 
-use super::{Aggregated, Aggregator, AggregatorArgs, Named, Roles};
+use super::{
+    Aggregated, Aggregator, AggregatorArgs, Named, Roles, double_value, latest, long_value,
+};
 use crate::error::{Error, Result};
 use crate::functions::Entry;
 use crate::functions::functional::java_double_compare;
@@ -261,39 +263,6 @@ pub const FUNCTIONS: &[(&str, Entry)] = &[
         Entry::Object(|n| Named::object(n, Count { omit_nulls: true })),
     ),
 ];
-
-/// Java `((Number) value).longValue()` / `doubleValue()` on a datapoint value: the
-/// `ClassCastException` of a non numeric value.
-fn class_cast(value: &Value) -> Error {
-    Error::new(format!(
-        "class {} cannot be cast to class java.lang.Number",
-        value.java_class()
-    ))
-}
-
-fn long_value(value: &Value) -> Result<i64> {
-    value.as_i64().ok_or_else(|| class_cast(value))
-}
-
-fn double_value(value: &Value) -> Result<f64> {
-    value.as_f64().ok_or_else(|| class_cast(value))
-}
-
-/// The location and elevation of the most recent datapoint of the window (the way `Sum`,
-/// `Count`… pick theirs).
-fn latest(args: &AggregatorArgs) -> (i64, i64) {
-    let mut location = NO_LOCATION;
-    let mut elevation = NO_ELEVATION;
-    let mut timestamp = i64::MIN;
-    for i in 0..args.values.len() {
-        if args.ticks[i] > timestamp {
-            location = args.locations[i];
-            elevation = args.elevations[i];
-            timestamp = args.ticks[i];
-        }
-    }
-    (location, elevation)
-}
 
 /// The type a running sum takes from its first value.
 enum SumType {
