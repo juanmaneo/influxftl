@@ -38,6 +38,16 @@ fn build_hhcode(mut lat: i64, mut lon: i64) -> i64 {
     hhcode
 }
 
+/// `GeoXPLib.xyFromGeoXPPoint`: the `(latitude, longitude)` units of an HHCode (`0..2^32`).
+pub fn xy_from_geoxp_point(hhcode: i64) -> (i64, i64) {
+    split_hhcode(hhcode)
+}
+
+/// `GeoXPLib.toGeoXPPoint(long, long)`: the HHCode of `(latitude, longitude)` units.
+pub fn to_geoxp_point_xy(lat: i64, lon: i64) -> i64 {
+    build_hhcode(lat, lon)
+}
+
 /// `GeoXPLib.fromGeoXPPoint`: the `(latitude, longitude)` of an HHCode, in decimal degrees.
 pub fn from_geoxp_point(hhcode: i64) -> (f64, f64) {
     let (lat, lon) = split_hhcode(hhcode);

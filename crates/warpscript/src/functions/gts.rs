@@ -172,16 +172,16 @@ fn newgts(stack: &mut Stack) -> Result<()> {
 }
 
 /// A datapoint to add: tick, GeoXP location, elevation and value.
-struct Datapoint {
-    tick: i64,
-    location: i64,
-    elevation: i64,
-    value: Value,
+pub(super) struct Datapoint {
+    pub(super) tick: i64,
+    pub(super) location: i64,
+    pub(super) elevation: i64,
+    pub(super) value: Value,
 }
 
 /// `MACROMAPPER.listToObjects`: a datapoint given as `[ tick lat lon elevation value ]`,
 /// `[ tick lat lon value ]`, `[ tick elevation value ]`, `[ tick value ]` or `[ value ]`.
-fn datapoint_from_list(elements: &[Value]) -> Result<Datapoint> {
+pub(super) fn datapoint_from_list(elements: &[Value]) -> Result<Datapoint> {
     let number = |index: usize| -> Result<f64> {
         let value = &elements[index];
         value.as_f64().ok_or_else(|| {

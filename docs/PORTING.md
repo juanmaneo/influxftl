@@ -29,11 +29,17 @@ and for coding agents alike: follow it literally and `cargo xtask dev-check` sta
   sees in the error message.
 - When a whole-script result is needed (the interplay of several functions, a stack state
   after an error, the exact JSON of a `FETCH`…), a real Warp 10 can serve as the oracle: the
-  official image `warp10io/warp10` (Alpine based) runs under `podman run --rm -p 8080:8080
-  warp10io/warp10` and answers `curl --data-binary @script.mc2 http://localhost:8080/api/v0/exec`
-  (the `/api/v0/exec` endpoint returns the stack as JSON, errors in the `X-Warp10-Error-Message`
-  header). A Debian based image built from the same tarball works the same way. Use it to
-  settle a doubt, then embed the observed values in the tests as literals.
+  official image `warp10io/warp10:3.5.0-alpine` (there is no `latest` tag) runs under
+  `podman run -d --name w10 -p 18080:8080 docker.io/warp10io/warp10:3.5.0-alpine` (about 40 s
+  to start) and answers `curl --data-binary 'script' http://127.0.0.1:18080/api/v0/exec`: the
+  response is the stack as a JSON array, **top of the stack first**; errors come in the
+  `X-Warp10-Error-Message` header. `target/w10.sh 'script'` (recreate it under `target/`, see
+  §6) wraps that. The image runs JDK 8, whose exception texts (`-1`, `java.lang.String cannot
+  be cast to java.lang.Number`) differ from the JDK 11+ texts the port reproduces. Use it to
+  settle a doubt, then embed the observed values in the tests as literals. Since `BUCKETIZE`
+  is available on both sides, bucketized series can be built on the oracle with
+  `[ gts bucketizer.sum 100 10 0 ] BUCKETIZE 0 GET` and in Rust tests with
+  `GeoTimeSerie::with_buckets`.
 - Geo Time Series internals (`GeoTimeSerie`, `GTSHelper`, `GTSEncoder`/`GTSDecoder`) are
   under `reference/warp10/warp10/src/main/java/io/warp10/continuum/gts/`; the GeoXP point
   conversions come from GeoXP Lib (`reference/geoxplib/`, Apache-2.0, see `NOTICE`).
@@ -47,7 +53,13 @@ crates/warpscript/src/
   error.rs            Error::new(msg) ; messages are wrapped by the interpreter with the position
   format.rs           Java number formatting / parsing (Double.toString, Long.parseLong…)
   jmath.rs            exact java.lang.Math ports
+  gts.rs              GeoTimeSerie / Metadata model (GTSHelper primitives: setValue, sort, valueSort,
+                      subserie, select…); geoxp.rs: HHCode conversions (GeoXP Lib)
+  aggregators/        WarpScriptAggregatorFunction objects (bucketizer.*, mapper.*, reducer.*):
+                      mod.rs (Aggregator trait, AggregatorArgs, Named wrapper), basic.rs…
   functions/
+    gts.rs            GTS construction / inspection; gts_time.rs, gts_points.rs, gts_stats.rs:
+                      GTSHelper transforms; gts_frameworks.rs: BUCKETIZE (MAP / REDUCE to come)
     mod.rs            TABLES (registration order) + `mod xxx_tests;` declarations
     args.rs           pop_string / pop_long / pop_list / pop_map / pop_number / getn / fail
     <group>.rs        one module per function family, `pub const FUNCTIONS: &[(&str, Entry)]`
@@ -134,6 +146,16 @@ target/bgjob.sh wait devcheck 700 ; tail -3 /tmp/influxftl-jobs/devcheck.log
 
 (`run <name> <dir> '<cmd>'`, `status [name]`, `log <name> [lines]`, `wait <name> [seconds]`;
 the script is a `setsid nohup` wrapper writing `/tmp/influxftl-jobs/<name>.{log,pid,exit}`.)
+
+The oracle wrapper `target/w10.sh` is a four-liner: `curl -s -D - --data-binary "$1"
+http://127.0.0.1:18080/api/v0/exec`, printing the `X-Warp10-Error-Message` header when
+present and the body (the JSON stack) otherwise.
+
+A coverage gap finder, once `cargo llvm-cov report --text -- --show-regions=true > /tmp/cov.txt`
+has run: `awk '$0 ~ "/<file>.rs:$" {p=1;next} /^\/home.*\.rs:$/ {p=0} p' /tmp/cov.txt | grep -n
+-B6 '\^0\|      0|'`. Note that `if let … else`-less blocks, `?` and closures all create regions:
+an unreachable arm or `?` must be restructured away (e.g. carry an `Option` instead of a
+variant that cannot occur) rather than left uncovered.
 
 ## 7. The gate
 

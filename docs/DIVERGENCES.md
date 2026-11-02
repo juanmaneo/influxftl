@@ -561,3 +561,21 @@ unstable, order), `GeoTimeSerie.toString` and `dump` (`TOSTRING`), and the JSON 
 - **`MUSIGMA`, `NSUMSUMSQ` and `LR`** compute with `BigDecimal` in Warp 10 and are not ported
   yet (they will come with the `BD*` functions). `STANDARDIZE`, `ZSCORE`, `SKEWNESS` and
   `KURTOSIS` use the plain double arithmetic of their Java counterparts.
+
+## 19. `BUCKETIZE` and the aggregators
+
+`BUCKETIZE` is a port of `GTSHelper.bucketize` (parameter derivation included: a `0` last
+bucket aligns the last tick on the span, a `0` span derives from the count and a `-1` span
+makes the first tick start the first bucket) with the aggregator and macro bucketizers. The
+aggregators (`bucketizer.*`, `mapper.*`, `reducer.*`) are the shared `WarpScriptAggregatorFunction`
+classes of Warp 10 (`Sum`, `Mean`, `Min`, `Max`, `First`, `Last`, `Count`, `And`, `Or` so far),
+each registered name keeping its `ignoreNulls` flag. The differences:
+
+- **A macro bucketizer receives a copy of the result's metadata** with each bucket's
+  datapoints; Warp 10 shares the metadata object, so a macro renaming or relabelling the
+  sub-series would alter the bucketized series.
+- **A `null` result** (alone or as the last element of a list) is left on the stack, like
+  Warp 10 does — scripts relying on that garbage behave identically.
+- **`MAP`, `REDUCE`, `APPLY`, `FILTER`** and the other aggregators (`median`, `join`,
+  `percentile`, `delta`, `rate`…) are not ported yet; `bucketizer.*` names that are not
+  listed in `docs/FUNCTIONS.md` are unknown functions.

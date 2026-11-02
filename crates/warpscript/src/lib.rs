@@ -15,6 +15,7 @@
 //! assert_eq!(stack.pop().unwrap(), Value::Long(42));
 //! ```
 
+pub mod aggregators;
 pub mod argon2;
 pub mod bitset;
 pub mod cmath;

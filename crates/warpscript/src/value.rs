@@ -51,6 +51,12 @@ pub trait FunctionObject {
     fn as_any(&self) -> Option<&dyn Any> {
         None
     }
+
+    /// The object as an aggregator (`WarpScriptAggregatorFunction`), for the `BUCKETIZE`,
+    /// `MAP` and `REDUCE` frameworks.
+    fn as_aggregator(&self) -> Option<&dyn crate::aggregators::Aggregator> {
+        None
+    }
 }
 
 /// A saved execution context (`SAVE` / `RESTORE`).

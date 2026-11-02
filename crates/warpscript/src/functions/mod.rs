@@ -15,6 +15,7 @@ pub mod control;
 pub mod crypto;
 pub mod functional;
 pub mod gts;
+pub mod gts_frameworks;
 pub mod gts_points;
 pub mod gts_stats;
 pub mod gts_time;
@@ -82,6 +83,8 @@ const TABLES: &[&[(&str, Entry)]] = &[
     gts_time::FUNCTIONS,
     gts_points::FUNCTIONS,
     gts_stats::FUNCTIONS,
+    gts_frameworks::FUNCTIONS,
+    crate::aggregators::basic::FUNCTIONS,
 ];
 
 static REGISTRY: OnceLock<HashMap<&'static str, &'static Entry>> = OnceLock::new();
@@ -112,8 +115,30 @@ pub(crate) mod test_objects {
         Rc::new(TestObject(name))
     }
 
+    /// An aggregator that always fails, to exercise the error paths of the frameworks.
+    struct FailingAggregator;
+
+    impl crate::aggregators::Aggregator for FailingAggregator {
+        fn roles(&self) -> crate::aggregators::Roles {
+            crate::aggregators::Roles::ALL
+        }
+
+        fn apply(
+            &self,
+            _args: &crate::aggregators::AggregatorArgs,
+        ) -> crate::error::Result<crate::aggregators::Aggregated> {
+            Err(crate::error::Error::new("test.failing failed."))
+        }
+    }
+
     /// The test-only table.
-    pub const FUNCTIONS: &[(&str, Entry)] = &[("test.object", Entry::Object(build))];
+    pub const FUNCTIONS: &[(&str, Entry)] = &[
+        ("test.object", Entry::Object(build)),
+        (
+            "test.failing",
+            Entry::Object(|n| crate::aggregators::Named::object(n, FailingAggregator)),
+        ),
+    ];
 }
 
 #[cfg(test)]
@@ -175,6 +200,8 @@ mod control_tests;
 mod crypto_tests;
 #[cfg(test)]
 mod functional_tests;
+#[cfg(test)]
+mod gts_frameworks_tests;
 #[cfg(test)]
 mod gts_points_tests;
 #[cfg(test)]
