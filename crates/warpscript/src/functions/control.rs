@@ -508,15 +508,8 @@ pub(crate) fn rethrow(stack: &mut Stack) -> Result<()> {
 }
 
 /// Java class name reported by `ERROR` for each kind of error.
-fn error_type(err: &Error) -> &'static str {
-    match err {
-        Error::Script(_) => "class io.warp10.script.WarpScriptException",
-        Error::Return => "class io.warp10.script.WarpScriptReturnException",
-        Error::Stop(_) => "class io.warp10.script.WarpScriptStopException",
-        Error::Break => "class io.warp10.script.WarpScriptLoopBreakException",
-        Error::Continue => "class io.warp10.script.WarpScriptLoopContinueException",
-        Error::Abort(_) => "class io.warp10.script.WarpScriptATCException",
-    }
+fn error_type(err: &Error) -> String {
+    format!("class {}", err.java_class())
 }
 
 /// `ERROR`: the last caught error and its causes as a list of maps.

@@ -562,11 +562,15 @@ unstable, order), `GeoTimeSerie.toString` and `dump` (`TOSTRING`), and the JSON 
   yet (they will come with the `BD*` functions). `STANDARDIZE`, `ZSCORE`, `SKEWNESS` and
   `KURTOSIS` use the plain double arithmetic of their Java counterparts.
 
-## 19. `BUCKETIZE` and the aggregators
+## 19. `BUCKETIZE`, `MAP` and the aggregators
 
 `BUCKETIZE` is a port of `GTSHelper.bucketize` (parameter derivation included: a `0` last
 bucket aligns the last tick on the span, a `0` span derives from the count and a `-1` span
-makes the first tick start the first bucket) with the aggregator and macro bucketizers. The
+makes the first tick start the first bucket) with the aggregator and macro bucketizers.
+`MAP` is a port of `MAP` / `GTSHelper.map` / `MACROMAPPER` (both parameter forms, pre and
+post windows in ticks or in time, occurrences and their backwards form, output ticks, step,
+the tick override, the duplicate-tick handling, the Java `int` / `Integer.MAX_VALUE`
+cappings and the multi-output maps). The
 aggregators (`bucketizer.*`, `mapper.*`, `reducer.*`) are the shared `WarpScriptAggregatorFunction`
 classes of Warp 10 (`Sum`, `Mean`, `Min`, `Max`, `First`, `Last`, `Count`, `And`, `Or`, `RMS`,
 `Variance` / `VarianceWelford`, `StandardDeviation`, `CircularMean`, `Median`, `MAD`,
@@ -575,9 +579,25 @@ flag; the parameterized ones (`true bucketizer.var`, `50 'type7' mapper.percenti
 `'-' reducer.join`, `360 bucketizer.mean.circular`) are built by the same stack functions
 as in Warp 10 and snapshot as that builder call. The differences:
 
-- **A macro bucketizer receives a copy of the result's metadata** with each bucket's
-  datapoints; Warp 10 shares the metadata object, so a macro renaming or relabelling the
-  sub-series would alter the bucketized series.
+- **A macro bucketizer or mapper receives a copy of the result's metadata** with each
+  bucket's or window's datapoints; Warp 10 shares the metadata object, so a macro renaming
+  or relabelling the sub-series would alter the bucketized or mapped series.
+- **Java runtime exceptions escape the frameworks unwrapped.** `MAP` wraps the
+  `WarpScriptException`s of a mapper (`MAP was given invalid parameters. (…)`) but lets the
+  Java runtime exceptions through, as Warp 10 does: a macro mapper leaving an empty stack
+  (`Empty stack.`, an `InformativeEmptyStackException`), a map whose values are not lists
+  (`class java.lang.Long cannot be cast to class java.util.List`), a non numeric tick in a
+  result list (`class java.lang.String cannot be cast to class java.lang.Number`), or the
+  tick override on a single-element list result, whose `0` tick is a Java `Integer` (`class
+  java.lang.Integer cannot be cast to class java.lang.Long`). `ERROR` reports the class of
+  these as Warp 10 does (`class java.lang.ClassCastException`,
+  `class io.warp10.script.InformativeEmptyStackException`,
+  `class java.lang.ArrayIndexOutOfBoundsException`, `class java.lang.RuntimeException`),
+  with an empty `stacktrace`.
+- **A map returned by a macro mapper is read as it is**; Warp 10 replaces each of its list
+  values by the array it builds from them (`MACROMAPPER.listToObjects`) — the mutated map is
+  unreachable afterwards, so nothing observable differs. The series of the named outputs are
+  created in the mapper's order and returned sorted by name (`TreeMap`), as in Warp 10.
 - **A `null` result** (alone or as the last element of a list) is left on the stack, like
   Warp 10 does — scripts relying on that garbage behave identically.
 - **Java runtime exceptions are reproduced by message**: a non numeric value after a numeric
@@ -604,6 +624,9 @@ as in Warp 10 and snapshot as that builder call. The differences:
   (`-1-2` for `null 1 2`); a `NaN` percentile rank is accepted (and selects the lowest
   value). `MAD` sorts copies of the window's locations and elevations where Warp 10 sorts
   the framework's arrays in place, with no observable difference.
-- **`MAP`, `REDUCE`, `APPLY`, `FILTER`** and the mapper-only aggregators (`delta`, `rate`,
+- **The mappers reading the index of the current tick in the window** (`mapper.product`,
+  `mapper.dotproduct`…) will read `Window::tick_index`, which `BUCKETIZE` leaves unset
+  where Java would read past the arguments array (`Index 4 out of bounds for length 4`).
+- **`REDUCE`, `APPLY`, `FILTER`** and the mapper-only aggregators (`delta`, `rate`,
   `mapper.add`…) are not ported yet; names that are not listed in `docs/FUNCTIONS.md` are
   unknown functions.

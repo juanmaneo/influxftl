@@ -49,9 +49,26 @@ pub struct AggregatorArgs<'a> {
     pub elevations: &'a [i64],
     /// `args[6]`: their values.
     pub values: &'a [Value],
-    /// `args[7]`: the window parameters (`[ 0 -bucketspan start end ]` for bucketizers,
-    /// `[ prewindow postwindow start end ]` for mappers), when the framework provides them.
-    pub window: Option<[i64; 4]>,
+    /// `args[7]`: the window parameters, when the framework provides them.
+    pub window: Option<Window>,
+}
+
+/// The window parameters of a bucketizer or mapper application (`args[7]`, a `long[]`):
+/// `[ 0 -bucketspan start end ]` for `BUCKETIZE`, `[ prewindow postwindow start stop tickidx ]`
+/// for `MAP`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Window {
+    /// The pre-window parameter (`0` for `BUCKETIZE`).
+    pub prewindow: i64,
+    /// The post-window parameter (the negated bucket span for `BUCKETIZE`).
+    pub postwindow: i64,
+    /// The first tick of the window.
+    pub start: i64,
+    /// The last tick of the window.
+    pub stop: i64,
+    /// `MAP` only: the index of the current tick in the window (`-1` when it holds no
+    /// datapoint at that tick); `BUCKETIZE` provides no fifth element.
+    pub tick_index: Option<i64>,
 }
 
 /// The result of an aggregator: `{ tick, location, elevation, value }` (`Object[4]`).
@@ -168,10 +185,7 @@ pub fn aggregator_of(value: &Value) -> Option<&dyn Aggregator> {
 /// Java `((Number) value).longValue()` / `doubleValue()` on a datapoint value: the
 /// `ClassCastException` of a non numeric value.
 pub(crate) fn class_cast(value: &Value) -> Error {
-    Error::new(format!(
-        "class {} cannot be cast to class java.lang.Number",
-        value.java_class()
-    ))
+    Error::class_cast(value.java_class(), "java.lang.Number")
 }
 
 /// `((Number) value).longValue()`.

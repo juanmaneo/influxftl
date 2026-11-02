@@ -184,12 +184,9 @@ pub(super) struct Datapoint {
 pub(super) fn datapoint_from_list(elements: &[Value]) -> Result<Datapoint> {
     let number = |index: usize| -> Result<f64> {
         let value = &elements[index];
-        value.as_f64().ok_or_else(|| {
-            Error::new(format!(
-                "class {} cannot be cast to class java.lang.Number",
-                value.java_class()
-            ))
-        })
+        value
+            .as_f64()
+            .ok_or_else(|| Error::class_cast(value.java_class(), "java.lang.Number"))
     };
     let location = |lat: usize, lon: usize| -> Result<i64> {
         let (lat, lon) = (number(lat)?, number(lon)?);

@@ -201,12 +201,19 @@ The project is Apache-2.0 and must stay redistributable under it (see `README.md
 
 ## 9. Status and next steps
 
-1616 / 2193 functions are ported (`docs/FUNCTIONS.md`; the inventory includes the names
+1617 / 2193 functions are ported (`docs/FUNCTIONS.md`; the inventory includes the names
 Warp 10 registers through `Builder`s and constants). The Geo Time Series model, the
-`GTSHelper` transforms (time, datapoints, statistics) and `BUCKETIZE` with the shared
-aggregators (`sum`, `mean`, `min`, `max`, `first`, `last`, `count`, `and`, `or`, `rms`,
-`var` / `sd` and their `.welford` forms, `mean.circular`, `median`, `mad`, `percentile`,
-`join`) are in. The remaining work, in the order that unlocks the most:
+`GTSHelper` transforms (time, datapoints, statistics), `BUCKETIZE` and `MAP` with the
+shared aggregators (`sum`, `mean`, `min`, `max`, `first`, `last`, `count`, `and`, `or`,
+`rms`, `var` / `sd` and their `.welford` forms, `mean.circular`, `median`, `mad`,
+`percentile`, `join`) are in. `MAP` covers `GTSHelper.map` entirely: pre/post windows in
+ticks or in time, occurrences (negative: backwards), output ticks, step, the tick override,
+the `MACROMAPPER` protocol and the multi-output maps. The Java runtime exceptions Warp 10
+lets escape (`ClassCastException`, `InformativeEmptyStackException`,
+`ArrayIndexOutOfBoundsException`…) are modelled by `Error::runtime` so that the functions
+wrapping `WarpScriptException`s (`MAP was given invalid parameters. (…)`) let them through
+like Java and `ERROR` reports their class (§19 of `DIVERGENCES.md`). The remaining work, in
+the order that unlocks the most:
 
 1. **The mapper-only aggregators** (`io.warp10.script.aggregator`: `Delta`, `Rate`,
    `Argminmax`, `Highest`, `Lowest`, `HDist`, `VDist`, `HSpeed`, `VSpeed`, `TrueCourse`,
@@ -215,13 +222,14 @@ aggregators (`sum`, `mean`, `min`, `max`, `first`, `last`, `count`, `and`, `or`,
    Builders with parameters (`50 bucketizer.percentile`) are `Entry::Builder` stack functions
    (they receive their registered name) pushing a configured object whose `parameters()`
    make `snapshot()` reproduce Java's `toString()` (`50.0 'type1' bucketizer.percentile `);
-   see `aggregators/stats.rs` and `aggregators/order.rs`.
-2. **`MAP`** (`GTSHelper.map`: pre/post windows, occurrences, step, overrideTick, the
-   `MACROMAPPER` protocol and multi-output maps), then **`REDUCE`** (`GTSHelper.reduce`:
-   partitioning by labels, `null` filling across series, `reducer.*`), **`APPLY`** with the
-   `op.*` N-ary operators and the `==` / `+` / `*`… operators on series (§18 of
-   `DIVERGENCES.md`), **`FILTER`** with `filter.*`, and the fillers (`FILL`, `FILLPREVIOUS`,
-   `FILLNEXT`, `FILLVALUE`, `FILLTICKS`, `INTERPOLATE`).
+   see `aggregators/stats.rs` and `aggregators/order.rs`. The mappers reading the index of
+   the current tick in the window (`mapper.product`, `mapper.dotproduct`…) get it from
+   `Window::tick_index` (`None` under `BUCKETIZE`, where Java would read past the
+   arguments array).
+2. **`REDUCE`** (`GTSHelper.reduce`: partitioning by labels, `null` filling across series,
+   `reducer.*`), **`APPLY`** with the `op.*` N-ary operators and the `==` / `+` / `*`…
+   operators on series (§18 of `DIVERGENCES.md`), **`FILTER`** with `filter.*`, and the
+   fillers (`FILL`, `FILLPREVIOUS`, `FILLNEXT`, `FILLVALUE`, `FILLTICKS`, `INTERPOLATE`).
 3. **`DEDUP` with a mapper**, `UNBUCKETIZE`, `LTTB` / `TLTTB`, the exponential smoothings,
    `PROB` / `CPROB`, `PATTERNS` / `DISCORDS`, `DTW`, `STL`, `LOWESS`.
 4. **GTS encoders** (`GTSEncoder` / `GTSDecoder`, Thrift compact + gzip wrappers): `WRAP` /

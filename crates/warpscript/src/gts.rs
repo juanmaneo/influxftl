@@ -386,12 +386,11 @@ impl GeoTimeSerie {
     /// bucketization. The series is sorted (ascending) in place beforehand.
     #[must_use]
     pub fn subserie(&mut self, start: i64, stop: i64) -> GeoTimeSerie {
-        let (first, end) = if self.ticks.is_empty() || start > stop {
-            (0, 0)
-        } else {
+        // Warp 10 only sorts when there is something to extract.
+        if !self.ticks.is_empty() && start <= stop {
             self.sort(false);
-            self.index_range(start, stop)
-        };
+        }
+        let (first, end) = self.window_range(start, stop);
         let mut sub = GeoTimeSerie {
             metadata: Metadata {
                 name: self.metadata.name.clone(),
@@ -413,10 +412,13 @@ impl GeoTimeSerie {
         sub
     }
 
-    /// The indexes `first..end` of the datapoints of a sorted series whose tick lies in
-    /// `[start, stop]`, searched like `subSerie` does (binary searches then scans over the
-    /// duplicates of the bounds); `(0, 0)` when there is none.
-    fn index_range(&self, start: i64, stop: i64) -> (usize, usize) {
+    /// The indexes `first..end` of the datapoints of a series sorted in ascending order whose
+    /// tick lies in `[start, stop]`, searched like `subSerie` does (binary searches then
+    /// scans over the duplicates of the bounds); `(0, 0)` when there is none.
+    pub fn window_range(&self, start: i64, stop: i64) -> (usize, usize) {
+        if self.ticks.is_empty() || start > stop {
+            return (0, 0);
+        }
         let n = self.ticks.len() as i64;
         let mut lastidx = java_binary_search_range(&self.ticks, 0, n, stop);
         if lastidx == -1 {
@@ -451,6 +453,15 @@ impl GeoTimeSerie {
     /// A shared handle on `self`.
     pub fn shared(self) -> Gts {
         Rc::new(RefCell::new(self))
+    }
+
+    /// `GTSHelper.clear`: drop every datapoint and the type, keeping the metadata, the
+    /// bucketization parameters and the sort flags.
+    pub fn clear(&mut self) {
+        self.ticks = Vec::new();
+        self.locations = None;
+        self.elevations = None;
+        self.values = Values::Undefined;
     }
 
     /// Number of datapoints (`GeoTimeSerie.size`).

@@ -37,6 +37,11 @@ pub struct ScriptError {
     pub message: String,
     /// The error that caused this one (Java `getCause()`).
     pub cause: Option<Box<Error>>,
+    /// The class of the Java `RuntimeException` this error stands for (`ClassCastException`,
+    /// `ArrayIndexOutOfBoundsException`, `InformativeEmptyStackException`…) when Warp 10 lets
+    /// one escape rather than raising a `WarpScriptException`: the functions that catch and
+    /// wrap `WarpScriptException`s let these through unwrapped.
+    pub runtime: Option<&'static str>,
 }
 
 impl Error {
@@ -45,6 +50,7 @@ impl Error {
         Error::Script(ScriptError {
             message: message.into(),
             cause: None,
+            runtime: None,
         })
     }
 
@@ -53,12 +59,75 @@ impl Error {
         Error::Script(ScriptError {
             message: message.into(),
             cause: Some(Box::new(cause)),
+            runtime: None,
         })
+    }
+
+    /// Create the error standing for the Java `RuntimeException` of class `class` (a fully
+    /// qualified name) with `message`.
+    pub fn runtime(class: &'static str, message: impl Into<String>) -> Self {
+        Error::Script(ScriptError {
+            message: message.into(),
+            cause: None,
+            runtime: Some(class),
+        })
+    }
+
+    /// The `InformativeEmptyStackException` of a `pop` on an empty stack.
+    pub fn empty_stack() -> Self {
+        Error::runtime(
+            "io.warp10.script.InformativeEmptyStackException",
+            "Empty stack.",
+        )
+    }
+
+    /// The `ClassCastException` of a Java cast of a `from` object to class `to`.
+    pub fn class_cast(from: &str, to: &str) -> Self {
+        Error::runtime(
+            "java.lang.ClassCastException",
+            format!("class {from} cannot be cast to class {to}"),
+        )
+    }
+
+    /// The `ArrayIndexOutOfBoundsException` of reading `index` in an array of `length`.
+    pub fn index_out_of_bounds(index: i64, length: usize) -> Self {
+        Error::runtime(
+            "java.lang.ArrayIndexOutOfBoundsException",
+            format!("Index {index} out of bounds for length {length}"),
+        )
     }
 
     /// `true` for the "abort the call" signals that macro execution lets through unwrapped.
     pub fn is_signal(&self) -> bool {
         !matches!(self, Error::Script(_))
+    }
+
+    /// `true` for the errors standing for a Java `RuntimeException` (see
+    /// [`ScriptError::runtime`]).
+    pub fn is_runtime(&self) -> bool {
+        matches!(
+            self,
+            Error::Script(ScriptError {
+                runtime: Some(_),
+                ..
+            })
+        )
+    }
+
+    /// The Java class of the exception this error stands for (`ERROR`'s `type`).
+    pub fn java_class(&self) -> &'static str {
+        match self {
+            Error::Script(ScriptError {
+                runtime: Some(class),
+                ..
+            }) => class,
+            Error::Script(_) => "io.warp10.script.WarpScriptException",
+            Error::Return => "io.warp10.script.WarpScriptReturnException",
+            Error::Stop(_) => "io.warp10.script.WarpScriptStopException",
+            Error::Break => "io.warp10.script.WarpScriptLoopBreakException",
+            Error::Continue => "io.warp10.script.WarpScriptLoopContinueException",
+            Error::Abort(_) => "io.warp10.script.WarpScriptATCException",
+        }
     }
 
     /// The message of this error (Java `getMessage()`).

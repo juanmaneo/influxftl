@@ -72,7 +72,7 @@ fn dupn(stack: &mut Stack) -> Result<()> {
 
 fn swap(stack: &mut Stack) -> Result<()> {
     if stack.depth() == 0 {
-        return Err(Error::new("Empty stack."));
+        return Err(Error::empty_stack());
     }
     if stack.depth() < 2 {
         return Err(Error::new("Index out of bound."));
@@ -99,7 +99,7 @@ fn clear(stack: &mut Stack) -> Result<()> {
 
 fn rot(stack: &mut Stack) -> Result<()> {
     if stack.depth() == 0 {
-        return Err(Error::new("Empty stack."));
+        return Err(Error::empty_stack());
     }
     if stack.depth() < 3 {
         return Err(Error::new("Index out of bound."));

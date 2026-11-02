@@ -112,8 +112,12 @@ fn floor_division_by_minus_one_wraps() {
 #[kani::proof]
 fn floor_division_by_zero_is_an_error() {
     let x: i64 = kani::any();
-    assert!(floor_div(x, 0).is_err());
-    assert!(floor_mod(x, 0).is_err());
+    let (div, rem) = (floor_div(x, 0), floor_mod(x, 0));
+    assert!(div.is_err());
+    assert!(rem.is_err());
+    // The errors are not dropped: CBMC cannot bound the recursion of the drop glue of
+    // `Error` (its cause chain), and the destructor is not what this harness is about.
+    core::mem::forget((div, rem));
 }
 
 /// `Math.abs(long)` is non-negative except for `Long.MIN_VALUE`, which is its own absolute value.

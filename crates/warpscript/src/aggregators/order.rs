@@ -104,9 +104,10 @@ fn sorted_indices(values: &[Value], name: &str) -> Result<Vec<usize>> {
     }
     let keys: Vec<Option<Num>> = values.iter().map(Num::of).collect();
     if non_null.iter().any(|&i| keys[i].is_none()) {
-        return Err(Error::new(format!(
-            "{name} can only operate on numeric Geo Time Series."
-        )));
+        return Err(Error::runtime(
+            "java.lang.RuntimeException",
+            format!("{name} can only operate on numeric Geo Time Series."),
+        ));
     }
     let mut indices: Vec<usize> = (0..values.len()).collect();
     indices.sort_by(|&a, &b| match (keys[a], keys[b]) {
@@ -158,10 +159,7 @@ impl Aggregator for Median {
         } else if n.is_multiple_of(2) {
             if n == 0 {
                 // `indices[-1]` in Warp 10.
-                return Err(Error::new(format!(
-                    "Index -1 out of bounds for length {}",
-                    values.len()
-                )));
+                return Err(Error::index_out_of_bounds(-1, values.len()));
             }
             let low = indices[n / 2 - 1];
             let high = indices[n / 2];
@@ -228,11 +226,7 @@ fn natural_sort(values: &[Value]) -> Result<Sorted<'_>> {
         return Ok(Sorted::Empty);
     };
     if let Some(other) = values.iter().find(|v| v.java_class() != first.java_class()) {
-        return Err(Error::new(format!(
-            "class {} cannot be cast to class {}",
-            first.java_class(),
-            other.java_class()
-        )));
+        return Err(Error::class_cast(first.java_class(), other.java_class()));
     }
     Ok(match first {
         Value::Long(_) => {
@@ -257,10 +251,10 @@ fn natural_sort(values: &[Value]) -> Result<Sorted<'_>> {
         }
         // Series hold no other type; such a window would not even be `Comparable`.
         other => {
-            return Err(Error::new(format!(
-                "class {} cannot be cast to class java.lang.Comparable",
-                other.java_class()
-            )));
+            return Err(Error::class_cast(
+                other.java_class(),
+                "java.lang.Comparable",
+            ));
         }
     })
 }
@@ -294,9 +288,7 @@ fn median_of_doubles(sorted: &[f64]) -> f64 {
 
 /// Java's `(double) median` on a `STRING` or `BOOLEAN` median: the `ClassCastException`.
 fn double_cast(class: &str) -> Error {
-    Error::new(format!(
-        "class {class} cannot be cast to class java.lang.Double"
-    ))
+    Error::class_cast(class, "java.lang.Double")
 }
 
 /// The median of non numeric values: Warp 10 selects it like for numbers (identical
@@ -349,7 +341,7 @@ impl Aggregator for Mad {
     fn apply(&self, args: &AggregatorArgs) -> Result<Aggregated> {
         if args.locations.is_empty() {
             // `locations[0]` in Warp 10.
-            return Err(Error::new("Index 0 out of bounds for length 0"));
+            return Err(Error::index_out_of_bounds(0, 0));
         }
         let mut locations = args.locations.to_vec();
         locations.sort_unstable();

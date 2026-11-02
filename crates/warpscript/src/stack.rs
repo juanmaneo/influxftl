@@ -286,7 +286,7 @@ impl Stack {
     /// Pop the top of the stack.
     pub fn pop(&mut self) -> Result<Value> {
         if self.depth() == 0 {
-            return Err(Error::new("Empty stack."));
+            return Err(Error::empty_stack());
         }
         Ok(self.elements.pop().unwrap_or(Value::Null))
     }
@@ -320,7 +320,7 @@ impl Stack {
     /// A reference to the top of the stack.
     pub fn peek(&self) -> Result<&Value> {
         if self.depth() == 0 {
-            return Err(Error::new("Empty stack."));
+            return Err(Error::empty_stack());
         }
         Ok(&self.elements[self.elements.len() - 1])
     }
