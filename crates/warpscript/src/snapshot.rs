@@ -8,9 +8,13 @@
 //! `() … +!`, in the *readable* form (`SNAPSHOTREADABLE`) strings only escape `%`, `'` and
 //! control characters and containers use the `[ … ]`, `{ … }` and `( … )` syntax.
 
+use indexmap::IndexMap;
+
 use crate::encoding::opb64_encode;
 use crate::error::{Error, Result};
 use crate::format::{java_double_to_string, snapshot_encode_readable, url_encode};
+use crate::geoxp;
+use crate::gts::{self, GeoTimeSerie};
 use crate::macros::{Macro, Statement};
 use crate::value::Value;
 
@@ -178,6 +182,67 @@ fn append(out: &mut String, value: &Value, depth: usize, readable: bool) -> Resu
                 out.push_str(&format!("{} COUNTERSET ", c.get()));
             }
         }
+        // Until `WRAP` is available, a reconstruction of the series.
+        Value::Gts(gts) => append_gts(out, &gts.borrow(), depth, readable)?,
     }
+    Ok(())
+}
+
+/// `NEWGTS 'name' RENAME { labels } RELABEL { attributes } SETATTRIBUTES` followed by one
+/// `tick lat lon elevation value ADDVALUE` per datapoint (`NaN` for the absent location and
+/// elevation). The name, maps and values are rendered in the requested form, one level
+/// deeper than the series like the items of a list.
+fn append_gts(out: &mut String, gts: &GeoTimeSerie, depth: usize, readable: bool) -> Result<()> {
+    let strings = |map: &IndexMap<String, String>| {
+        Value::map(
+            map.iter()
+                .map(|(k, v)| (Value::from(k.as_str()), Value::from(v.as_str())))
+                .collect(),
+        )
+    };
+    // The source preceding each element, and the element.
+    let mut parts = vec![
+        (
+            String::from("NEWGTS "),
+            Value::from(gts.name().unwrap_or_default()),
+        ),
+        (String::from("RENAME "), strings(&gts.metadata.labels)),
+        (String::from("RELABEL "), strings(&gts.metadata.attributes)),
+    ];
+    for i in 0..gts.size() {
+        let mut prefix = String::from(if i == 0 {
+            "SETATTRIBUTES "
+        } else {
+            "ADDVALUE "
+        });
+        prefix.push_str(&format!("{} ", gts.tick_at(i)));
+        let location = gts.location_at(i);
+        if location == gts::NO_LOCATION {
+            prefix.push_str("NaN NaN ");
+        } else {
+            let (lat, lon) = geoxp::from_geoxp_point(location);
+            prefix.push_str(&format!(
+                "{} {} ",
+                java_double_to_string(lat),
+                java_double_to_string(lon)
+            ));
+        }
+        let elevation = gts.elevation_at(i);
+        if elevation == gts::NO_ELEVATION {
+            prefix.push_str("NaN ");
+        } else {
+            prefix.push_str(&format!("{elevation} "));
+        }
+        parts.push((prefix, gts.value_at(i)));
+    }
+    for (prefix, value) in &parts {
+        out.push_str(prefix);
+        append(out, value, depth + 1, readable)?;
+    }
+    out.push_str(if gts.size() == 0 {
+        "SETATTRIBUTES "
+    } else {
+        "ADDVALUE "
+    });
     Ok(())
 }

@@ -547,7 +547,7 @@ fn todouble(stack: &mut Stack) -> Result<()> {
 
 /// Java `Double.valueOf(String)` for the common cases: trims, accepts `NaN` / `Infinity` and a
 /// leading sign, delegates the magnitude to Rust's `f64` parser.
-fn parse_java_double(s: &str) -> Result<f64> {
+pub(crate) fn parse_java_double(s: &str) -> Result<f64> {
     let trimmed = s.trim();
     let (sign, rest) = match trimmed.strip_prefix('-') {
         Some(rest) => (-1.0, rest),
@@ -646,6 +646,11 @@ fn tostring(stack: &mut Stack) -> Result<()> {
         | Value::String(_)
         | Value::Counter(_)) => {
             stack.push(Value::from(value.to_string()));
+            Ok(())
+        }
+        // `GeoTimeSerie.dump`: the GTS input format.
+        Value::Gts(gts) => {
+            stack.push(Value::from(gts.borrow().dump()));
             Ok(())
         }
         _ => Err(fail(

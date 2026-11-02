@@ -29,6 +29,8 @@ use super::args::{fail_with_cause, pop_string};
 use super::misc::ATTRIBUTE_JSON_STRICT;
 use crate::error::{Error, Result};
 use crate::format::java_double_to_string;
+use crate::geoxp;
+use crate::gts::{self, GeoTimeSerie};
 use crate::stack::Stack;
 use crate::value::Value;
 
@@ -115,6 +117,47 @@ pub fn to_json(value: &Value, options: JsonOptions) -> std::result::Result<Strin
     Ok(serializer.out)
 }
 
+/// The JSON object of a Geo Time Series (`GeoTimeSerieSerializer`): `c` (class name), `l`
+/// (labels), `a` (attributes), `la` (last activity) and `v`, the datapoints as
+/// `[tick, lat, lon, elevation, value]` arrays with the absent location and elevation left
+/// out.
+fn gts_entries(gts: &GeoTimeSerie) -> IndexMap<Value, Value> {
+    let strings = |map: &IndexMap<String, String>| {
+        Value::map(
+            map.iter()
+                .map(|(k, v)| (Value::from(k.as_str()), Value::from(v.as_str())))
+                .collect(),
+        )
+    };
+    let datapoints = (0..gts.size())
+        .map(|i| {
+            let mut point = vec![Value::Long(gts.tick_at(i))];
+            let location = gts.location_at(i);
+            if location != gts::NO_LOCATION {
+                let (lat, lon) = geoxp::from_geoxp_point(location);
+                point.push(Value::Double(lat));
+                point.push(Value::Double(lon));
+            }
+            let elevation = gts.elevation_at(i);
+            if elevation != gts::NO_ELEVATION {
+                point.push(Value::Long(elevation));
+            }
+            point.push(gts.value_at(i));
+            Value::list(point)
+        })
+        .collect();
+    IndexMap::from([
+        (
+            Value::from("c"),
+            Value::from(gts.name().unwrap_or_default()),
+        ),
+        (Value::from("l"), strings(&gts.metadata.labels)),
+        (Value::from("a"), strings(&gts.metadata.attributes)),
+        (Value::from("la"), Value::Long(gts.metadata.last_activity)),
+        (Value::from("v"), Value::list(datapoints)),
+    ])
+}
+
 /// A Jackson-compatible generator writing into a string.
 struct Serializer {
     out: String,
@@ -171,6 +214,11 @@ impl Serializer {
             }
             Value::Map(map) => {
                 let entries = map.borrow();
+                self.write_object(&entries, depth)?;
+            }
+            // `GeoTimeSerieSerializer`: the metadata fields then the datapoints.
+            Value::Gts(gts) => {
+                let entries = gts_entries(&gts.borrow());
                 self.write_object(&entries, depth)?;
             }
         }

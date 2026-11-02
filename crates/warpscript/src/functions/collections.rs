@@ -794,6 +794,8 @@ fn size(stack: &mut Stack) -> Result<()> {
         Value::Set(set) => set.borrow().len(),
         Value::String(s) => s.encode_utf16().count(),
         Value::Bytes(bytes) => bytes.len(),
+        // The number of values, not the number of buckets.
+        Value::Gts(gts) => gts.borrow().size(),
         Value::Macro(m) => m.len(),
         _ => {
             return Err(fail(
@@ -1208,6 +1210,7 @@ fn clone_fn(stack: &mut Stack) -> Result<()> {
         Value::List(list) => Value::list(list.borrow().clone()),
         Value::Map(map) => Value::map(map.borrow().clone()),
         Value::Set(set) => Value::set(set.borrow().clone()),
+        Value::Gts(gts) => Value::Gts(gts.borrow().clone().shared()),
         _ => {
             return Err(fail(
                 "CLONE",

@@ -27,6 +27,16 @@ and for coding agents alike: follow it literally and `cargo xtask dev-check` sta
   texts such as `Index 0 out of bounds for length 0`, `Value 13 for monthOfYear must be in the
   range [1,12]`, `d != java.lang.Double`) are reproduced verbatim: they are what a Warp 10 user
   sees in the error message.
+- When a whole-script result is needed (the interplay of several functions, a stack state
+  after an error, the exact JSON of a `FETCH`…), a real Warp 10 can serve as the oracle: the
+  official image `warp10io/warp10` (Alpine based) runs under `podman run --rm -p 8080:8080
+  warp10io/warp10` and answers `curl --data-binary @script.mc2 http://localhost:8080/api/v0/exec`
+  (the `/api/v0/exec` endpoint returns the stack as JSON, errors in the `X-Warp10-Error-Message`
+  header). A Debian based image built from the same tarball works the same way. Use it to
+  settle a doubt, then embed the observed values in the tests as literals.
+- Geo Time Series internals (`GeoTimeSerie`, `GTSHelper`, `GTSEncoder`/`GTSDecoder`) are
+  under `reference/warp10/warp10/src/main/java/io/warp10/continuum/gts/`; the GeoXP point
+  conversions come from GeoXP Lib (`reference/geoxplib/`, Apache-2.0, see `NOTICE`).
 
 ## 2. Where the code goes
 

@@ -21,6 +21,7 @@ use indexmap::{IndexMap, IndexSet};
 
 use crate::bitset::BitSet;
 use crate::format::java_double_to_string;
+use crate::gts::Gts;
 use crate::macros::Macro;
 
 /// A shared, mutable list (`java.util.List`).
@@ -96,6 +97,8 @@ pub enum Value {
     Context(Rc<Context>),
     /// A mutable counter (`COUNTER`, a `java.util.concurrent.atomic.AtomicLong`).
     Counter(Rc<Cell<i64>>),
+    /// `GTS`: a Geo Time Series, shared and mutable like the Java object.
+    Gts(Gts),
 }
 
 impl Value {
@@ -142,6 +145,7 @@ impl Value {
             Value::Mark => "MARK",
             Value::Context(_) => "CONTEXT",
             Value::Counter(_) => "COUNTER",
+            Value::Gts(_) => "GTS",
         }
     }
 
@@ -164,6 +168,7 @@ impl Value {
             Value::Mark => "io.warp10.script.WarpScriptStack$Mark",
             Value::Context(_) => "io.warp10.script.MemoryWarpScriptStack$StackContext",
             Value::Counter(_) => "java.util.concurrent.atomic.AtomicLong",
+            Value::Gts(_) => "io.warp10.continuum.gts.GeoTimeSerie",
         }
     }
 
@@ -223,6 +228,7 @@ impl Value {
             (Value::Function(a), Value::Function(b)) => Rc::ptr_eq(a, b),
             (Value::Context(a), Value::Context(b)) => Rc::ptr_eq(a, b),
             (Value::Counter(a), Value::Counter(b)) => Rc::ptr_eq(a, b),
+            (Value::Gts(a), Value::Gts(b)) => Rc::ptr_eq(a, b),
             (Value::String(a), Value::String(b)) => Rc::ptr_eq(a, b),
             (Value::Bytes(a), Value::Bytes(b)) => Rc::ptr_eq(a, b),
             _ => false,
@@ -263,7 +269,8 @@ impl PartialEq for Value {
             (Value::Macro(_), Value::Macro(_))
             | (Value::Function(_), Value::Function(_))
             | (Value::Context(_), Value::Context(_))
-            | (Value::Counter(_), Value::Counter(_)) => self.same_object(other),
+            | (Value::Counter(_), Value::Counter(_))
+            | (Value::Gts(_), Value::Gts(_)) => self.same_object(other),
             _ => false,
         }
     }
@@ -308,6 +315,7 @@ impl Hash for Value {
             Value::Mark => 1u8.hash(state),
             Value::Context(c) => (Rc::as_ptr(c) as usize).hash(state),
             Value::Counter(c) => (Rc::as_ptr(c) as usize).hash(state),
+            Value::Gts(g) => (Rc::as_ptr(g) as usize).hash(state),
         }
     }
 }
@@ -358,6 +366,7 @@ impl fmt::Display for Value {
             Value::Mark => f.write_str("MARK"),
             Value::Context(_) => f.write_str("CONTEXT"),
             Value::Counter(c) => write!(f, "{}", c.get()),
+            Value::Gts(g) => write!(f, "{}", g.borrow()),
         }
     }
 }

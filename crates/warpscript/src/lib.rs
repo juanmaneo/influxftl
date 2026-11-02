@@ -22,6 +22,8 @@ pub mod encoding;
 pub mod error;
 pub mod format;
 pub mod functions;
+pub mod geoxp;
+pub mod gts;
 pub mod jmath;
 pub mod jrandom;
 pub mod macros;
@@ -51,6 +53,10 @@ mod encoding_tests;
 mod error_tests;
 #[cfg(test)]
 mod format_tests;
+#[cfg(test)]
+mod geoxp_tests;
+#[cfg(test)]
+mod gts_tests;
 #[cfg(test)]
 mod jmath_tests;
 #[cfg(test)]

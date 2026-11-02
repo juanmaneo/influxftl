@@ -35,9 +35,11 @@ were derived from the Warp 10 sources. Warp 10, WarpScript, WarpLib,
 WarpFleet, Geo Time Series and SenX are trademarks of SenX S.A.S.; they are
 used here only to describe compatibility with the Warp 10 platform.
 
-The HHCode geo-indexing scheme used by the geo functions is derived from
-GeoXP (https://github.com/senx/geoxplib), Copyright SenX S.A.S., licensed
-under the Apache License, Version 2.0.
+The GeoXP point conversions (HHCode geo-indexing scheme, module
+`crates/warpscript/src/geoxp.rs`) are derived from GeoXP Lib
+(https://github.com/senx/geoxplib), Copyright 1999-2019 Mathias Herberts,
+Copyright 2019-2020 iroise.net S.A.S., Copyright 2020- SenX S.A.S.,
+licensed under the Apache License, Version 2.0.
 
 ========================================================================
 InfluxDB 3 Core — MIT License or Apache License, Version 2.0
