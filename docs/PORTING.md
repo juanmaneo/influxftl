@@ -16,9 +16,17 @@ and for coding agents alike: follow it literally and `cargo xtask dev-check` sta
   error messages and the corner cases (empty input, `null`, `NaN`, `-0.0`, `Long.MIN_VALUE`,
   index out of range, negative counts…) all come from the Java source.
 - When a Java library result is needed (`java.lang.Math`, `java.util.Random`, `Double.toString`,
-  Commons Math, Joda-Time…), **generate the reference value with Java**: a JDK is installed
-  (`java`, `javac`). Keep scratch programs under `/tmp/jref/` (the Commons Math 3.6.1 jar is at
-  `/tmp/jref/commons-math3.jar`). Never guess a floating point digit.
+  Commons Math, Joda-Time, BouncyCastle, `String.format`…), **generate the reference value
+  with Java**: a JDK is installed (`java`, `javac`). Keep scratch programs under `/tmp/jref/`
+  (Commons Math 3.6.1: `/tmp/jref/commons-math3.jar`; BouncyCastle 1.78.1:
+  `/tmp/jref/bc/bcprov-jdk18on-1.78.1.jar`; Joda-Time 2.13.1:
+  `/tmp/jref/joda/joda-time-2.13.1.jar` — fetch them again from Maven Central when `/tmp` was
+  cleaned). Embed the generated values in the test files as literals. Never guess a floating
+  point digit.
+- Java semantics that scripts can observe but that are not WarpScript-level (JDK exception
+  texts such as `Index 0 out of bounds for length 0`, `Value 13 for monthOfYear must be in the
+  range [1,12]`, `d != java.lang.Double`) are reproduced verbatim: they are what a Warp 10 user
+  sees in the error message.
 
 ## 2. Where the code goes
 
@@ -90,7 +98,34 @@ A new group is added to `TABLES` in `functions/mod.rs` and its test module is de
 - Optional: pure helpers (no allocation, bounded loops) can get a Kani harness in
   `crates/warpscript/src/proofs.rs`; keep the whole proof step under a few minutes.
 
-## 5. The gate
+## 5. Infrastructure the host provides
+
+Some Java behaviour depends on the server around the stack. The runtime exposes hooks the
+host (`crates/influxftl`) fills in; functions must use them rather than hard-code a policy:
+
+- capabilities: `Stack::capabilities_mut()` (token attributes), `Stack::capability(name)`;
+  `limits::pop_limit` implements the `MAXOPS`-style `'<cap>' or 'limits'` pattern;
+- tokens: `Stack::set_token_resolver` (`CAPADD`);
+- interactive output: `Stack::set_interactive_writer` (`PEEK`, `PSTACK`…);
+- secure scripts: `Stack::set_secure_codec`; configuration: `Stack::set_config`.
+
+Test stacks (`crate::tests::test_stack`) have unlimited limits and the `limits` capability.
+
+## 6. Long runs
+
+`cargo xtask dev-check` takes about seven minutes (Kani included) and `cargo xtask coverage`
+about two. Run them detached from the editor so that closing it never kills the run, e.g.
+with the helper kept out of the sources in `target/bgjob.sh`:
+
+```
+target/bgjob.sh run devcheck /path/to/influxftl 'cargo xtask dev-check'
+target/bgjob.sh wait devcheck 700 ; tail -3 /tmp/influxftl-jobs/devcheck.log
+```
+
+(`run <name> <dir> '<cmd>'`, `status [name]`, `log <name> [lines]`, `wait <name> [seconds]`;
+the script is a `setsid nohup` wrapper writing `/tmp/influxftl-jobs/<name>.{log,pid,exit}`.)
+
+## 7. The gate
 
 ```
 cargo fmt --all
