@@ -672,6 +672,85 @@ impl GeoTimeSerie {
         }
     }
 
+    /// A series with the same metadata and bucketization holding the datapoints at the given
+    /// `indexes` of `self`, in that order (flags recomputed by the appends).
+    #[must_use]
+    pub fn select(&self, indexes: &[usize]) -> GeoTimeSerie {
+        let mut out = self.clone_empty();
+        for &i in indexes {
+            out.copy_datapoint(self, i);
+        }
+        out
+    }
+
+    /// `GTSHelper.valueSort`: order the datapoints by value then tick (descending when
+    /// `reversed`), in place, with the quicksort of Warp 10 (so that `NaN`s, which compare
+    /// with nothing, land where they do in Warp 10). A `BOOLEAN` series is split into its
+    /// `false` and `true` datapoints (each sorted by tick) and reassembled. The series is no
+    /// longer flagged as sorted.
+    pub fn value_sort(&mut self, reversed: bool) {
+        self.sorted = false;
+        let order = match &self.values {
+            Values::Undefined => return,
+            Values::Boolean(_) => None,
+            Values::Long(v) => Some(value_sort_permutation(&self.ticks, reversed, |a, b| {
+                v[a].partial_cmp(&v[b])
+            })),
+            Values::Double(v) => Some(value_sort_permutation(&self.ticks, reversed, |a, b| {
+                v[a].partial_cmp(&v[b])
+            })),
+            Values::String(v) => Some(value_sort_permutation(&self.ticks, reversed, |a, b| {
+                v[a].encode_utf16().partial_cmp(v[b].encode_utf16())
+            })),
+        };
+        let Some(order) = order else {
+            self.boolean_value_sort(reversed);
+            return;
+        };
+        let mut sorted = self.select(&order);
+        sorted.sorted = false;
+        sorted.reversed = self.reversed;
+        sorted.renamed = self.renamed;
+        *self = sorted;
+    }
+
+    /// `GTSHelper.quicksortByValue` on a `BOOLEAN` series: `booleanGTSSplit`, a tick sort of
+    /// each half that is not flagged as sorted, then the `false` datapoints followed by the
+    /// `true` ones (the other way round when `reversed`), each half read backwards when its
+    /// (possibly stale) `reversed` flag does not match.
+    fn boolean_value_sort(&mut self, reversed: bool) {
+        let mut halves = [self.clone_empty(), self.clone_empty()];
+        for i in 0..self.size() {
+            let half = usize::from(self.value_at(i) == Value::Boolean(true));
+            halves[half].copy_datapoint(self, i);
+        }
+        for half in &mut halves {
+            if !half.sorted {
+                half.quicksort(reversed);
+            }
+        }
+        if reversed {
+            halves.swap(0, 1);
+        }
+        let renamed = self.renamed;
+        let mut out = self.clone_empty();
+        for half in &halves {
+            if half.reversed == reversed {
+                for j in 0..half.size() {
+                    out.copy_datapoint(half, j);
+                }
+            } else {
+                for j in (0..half.size()).rev() {
+                    out.copy_datapoint(half, j);
+                }
+            }
+        }
+        out.sorted = false;
+        out.reversed = self.reversed;
+        out.renamed = renamed;
+        *self = out;
+    }
+
     /// `GeoTimeSerie.cloneEmpty`: the metadata and bucketization parameters without any
     /// datapoint (nor type).
     #[must_use]
@@ -804,6 +883,58 @@ pub fn java_binary_search_range(ticks: &[i64], from: i64, to: i64, key: i64) -> 
 /// Strict ordering of two ticks in the requested direction.
 fn before(a: i64, b: i64, reversed: bool) -> bool {
     if reversed { a > b } else { a < b }
+}
+
+/// The order `GTSHelper.quicksortByValue` leaves the datapoints in, as the list of their
+/// original indexes: the iterative Hoare partitioning of Warp 10 driven by `cmp` on the
+/// values (`None` when they do not compare, like `NaN`s) then by the ticks.
+fn value_sort_permutation(
+    ticks: &[i64],
+    reversed: bool,
+    cmp: impl Fn(usize, usize) -> Option<std::cmp::Ordering>,
+) -> Vec<usize> {
+    let n = ticks.len();
+    let mut order: Vec<usize> = (0..n).collect();
+    if n == 0 {
+        return order;
+    }
+    // `a` strictly before `b` in the requested direction (value, then tick).
+    let before = |a: usize, b: usize| {
+        let (a, b) = if reversed { (b, a) } else { (a, b) };
+        match cmp(a, b) {
+            Some(std::cmp::Ordering::Less) => true,
+            Some(std::cmp::Ordering::Equal) => ticks[a] < ticks[b],
+            _ => false,
+        }
+    };
+    let mut ranges = vec![(0i64, n as i64 - 1)];
+    let mut next = 0;
+    while next < ranges.len() {
+        let (low, high) = ranges[next];
+        next += 1;
+        let (mut i, mut j) = (low, high);
+        let pivot = order[(low + (high - low) / 2) as usize];
+        while i <= j {
+            while before(order[i as usize], pivot) {
+                i += 1;
+            }
+            while before(pivot, order[j as usize]) {
+                j -= 1;
+            }
+            if i <= j {
+                order.swap(i as usize, j as usize);
+                i += 1;
+                j -= 1;
+            }
+        }
+        if low < j {
+            ranges.push((low, j));
+        }
+        if i < high {
+            ranges.push((i, high));
+        }
+    }
+    order
 }
 
 /// `GTSHelper.encodeValue`: the text form of a value in the GTS input format.

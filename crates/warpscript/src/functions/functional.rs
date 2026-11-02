@@ -283,7 +283,7 @@ fn filterby(stack: &mut Stack) -> Result<()> {
 // -----------------------------------------------------------------------------------------
 
 /// `Double.compare`: `-0.0 < 0.0`, `NaN` is the greatest value and equals itself.
-fn java_double_compare(x: f64, y: f64) -> Ordering {
+pub(crate) fn java_double_compare(x: f64, y: f64) -> Ordering {
     if x < y {
         Ordering::Less
     } else if x > y {

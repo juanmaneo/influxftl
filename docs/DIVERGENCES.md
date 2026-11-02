@@ -536,3 +536,21 @@ unstable, order), `GeoTimeSerie.toString` and `dump` (`TOSTRING`), and the JSON 
   operators reject them, where Warp 10 computes a new series tick by tick.
 - **`CLONE` and the functions returning a copy** (`TIMESHIFT`, `TIMESCALE`, `CROP`…) reset the
   `renamed` flag like `GeoTimeSerie.clone`; the flag is only read by `UPDATE`.
+- **`VALUESORT` / `RVALUESORT` / `VALUEDEDUP` on a `BOOLEAN` series** whose `false` or
+  `true` datapoints are not in tick order: Warp 10 sorts each half with an off-by-one upper
+  bound and reads (and swaps in) the array slot past the last datapoint, producing a bogus
+  tick (`0` or a stale value). The port sorts within bounds and otherwise follows Warp 10,
+  including the stale `reversed` flag it consults to decide the reading direction of each
+  half (`[ 3 1 2 ] true` values come out as ticks `3 2 1`).
+- **`DEDUP` with a macro or mapper** on top of the stack (`GTSHelper.map`) fails with `DEDUP
+  with a macro or mapper requires the MAP framework, which is not supported yet.` instead
+  of applying the mapper.
+- **`LASTSORT` with series of mixed value types** compares the values as strings (`"10"`
+  before `"2"`), an inconsistent order for which Java's TimSort and Rust's merge sort may
+  produce different permutations; consistent comparisons (same type, or `LONG` / `DOUBLE`)
+  sort identically.
+- **JDK exception texts** are those of JDK 11 and later (`Index -1 out of bounds for length
+  0` for `[ ] COMMONTICKS`, `Index 0 out of bounds for length 0` for `RESETS` on a numeric
+  series without datapoint, `class java.lang.String cannot be cast to class java.lang.Number`
+  for `INTEGRATE` on a `STRING` series); a Warp 10 running on JDK 8 prints `-1`, `0` and
+  `java.lang.String cannot be cast to java.lang.Number`.

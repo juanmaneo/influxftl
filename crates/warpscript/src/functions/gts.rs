@@ -132,7 +132,7 @@ fn string_entries<'a>(
 
 /// `ATINDEX.getTupleAtIndex`: `[ tick lat lon elevation value ]`, with `NaN` for the absent
 /// location and elevation, or `[ NaN NaN NaN NaN null ]` when `idx` is out of range.
-fn tuple_at_index(gts: &GeoTimeSerie, idx: Option<usize>) -> Value {
+pub(super) fn tuple_at_index(gts: &GeoTimeSerie, idx: Option<usize>) -> Value {
     let Some(idx) = idx else {
         return Value::list(vec![
             Value::Double(f64::NAN),
