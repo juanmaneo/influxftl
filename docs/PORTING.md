@@ -198,3 +198,34 @@ The project is Apache-2.0 and must stay redistributable under it (see `README.md
    exception messages or CLDR symbols in tests and code is fine.
 5. New crates must pass `cargo deny` (`deny.toml` allow-list); do not add exceptions for
    copyleft licenses.
+
+## 9. Status and next steps
+
+1575 / 2094 functions are ported (`docs/FUNCTIONS.md`). The Geo Time Series model, the
+`GTSHelper` transforms (time, datapoints, statistics) and `BUCKETIZE` with the elementary
+aggregators are in. The remaining work, in the order that unlocks the most:
+
+1. **The other aggregators** (`io.warp10.script.aggregator`): `Median`, `MAD`, `Join`,
+   `Percentile`, `CircularMean`, `RMS`, `Variance` / `StandardDeviation` (and their
+   `.welford` forms), then the mapper-only ones (`Delta`, `Rate`, `Argminmax`, `Highest`,
+   `Lowest`, `HDist`, `VDist`, `HSpeed`, `VSpeed`, `TrueCourse`, `ShannonEntropy`,
+   `CompareTo`, `ResetCounter`) and the `io.warp10.script.mapper` package (84 mappers:
+   `mapper.add`, `mapper.mul`, `mapper.abs`, `mapper.tick`, `mapper.year`, `mapper.geo.*`…).
+   Builders with parameters (`50 bucketizer.percentile`) are stack functions pushing a
+   configured object whose `snapshot()` reproduces Java's `toString()`
+   (`50.0 'type1' bucketizer.percentile `).
+2. **`MAP`** (`GTSHelper.map`: pre/post windows, occurrences, step, overrideTick, the
+   `MACROMAPPER` protocol and multi-output maps), then **`REDUCE`** (`GTSHelper.reduce`:
+   partitioning by labels, `null` filling across series, `reducer.*`), **`APPLY`** with the
+   `op.*` N-ary operators and the `==` / `+` / `*`… operators on series (§18 of
+   `DIVERGENCES.md`), **`FILTER`** with `filter.*`, and the fillers (`FILL`, `FILLPREVIOUS`,
+   `FILLNEXT`, `FILLVALUE`, `FILLTICKS`, `INTERPOLATE`).
+3. **`DEDUP` with a mapper**, `UNBUCKETIZE`, `LTTB` / `TLTTB`, the exponential smoothings,
+   `PROB` / `CPROB`, `PATTERNS` / `DISCORDS`, `DTW`, `STL`, `LOWESS`.
+4. **GTS encoders** (`GTSEncoder` / `GTSDecoder`, Thrift compact + gzip wrappers): `WRAP` /
+   `UNWRAP` and the `ENCODER` type; then the sorted `MERGE`, `->ENCODER`, `OPTIMIZE`.
+5. **BigDecimal** (`BD*`, `MUSIGMA`, `NSUMSUMSQ`, `LR`): either a spec-derived decimal
+   implementation or a vetted crate (`cargo deny` compatible).
+6. **Geo** (`GeoXPLib` shapes, `HAVERSINE`, `LOCATIONOFFSET`, `GEO.*`), **datastore**
+   (`FETCH` / `FIND` / `UPDATE` / `META` / `DELETE` on InfluxDB 3), PKI crypto, Processing,
+   matrices.
