@@ -554,3 +554,10 @@ unstable, order), `GeoTimeSerie.toString` and `dump` (`TOSTRING`), and the JSON 
   series without datapoint, `class java.lang.String cannot be cast to class java.lang.Number`
   for `INTEGRATE` on a `STRING` series); a Warp 10 running on JDK 8 prints `-1`, `0` and
   `java.lang.String cannot be cast to java.lang.Number`.
+- **`MODE` compares values by value.** Warp 10 compares the boxed `Object`s by reference
+  (`lastValue != value`), so it only groups `LONG`s in the `Integer` cache (-128 to 127),
+  `BOOLEAN`s and `STRING`s that happen to be the same instance; every other value counts as
+  its own mode (a `DOUBLE` series reports all its values). The port groups equal values.
+- **`MUSIGMA`, `NSUMSUMSQ` and `LR`** compute with `BigDecimal` in Warp 10 and are not ported
+  yet (they will come with the `BD*` functions). `STANDARDIZE`, `ZSCORE`, `SKEWNESS` and
+  `KURTOSIS` use the plain double arithmetic of their Java counterparts.
