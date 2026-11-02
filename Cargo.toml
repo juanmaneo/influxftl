@@ -38,9 +38,12 @@ gost94 = "0.11"
 keccak = "0.2"
 # AES block cipher for the RFC 3394 key wrap of `AESWRAP` / `AESUNWRAP`.
 aes = "0.9"
-# BLAKE2b for Argon2 (`ARGON2`).
 # `GZIP` / `UNGZIP` / `DEFLATE` / `INFLATE` (pure Rust `miniz_oxide` backend).
 flate2 = { version = "1", default-features = false, features = ["rust_backend"] }
+# Calendar computations and the IANA time zone database (Joda-Time in Warp 10) for
+# `ISO8601`, `TSELEMENTS`, `ADDDAYS`…
+chrono = { version = "0.4", default-features = false, features = ["std"] }
+chrono-tz = "0.10"
 
 [workspace.lints.rust]
 unsafe_code = "forbid"

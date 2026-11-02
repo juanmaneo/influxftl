@@ -17,10 +17,12 @@ pub mod misc;
 pub mod numerical;
 pub mod operators;
 pub mod pack;
+pub mod quaternions;
 pub mod runtime;
 pub mod stack_ops;
 pub mod strings;
 pub mod symbols;
+pub mod time;
 
 use std::collections::HashMap;
 use std::rc::Rc;
@@ -61,6 +63,8 @@ const TABLES: &[&[(&str, Entry)]] = &[
     limits::FUNCTIONS,
     runtime::FUNCTIONS,
     runtime::SNAPSHOT_FUNCTIONS,
+    time::FUNCTIONS,
+    quaternions::FUNCTIONS,
 ];
 
 static REGISTRY: OnceLock<HashMap<&'static str, &'static Entry>> = OnceLock::new();
@@ -167,6 +171,8 @@ mod operators_tests;
 #[cfg(test)]
 mod pack_tests;
 #[cfg(test)]
+mod quaternions_tests;
+#[cfg(test)]
 mod runtime_tests;
 #[cfg(test)]
 mod stack_ops_tests;
@@ -174,3 +180,5 @@ mod stack_ops_tests;
 mod strings_tests;
 #[cfg(test)]
 mod symbols_tests;
+#[cfg(test)]
+mod time_tests;

@@ -382,3 +382,30 @@ these differences:
 - **`GUARD`** failures are `WarpScriptATCException`s wrapped as `Line #n (Exception in GUARDed
   macro.)` at the top level; the exception class is reported by `ERROR` as
   `class io.warp10.script.WarpScriptATCException`.
+
+## 14. Dates, times and durations
+
+`ISO8601`, `TSELEMENTS` / `->TSELEMENTS`, `TSELEMENTS->`, `ADDDAYS`, `ADDMONTHS`,
+`ADDYEARS`, `ADDDURATION`, `DURATION`, `ISODURATION`, `HUMANDURATION`, `TOTIMESTAMP`,
+`NOTBEFORE` and `NOTAFTER` are implemented on `chrono` and the IANA database embedded by
+`chrono-tz`, and verified against Joda-Time 2.13.1 and `java.time` for instants from year 0
+to 10000, fixed offsets, historical LMT offsets (`+00:09:21`) and every daylight saving case
+(gap, overlap, forward and backward arithmetic, east and west of Greenwich). The differences:
+
+- **Range of years.** Joda-Time handles years up to ±292 million and `java.time` up to
+  ±999 999 999; `chrono` stops at ±262 143. Instants beyond that raise `The instant N is out
+  of range.`, dates `Value N for year must be in the range [-262143,262142]`, and
+  `TOTIMESTAMP` reports `Invalid value for Year (valid values -262143 - 262142): N`.
+- **Time zone database.** The zone identifiers, offsets and transition rules come from the
+  IANA database compiled into `chrono-tz` rather than from the JDK / Joda `tzdata` of the
+  Warp 10 host; recent rule changes may differ between the two.
+- **Arithmetic overflow** (`ADDDAYS` with billions of days, `ADDDURATION` with huge periods)
+  raises `The calculation caused an overflow.`, where Joda would raise an `ArithmeticException`
+  with a similar text or wrap silently.
+- **`TOTIMESTAMP` error details.** The cause texts follow `java.time`'s
+  `DateTimeParseException` wording (`Text '…' could not be parsed at index N`, `Invalid value
+  for HourOfDay (valid values 0 - 23): 25`, `Invalid date 'FEBRUARY 30'`…) but a few rare
+  cases (an out-of-range year, a zone id that is not followed by `]`) are worded differently.
+- **Non-numeric tselements** raise `class java.lang.String cannot be cast to class
+  java.lang.Number`, the first part of the JVM's `ClassCastException` message (the JVM adds the
+  class loader details).
