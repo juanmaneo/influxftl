@@ -201,7 +201,7 @@ The project is Apache-2.0 and must stay redistributable under it (see `README.md
 
 ## 9. Status and next steps
 
-1722 / 2193 functions are ported (`docs/FUNCTIONS.md`; the inventory includes the names
+1728 / 2193 functions are ported (`docs/FUNCTIONS.md`; the inventory includes the names
 Warp 10 registers through `Builder`s and constants). The Geo Time Series model, the
 `GTSHelper` transforms (time, datapoints, statistics), `BUCKETIZE` and `MAP` with the
 shared aggregators (`sum`, `mean`, `min`, `max`, `first`, `last`, `count`, `and`, `or`,
@@ -228,9 +228,10 @@ wrapping `WarpScriptException`s (`MAP was given invalid parameters. (…)`) let 
 like Java and `ERROR` reports their class (§19 of `DIVERGENCES.md`). The remaining work, in
 the order that unlocks the most:
 
-1. **The remaining aggregators**: `reducer.argmin` / `argmax`, `reducer.shannonentropy.*`,
-   `STRICTMAPPER` / `STRICTREDUCER`, and `mapper.geo.within` / `outside` / `fence` /
-   `approximate` (they need the `GeoXPShape` cells of the `GEO.*` functions).
+1. **The remaining aggregators**: `mapper.geo.within` / `outside` / `fence` /
+   `approximate` (they need the `GeoXPShape` cells of the `GEO.*` functions). The strict
+   wrappers, `reducer.argmin` / `argmax` and `reducer.shannonentropy.*` are in
+   (`aggregators/strict.rs`, `aggregators/reducers.rs`).
    Builders with parameters (`50 bucketizer.percentile`) are `Entry::Builder` stack functions
    (they receive their registered name) pushing a configured object whose `parameters()`
    make `snapshot()` reproduce Java's `toString()` (`50.0 'type1' bucketizer.percentile `);

@@ -33,12 +33,18 @@ mod pattern_tests;
 pub mod product;
 #[cfg(test)]
 mod product_tests;
+pub mod reducers;
+#[cfg(test)]
+mod reducers_tests;
 pub mod single;
 #[cfg(test)]
 mod single_tests;
 pub mod stats;
 #[cfg(test)]
 mod stats_tests;
+pub mod strict;
+#[cfg(test)]
+mod strict_tests;
 #[cfg(test)]
 mod tests;
 
@@ -168,6 +174,13 @@ pub trait Aggregator {
     fn wrapped_macro(&self) -> Option<&Rc<crate::macros::Macro>> {
         None
     }
+
+    /// The aggregator a `STRICTMAPPER` / `STRICTREDUCER` wrapper hands `args` to when its
+    /// condition holds, so that the frameworks reach a wrapped macro; `None` to apply this
+    /// aggregator itself.
+    fn delegate(&self, _args: &AggregatorArgs) -> Option<&dyn Aggregator> {
+        None
+    }
 }
 
 /// A registered aggregator: the name it was registered under and its implementation.
@@ -266,6 +279,15 @@ impl Num {
             Value::Long(l) => Some(Num::Long(*l)),
             Value::Double(d) => Some(Num::Double(*d)),
             _ => None,
+        }
+    }
+
+    /// The value as a `i64` (`Number.longValue()`: a `DOUBLE` truncated, saturating, `NaN`
+    /// giving 0).
+    pub(crate) fn long_value(self) -> i64 {
+        match self {
+            Num::Long(l) => l,
+            Num::Double(d) => crate::value::double_to_long(d),
         }
     }
 

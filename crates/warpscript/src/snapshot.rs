@@ -70,7 +70,7 @@ fn macro_snapshot_at(m: &Macro, hide_secure: bool, depth: usize) -> String {
                     }
                 }
                 Statement::Call(callable) => {
-                    out.push_str(callable.name());
+                    out.push_str(&callable.snapshot());
                     out.push(' ');
                 }
             }

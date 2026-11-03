@@ -426,6 +426,10 @@ pub(super) fn aggregate(
     aggregator: &dyn Aggregator,
     args: &AggregatorArgs,
 ) -> Result<Mapped> {
+    let mut aggregator = aggregator;
+    while let Some(inner) = aggregator.delegate(args) {
+        aggregator = inner;
+    }
     let Some(wrapped) = aggregator.wrapped_macro().cloned() else {
         let aggregated = aggregator.apply(args)?;
         return Ok(Mapped::Single(MappedDatapoint {

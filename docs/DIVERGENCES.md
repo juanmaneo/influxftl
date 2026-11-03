@@ -723,5 +723,13 @@ as in Warp 10 and snapshot as that builder call. The differences:
   MACROMAPPER %> EVAL`. A map result under `BUCKETIZE` raises the `ClassCastException` of
   Java's cast to `Object[]`. `BUCKETIZE` works on a copy of the sorted series so that a
   macro reaching the series cannot interfere with the bucketization.
+- **`STRICTMAPPER` / `STRICTREDUCER`, `reducer.argmin` / `argmax` and
+  `reducer.shannonentropy.*`** follow Warp 10, snapshots included (the macro form of
+  `STRICTMAPPER` is a macro holding the run-time function, `<% <% <% … %> 1 2 STRICTMAPPER
+  %> EVAL EVAL %>`). A strict wrapper around a `MACROMAPPER` / `MACROREDUCER` runs the macro
+  on the framework's stack. `argmin` / `argmax` under `BUCKETIZE` raise the
+  `ArrayIndexOutOfBoundsException` of the single label map Java hands bucketizers
+  (`Index 1 out of bounds for length 1`), and the entropy of no value is `-0.0` (`0 /
+  log(0)`).
 - **`APPLY`, `FILTER`** and the fillers are not ported yet; names that are not listed in
   `docs/FUNCTIONS.md` are unknown functions.

@@ -20,6 +20,19 @@ pub type StackFn = fn(&mut Stack) -> Result<()>;
 /// builders of parameterized function objects, `bucketizer.var`, `mapper.percentile`…).
 pub type BuilderFn = fn(&mut Stack, &'static str) -> Result<()>;
 
+/// A stack function object built at run time and compiled into a macro (the function
+/// `STRICTMAPPER` wraps a macro mapper with), invoked when the macro runs.
+pub trait StackObject: fmt::Debug {
+    /// The name reported in error messages (`Exception at '<name>'`).
+    fn name(&self) -> &str;
+
+    /// The WarpScript source of the statement in a macro snapshot.
+    fn snapshot(&self) -> String;
+
+    /// Invoke the function on `stack`.
+    fn apply(&self, stack: &mut Stack) -> Result<()>;
+}
+
 /// Something that can be invoked as a stack function.
 #[derive(Clone, Debug)]
 pub enum Callable {
@@ -50,6 +63,8 @@ pub enum Callable {
         /// The undefined name.
         name: Rc<str>,
     },
+    /// A stack function object built at run time.
+    Object(Rc<dyn StackObject>),
 }
 
 impl Callable {
@@ -58,6 +73,16 @@ impl Callable {
         match self {
             Callable::Native { name, .. } | Callable::Builder { name, .. } => name,
             Callable::Defined { name, .. } | Callable::Undefined { name } => name,
+            Callable::Object(object) => object.name(),
+        }
+    }
+
+    /// The WarpScript source of a call to this callable in a macro snapshot: its name, or the
+    /// source of a run-time function object.
+    pub fn snapshot(&self) -> String {
+        match self {
+            Callable::Object(object) => object.snapshot(),
+            other => other.name().to_owned(),
         }
     }
 
@@ -68,6 +93,7 @@ impl Callable {
             Callable::Builder { name, func } => func(stack, name),
             Callable::Defined { body, .. } => stack.exec_macro(body),
             Callable::Undefined { name } => Err(Error::new(format!("{name} is undefined."))),
+            Callable::Object(object) => object.apply(stack),
         }
     }
 }
