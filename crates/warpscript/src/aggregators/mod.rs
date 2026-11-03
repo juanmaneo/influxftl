@@ -24,6 +24,9 @@ pub mod macro_wrapper;
 pub mod motion;
 #[cfg(test)]
 mod motion_tests;
+pub mod ops;
+#[cfg(test)]
+mod ops_tests;
 pub mod order;
 #[cfg(test)]
 mod order_tests;
@@ -145,6 +148,13 @@ impl Roles {
         reducer: true,
     };
 
+    /// None of the three: the `op.*` operations of `APPLY`.
+    pub const NONE: Roles = Roles {
+        bucketizer: false,
+        mapper: false,
+        reducer: false,
+    };
+
     /// `MAP` only, the role of the classes of the `io.warp10.script.mapper` package.
     pub const MAPPER: Roles = Roles {
         bucketizer: false,
@@ -180,6 +190,13 @@ pub trait Aggregator {
     /// aggregator itself.
     fn delegate(&self, _args: &AggregatorArgs) -> Option<&dyn Aggregator> {
         None
+    }
+
+    /// Whether this is an operation of `APPLY` (`WarpScriptNAryFunction`, the `op.*`
+    /// functions), which receives the index of the parameter collection of each series in
+    /// place of its tick.
+    fn nary(&self) -> bool {
+        false
     }
 }
 

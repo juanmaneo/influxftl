@@ -201,7 +201,7 @@ The project is Apache-2.0 and must stay redistributable under it (see `README.md
 
 ## 9. Status and next steps
 
-1728 / 2193 functions are ported (`docs/FUNCTIONS.md`; the inventory includes the names
+1748 / 2193 functions are ported (`docs/FUNCTIONS.md`; the inventory includes the names
 Warp 10 registers through `Builder`s and constants). The Geo Time Series model, the
 `GTSHelper` transforms (time, datapoints, statistics), `BUCKETIZE` and `MAP` with the
 shared aggregators (`sum`, `mean`, `min`, `max`, `first`, `last`, `count`, `and`, `or`,
@@ -239,8 +239,9 @@ the order that unlocks the most:
    the current tick in the window (`mapper.product`, `mapper.dotproduct`…) get it from
    `Window::tick_index` (`None` under `BUCKETIZE`, where Java would read past the
    arguments array).
-2. **`APPLY`** with the `op.*` N-ary operators and the `==` / `+` / `*`…
-   operators on series (§18 of `DIVERGENCES.md`), **`FILTER`** with `filter.*`, and the
+2. The `==` / `+` / `*`… operators on series (§18 of `DIVERGENCES.md`; `APPLY` / `PAPPLY`
+   and the `op.*` operations are in, `functions/gts_apply.rs`, `aggregators/ops.rs`),
+   **`FILTER`** with `filter.*`, and the
    fillers (`FILL`, `FILLPREVIOUS`, `FILLNEXT`, `FILLVALUE`, `FILLTICKS`, `INTERPOLATE`).
 3. **`DEDUP` with a mapper**, `UNBUCKETIZE`, `LTTB` / `TLTTB`, the exponential smoothings,
    `PROB` / `CPROB`, `PATTERNS` / `DISCORDS`, `DTW`, `STL`, `LOWESS`.

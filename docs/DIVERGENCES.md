@@ -731,5 +731,15 @@ as in Warp 10 and snapshot as that builder call. The differences:
   `ArrayIndexOutOfBoundsException` of the single label map Java hands bucketizers
   (`Index 1 out of bounds for length 1`), and the entropy of no value is `-0.0` (`0 /
   log(0)`).
-- **`APPLY`, `FILTER`** and the fillers are not ported yet; names that are not listed in
+- **`APPLY` / `PAPPLY`** port `GTSHelper.partitionAndApplyUnflattened` and
+  `applyNAryFunction`: only the collections of more than one series are partitioned (each
+  series once; the first collection when there are none), a collection of a single series
+  takes part in every class, the validator macro receives the per-collection lists and the
+  class labels, the result is named after the last series of the class (`op.*` receive the
+  index of the collection of each series in place of its tick), the class order is Java's
+  hash order, and the class and labels ids of the input series are unset afterwards. The
+  `op.*` operations reproduce the Java type rules (`true + 1.5` is `2.5`, a first string
+  makes `op.add` and `op.mul` concatenate, `NaN` never breaks the order of `op.lt` …
+  `op.ge`).
+- **`FILTER`** and the fillers are not ported yet; names that are not listed in
   `docs/FUNCTIONS.md` are unknown functions.

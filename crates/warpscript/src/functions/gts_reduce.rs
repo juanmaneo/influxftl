@@ -33,7 +33,7 @@ pub const FUNCTIONS: &[(&str, Entry)] = &[
 ];
 
 /// A label map.
-type Labels = IndexMap<String, String>;
+pub(super) type Labels = IndexMap<String, String>;
 
 /// `String.hashCode()`.
 fn java_string_hash(s: &str) -> i32 {
@@ -73,7 +73,7 @@ fn table_size_for(n: usize) -> usize {
 /// `GTSHelper.partition`: the equivalence classes of `series` by the values of `bylabels`
 /// (all the labels when `None`), each keyed by the labels its members have in common, in
 /// Java's hash order.
-fn partition(series: &[Gts], bylabels: Option<&[String]>) -> Vec<(Labels, Vec<Gts>)> {
+pub(super) fn partition(series: &[Gts], bylabels: Option<&[String]>) -> Vec<(Labels, Vec<Gts>)> {
     // (class key, common labels, members), in insertion order.
     let mut classes: Vec<(Labels, Labels, Vec<Gts>)> = Vec::new();
     let mut lookup: std::collections::HashMap<Vec<(String, String)>, usize> =
@@ -150,7 +150,7 @@ fn rehash<T>(entries: Vec<(Labels, T)>) -> Vec<(Labels, T)> {
 }
 
 /// A label map as a WarpScript map.
-fn labels_value(labels: &Labels) -> Value {
+pub(super) fn labels_value(labels: &Labels) -> Value {
     Value::map(
         labels
             .iter()
@@ -160,7 +160,7 @@ fn labels_value(labels: &Labels) -> Value {
 }
 
 /// The equivalence classes as a map of label maps to lists of series.
-fn classes_value(classes: Vec<(Labels, Vec<Gts>)>) -> Value {
+pub(super) fn classes_value(classes: Vec<(Labels, Vec<Gts>)>) -> Value {
     Value::map(
         classes
             .into_iter()
