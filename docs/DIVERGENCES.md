@@ -625,8 +625,14 @@ as in Warp 10 and snapshot as that builder call. The differences:
   value). `MAD` sorts copies of the window's locations and elevations where Warp 10 sorts
   the framework's arrays in place, with no observable difference.
 - **The mappers reading the index of the current tick in the window** (`mapper.product`,
-  `mapper.dotproduct`…) will read `Window::tick_index`, which `BUCKETIZE` leaves unset
-  where Java would read past the arguments array (`Index 4 out of bounds for length 4`).
+  `mapper.dotproduct`…) read `Window::tick_index`; an output tick holding no datapoint
+  (index `-1`) raises the `ArrayIndexOutOfBoundsException` Warp 10 raises, with the JDK 11+
+  text (`Index -1 out of bounds for length 1`, Warp 10 on JDK 8: `-1`).
+- **`mapper.product` / `reducer.product`** compute the exact `BigDecimal` product: the
+  wrapping product when all the values are `LONG`s, the correctly rounded product otherwise
+  (`0.1 0.2 0.3` give `0.006`, `1e300 1e300 1e-300` give `1.0000000000000002E300`, a `-0.0`
+  factor gives `0.0`), and the `NumberFormatException` `Infinite or NaN` on a non-finite
+  value.
 - **The single datapoint mappers** (`mapper.abs`, `ceil`, `floor`, `round`, `tanh`,
   `sigmoid`, `finite`, `toboolean`, `tolong`, `todouble`, `tostring`, `lat`, `lon`, `elev`,
   `geo.clear`, `tick`, and the `year`, `month`, `day`, `weekday`, `hour`, `minute`,

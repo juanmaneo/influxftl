@@ -620,38 +620,7 @@ fn parse_hex_double(body: &str) -> Option<f64> {
             e += i64::from(!fractional) * 4;
         }
     }
-    if m == 0 {
-        return Some(0.0);
-    }
-    let leading = m.leading_zeros();
-    let m = m << leading;
-    // The value is `m * 2^e` with the top bit of `m` set: its unbiased exponent is `top`.
-    let top = 63 + e - i64::from(leading);
-    if top > 1023 {
-        return Some(f64::INFINITY);
-    }
-    // The bits of `m` below the 53 kept (fewer for a subnormal) are rounded off.
-    let shift = 11 + (-1022 - top).max(0);
-    if shift > 64 {
-        // Below half the least subnormal.
-        return Some(0.0);
-    }
-    let shift = shift as u32;
-    let wide = u128::from(m);
-    let mut kept = (wide >> shift) as u64;
-    let rest = wide & ((1u128 << shift) - 1);
-    let half = 1u128 << (shift - 1);
-    if rest > half || rest == half && (sticky || kept & 1 == 1) {
-        kept += 1;
-    }
-    // A normal value adds its biased exponent minus one to the mantissa and its implicit
-    // bit, so that a rounding carry moves to the next exponent (up to infinity).
-    let bits = if top >= -1022 {
-        (((top + 1022) as u64) << 52) + kept
-    } else {
-        kept
-    };
-    Some(f64::from_bits(bits))
+    Some(crate::jmath::binary_to_f64(m, e, sticky))
 }
 
 fn tolong(stack: &mut Stack) -> Result<()> {

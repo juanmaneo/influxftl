@@ -99,6 +99,45 @@ pub fn pow(a: f64, b: f64) -> f64 {
     }
 }
 
+/// The `f64` nearest to `m × 2^e` (ties to even), `sticky` telling that `m` is the truncation
+/// of a value with more non-zero bits below: the correct rounding Java applies when it
+/// converts an exact binary value (`Double.parseDouble` of a hexadecimal literal,
+/// `BigDecimal.doubleValue()`). Zero gives `0.0`, overflows give infinity.
+pub fn binary_to_f64(m: u64, e: i64, sticky: bool) -> f64 {
+    if m == 0 {
+        return 0.0;
+    }
+    let leading = m.leading_zeros();
+    let m = m << leading;
+    // The value is `m * 2^e` with the top bit of `m` set: its unbiased exponent is `top`.
+    let top = 63 + e - i64::from(leading);
+    if top > 1023 {
+        return f64::INFINITY;
+    }
+    // The bits of `m` below the 53 kept (fewer for a subnormal) are rounded off.
+    let shift = 11 + (-1022 - top).max(0);
+    if shift > 64 {
+        // Below half the least subnormal.
+        return 0.0;
+    }
+    let shift = shift as u32;
+    let wide = u128::from(m);
+    let mut kept = (wide >> shift) as u64;
+    let rest = wide & ((1u128 << shift) - 1);
+    let half = 1u128 << (shift - 1);
+    if rest > half || rest == half && (sticky || kept & 1 == 1) {
+        kept += 1;
+    }
+    // A normal value adds its biased exponent minus one to the mantissa and its implicit
+    // bit, so that a rounding carry moves to the next exponent (up to infinity).
+    let bits = if top >= -1022 {
+        (((top + 1022) as u64) << 52) + kept
+    } else {
+        kept
+    };
+    f64::from_bits(bits)
+}
+
 /// `Math.getExponent(double)`: the unbiased exponent; `MAX_EXPONENT + 1` for `NaN` and the
 /// infinities, `MIN_EXPONENT - 1` for zero and the subnormals.
 pub fn get_exponent(d: f64) -> i32 {
