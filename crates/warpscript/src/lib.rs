@@ -21,6 +21,9 @@ pub mod bitset;
 pub mod cmath;
 pub mod encoding;
 pub mod error;
+pub mod fillers;
+#[cfg(test)]
+mod fillers_tests;
 pub mod filters;
 #[cfg(test)]
 mod filters_tests;
@@ -28,6 +31,9 @@ pub mod format;
 pub mod functions;
 pub mod geoxp;
 pub mod gts;
+pub mod interpolation;
+#[cfg(test)]
+mod interpolation_tests;
 pub mod jmath;
 pub mod jrandom;
 pub mod macros;

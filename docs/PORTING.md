@@ -201,7 +201,7 @@ The project is Apache-2.0 and must stay redistributable under it (see `README.md
 
 ## 9. Status and next steps
 
-1774 / 2193 functions are ported (`docs/FUNCTIONS.md`; the inventory includes the names
+1792 / 2193 functions are ported (`docs/FUNCTIONS.md`; the inventory includes the names
 Warp 10 registers through `Builder`s and constants). The Geo Time Series model, the
 `GTSHelper` transforms (time, datapoints, statistics), `BUCKETIZE` and `MAP` with the
 shared aggregators (`sum`, `mean`, `min`, `max`, `first`, `last`, `count`, `and`, `or`,
@@ -242,8 +242,11 @@ the order that unlocks the most:
 2. The `==` / `+` / `*`… operators on series (§18 of `DIVERGENCES.md`; `APPLY` / `PAPPLY`
    and the `op.*` operations are in, `functions/gts_apply.rs`, `aggregators/ops.rs`; `FILTER`
    / `PFILTER` with most `filter.*` and `MACROFILTER` too, `filters.rs`), `PARSESELECTOR` /
-   `TOSELECTOR` with `filter.byselector` / `filter.bymetadata`, `filter.latencies`, and the
-   fillers (`FILL`, `FILLPREVIOUS`, `FILLNEXT`, `FILLVALUE`, `FILLTICKS`, `INTERPOLATE`).
+   `TOSELECTOR` with `filter.byselector` / `filter.bymetadata` and `filter.latencies`.
+   `FILL` with every filler, `FILLPREVIOUS`, `FILLNEXT`, `FILLVALUE`, `FILLTICKS` and
+   `INTERPOLATE` are in (`fillers.rs`, `functions/gts_fill.rs`, with the Commons Math
+   interpolators in `interpolation.rs`); their tests are generated from the answers of the
+   Warp 10 oracle to each script by a throw-away script (kept under `target/`).
 3. **`DEDUP` with a mapper**, `UNBUCKETIZE`, `LTTB` / `TLTTB`, the exponential smoothings,
    `PROB` / `CPROB`, `PATTERNS` / `DISCORDS`, `DTW`, `STL`, `LOWESS`.
 4. **GTS encoders** (`GTSEncoder` / `GTSDecoder`, Thrift compact + gzip wrappers): `WRAP` /

@@ -750,5 +750,31 @@ as in Warp 10 and snapshot as that builder call. The differences:
   The snapshot of `filter.bylabels` reproduces Java's missing spaces (`{ 'a' 'b''c' 'd'}`).
   `filter.bymetadata`, `filter.byselector` (they need `PARSESELECTOR`) and
   `filter.latencies` are not ported yet.
-- **The fillers** are not ported yet; names that are not listed in
-  `docs/FUNCTIONS.md` are unknown functions.
+- **`FILL` and the fillers** port `GTSHelper.fill` in its four forms (cross fill and
+  univariate fill, each with a windowed or a single value filler), `FILL.fillerFromMacro`,
+  `MACROFILLER` and the `filler.*` objects, with `FILLVALUE`, `FILLPREVIOUS`, `FILLNEXT`,
+  `FILLTICKS` and `INTERPOLATE`. The Commons Math 3.6.1 interpolators the fillers build on
+  (linear, spline, Akima, divided differences, LOESS) are ported operation for operation
+  (`interpolation.rs`), so the filled values are bit-identical. The Warp 10 quirks are
+  reproduced: `FILL` sorts its input series in place; the univariate fills return a list
+  even for a single series; `FILL.sortDedupTicks` sorts the user's tick list in place and
+  drops the first occurrence of the first duplicated tick too (`[ 0 15 15 20 ]` fills `0`
+  and `20`); the verification of a single value fill walks the series along the ticks
+  (a tick equal to the next tick of the series is filled again, one following an existing
+  tick may be skipped); a macro filler adds its datapoints to the original series, which
+  the bucket and cross fills keep reading until a limit of the stack stops them;
+  `filler.trend` throws the `NullPointerException` of Java whenever a projected window
+  slot lacks a location or an elevation, and stores the projected elevation, rounded, as
+  the location; `filler.interpolate` rounds elevations where `INTERPOLATE` truncates them,
+  and rejects a single located (or elevated) datapoint (`number of points (1)`);
+  `FILLVALUE` skips the bucket following a tick that is not on a bucket; `FILLTICKS` adds
+  the datapoint at existing ticks too; a single value fill whose ticks deduplicate to none
+  falls back to the empty buckets (`/ by zero` on a series that is not bucketized). The
+  differences:
+  - The messages follow JDK 11+: `class java.lang.Long cannot be cast to class
+    java.lang.Double` (JDK 8: `java.lang.Long cannot be cast to java.lang.Double`), and the
+    `NotFiniteNumberException` of LOESS reads `NaN is not a finite number` (JDK 8 renders
+    the `NaN` of `MessageFormat` as U+FFFD) or `∞ is not a finite number`.
+  - A windowed fill of a bucketized series holding a tick on the bucket grid before its
+    first bucket enumerates the grid up to that tick around the whole `long` range, like
+    Java, until memory runs out (Java: `OutOfMemoryError`).
