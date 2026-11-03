@@ -14,6 +14,9 @@ mod join_tests;
 pub mod order;
 #[cfg(test)]
 mod order_tests;
+pub mod single;
+#[cfg(test)]
+mod single_tests;
 pub mod stats;
 #[cfg(test)]
 mod stats_tests;

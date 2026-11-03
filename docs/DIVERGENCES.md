@@ -627,6 +627,29 @@ as in Warp 10 and snapshot as that builder call. The differences:
 - **The mappers reading the index of the current tick in the window** (`mapper.product`,
   `mapper.dotproduct`…) will read `Window::tick_index`, which `BUCKETIZE` leaves unset
   where Java would read past the arguments array (`Index 4 out of bounds for length 4`).
-- **`REDUCE`, `APPLY`, `FILTER`** and the mapper-only aggregators (`delta`, `rate`,
+- **The single datapoint mappers** (`mapper.abs`, `ceil`, `floor`, `round`, `tanh`,
+  `sigmoid`, `finite`, `toboolean`, `tolong`, `todouble`, `tostring`, `lat`, `lon`, `elev`,
+  `geo.clear`, `tick`, and the `year`, `month`, `day`, `weekday`, `hour`, `minute`,
+  `second` builders) reproduce the Java quirks: `mapper.round` of a `LONG` goes through
+  `Math.round(float)` (`123456789` gives `123456792`, `Long.MAX_VALUE` gives
+  `2147483647`); `mapper.abs` keeps `Long.MIN_VALUE`; a `LONG` millisecond offset given to
+  the date-time builders is truncated to an `int` (`9999999999` fails with `Millis out of
+  range: 1410065407`). The differences:
+  - The date-time builders keep the zone identifier as given: Joda resolves the IANA links
+    (`'US/Pacific' mapper.hour` snapshots as `'America%2FLos_Angeles' mapper.hour` in
+    Warp 10, `'US%2FPacific' mapper.hour` here; `EST` and `GMT` likewise stay themselves).
+    The computed fields are identical.
+  - Ticks whose instant lies beyond the years `chrono` represents (±262143, i.e. ticks
+    beyond about ±8.2 × 10¹⁸ microseconds) make the date-time mappers fail with
+    `The instant … is out of range.`; Joda computes them (year `294247` for
+    `Long.MAX_VALUE`).
+  - `mapper.tolong` parses with `Long.valueOf` restricted to ASCII digits; Java also
+    accepts the other Unicode decimal digits (`'٥'` gives 5 in Warp 10, no value here).
+- **`Double.valueOf` is reproduced exactly** wherever Warp 10 uses it (`TODOUBLE`,
+  `mapper.todouble`, string series converted to `DOUBLE`): surrounding control characters
+  and spaces are trimmed, one `f` / `F` / `d` / `D` suffix is accepted, hexadecimal
+  literals (`0x1.8p3`) are parsed and correctly rounded, and the Rust-only forms (`inf`,
+  `nan`, `infinity`) are rejected (`For input string: "nan"`, `empty String`).
+- **`REDUCE`, `APPLY`, `FILTER`** and the other mapper-only aggregators (`delta`, `rate`,
   `mapper.add`…) are not ported yet; names that are not listed in `docs/FUNCTIONS.md` are
   unknown functions.

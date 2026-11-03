@@ -90,6 +90,20 @@ impl Zone {
         )))
     }
 
+    /// `DateTimeZone.getID()`, without the resolution of the IANA links Joda performs
+    /// (`US/Pacific` stays `US/Pacific` where Joda reports `America/Los_Angeles`).
+    pub fn id(self) -> String {
+        match self {
+            Zone::Named(tz) => tz.name().to_owned(),
+            Zone::Fixed(offset) => format_offset(offset.local_minus_utc(), false),
+        }
+    }
+
+    /// The local date-time in this zone at `millis` milliseconds since the epoch.
+    pub fn local_at(self, millis: i64) -> Result<NaiveDateTime> {
+        Ok(to_local(self, utc_from_millis(millis)?).0)
+    }
+
     /// The UTC offset in effect at the UTC instant `utc`, in seconds.
     fn offset_at(self, utc: NaiveDateTime) -> i32 {
         match self {

@@ -5,6 +5,7 @@
 use indexmap::IndexSet;
 
 use crate::functions::call;
+use crate::functions::operators::parse_java_double;
 use crate::stack::Stack;
 use crate::tests::{assert_fails, assert_top, exec, top};
 use crate::value::Value;
@@ -284,10 +285,72 @@ fn numeric_conversions() {
     assert_top("'1.5' TODOUBLE", Value::Double(1.5));
     assert_top("'-2' TODOUBLE", Value::Double(-2.0));
     assert_top("'NaN' TODOUBLE TYPEOF", "DOUBLE");
-    assert_top("'nan' TODOUBLE TYPEOF", "DOUBLE");
     assert_top("'Infinity' TODOUBLE", Value::Double(f64::INFINITY));
     assert_top("'-Infinity' TODOUBLE", Value::Double(f64::NEG_INFINITY));
     assert_fails("'abc' TODOUBLE", "For input string: \"abc\"");
+}
+
+/// `Double.valueOf` as Java parses it (values checked against Warp 10).
+#[test]
+fn java_double_parsing() {
+    for (text, expected) in [
+        (" 5", 5.0),
+        ("+5", 5.0),
+        ("1e3", 1000.0),
+        ("1d", 1.0),
+        (" 1.5f ", 1.5),
+        ("1e3D", 1000.0),
+        ("1.e2", 100.0),
+        (".5f", 0.5),
+        ("5.", 5.0),
+        ("0x1p3", 8.0),
+        ("-0x1p0d", -1.0),
+        ("0X.8P+1F", 1.0),
+        ("0x1.8p-1", 0.75),
+        ("0x0.0p0", 0.0),
+        ("0x1p-1074", 4.9E-324),
+        ("0x1.8p-1023", 1.668_805_393_880_401E-308),
+        ("0x1p-1075", 0.0),
+        ("0x1.0000000000001p-1075", 4.9E-324),
+        ("0x1p-99999999", 0.0),
+        ("0x1.fffffffffffff7p1023", f64::MAX),
+        ("0x1.fffffffffffff8p1023", f64::INFINITY),
+        ("0x1p99999999999", f64::INFINITY),
+        ("0x1.00000000000008p0", 1.0),
+        ("0x1.00000000000018p0", 1.000_000_000_000_000_4),
+        ("0x1.00000000000008000000001p0", 1.000_000_000_000_000_2),
+        ("0x123456789abcdef01p0", 2.098_829_547_942_064_5E19),
+    ] {
+        assert_eq!(parse_java_double(text).unwrap(), expected, "{text}");
+    }
+    assert!(parse_java_double("0x1p-1075").unwrap().is_sign_positive());
+    for text in [
+        "nan",
+        "inf",
+        "infinity",
+        "Infinityd",
+        "NaNd",
+        "+-5",
+        "1.5fd",
+        "1e5.",
+        "e5",
+        "0x",
+        "0xp1",
+        "0x1p",
+        "0x1pa",
+        "0x1gp1",
+        "0x1",
+        "0x1p1x",
+        "0x1p-",
+    ] {
+        assert_eq!(
+            parse_java_double(text).unwrap_err().to_string(),
+            format!("For input string: \"{text}\""),
+        );
+    }
+    assert_fails("' nan ' TODOUBLE", "For input string: \"nan\"");
+    assert_fails("'' TODOUBLE", "empty String");
+    assert_fails("' ' TODOUBLE", "empty String");
     assert_fails(
         "[ ] TODOUBLE",
         "TODOUBLE can only operate on numeric, boolean or string values.",

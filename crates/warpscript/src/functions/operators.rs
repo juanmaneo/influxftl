@@ -545,10 +545,17 @@ fn todouble(stack: &mut Stack) -> Result<()> {
     Ok(())
 }
 
-/// Java `Double.valueOf(String)` for the common cases: trims, accepts `NaN` / `Infinity` and a
-/// leading sign, delegates the magnitude to Rust's `f64` parser.
+/// Java `Double.valueOf(String)` (`FloatingDecimal.readJavaFormatString`): the string is
+/// trimmed of the characters up to `' '`, then holds an optional sign followed by `NaN`,
+/// `Infinity`, a decimal number or a hexadecimal one (`0x1.8p3`), the numbers optionally
+/// followed by one of the type suffixes `f`, `F`, `d`, `D`. The Rust-only forms `inf`, `nan`…
+/// are rejected.
 pub(crate) fn parse_java_double(s: &str) -> Result<f64> {
-    let trimmed = s.trim();
+    let trimmed = s.trim_matches(|c: char| c <= ' ');
+    if trimmed.is_empty() {
+        return Err(Error::new("empty String"));
+    }
+    let error = || Error::new(format!("For input string: \"{trimmed}\""));
     let (sign, rest) = match trimmed.strip_prefix('-') {
         Some(rest) => (-1.0, rest),
         None => (1.0, trimmed.strip_prefix('+').unwrap_or(trimmed)),
@@ -556,11 +563,95 @@ pub(crate) fn parse_java_double(s: &str) -> Result<f64> {
     let magnitude = match rest {
         "NaN" => f64::NAN,
         "Infinity" => f64::INFINITY,
-        other => other
-            .parse::<f64>()
-            .map_err(|_| Error::new(format!("For input string: \"{s}\"")))?,
+        other => {
+            let body = other.strip_suffix(['f', 'F', 'd', 'D']).unwrap_or(other);
+            if let Some(hex) = body.strip_prefix("0x").or_else(|| body.strip_prefix("0X")) {
+                parse_hex_double(hex).ok_or_else(error)?
+            } else if body.starts_with(|c: char| c.is_ascii_digit() || c == '.')
+                && body
+                    .bytes()
+                    .all(|b| b.is_ascii_digit() || matches!(b, b'.' | b'e' | b'E' | b'+' | b'-'))
+            {
+                // Within these characters Rust's grammar is Java's decimal one.
+                body.parse::<f64>().map_err(|_| error())?
+            } else {
+                return Err(error());
+            }
+        }
     };
     Ok(sign * magnitude)
+}
+
+/// The magnitude of a Java hexadecimal floating-point literal after its `0x` prefix:
+/// `HexDigits? (. HexDigits?)? [pP] [+-]? Digits` with at least one hexadecimal digit,
+/// correctly rounded (to nearest, ties to even) to a `f64`.
+fn parse_hex_double(body: &str) -> Option<f64> {
+    // Exponents beyond this magnitude saturate: the result is 0 or infinite either way.
+    const EXPONENT_LIMIT: i64 = 1 << 20;
+    let (mantissa, exponent) = body.split_once(['p', 'P'])?;
+    let (int, frac) = mantissa.split_once('.').unwrap_or((mantissa, ""));
+    let (negative, digits) = match exponent.strip_prefix('-') {
+        Some(digits) => (true, digits),
+        None => (false, exponent.strip_prefix('+').unwrap_or(exponent)),
+    };
+    if int.is_empty() && frac.is_empty() || digits.is_empty() {
+        return None;
+    }
+    let mut e = 0i64;
+    for b in digits.bytes() {
+        let digit = char::from(b).to_digit(10)?;
+        e = (e * 10 + i64::from(digit)).min(EXPONENT_LIMIT);
+    }
+    if negative {
+        e = -e;
+    }
+    // The first 16 significant hexadecimal digits, the others only telling whether the
+    // value lies above the truncated one.
+    let mut m = 0u64;
+    let mut sticky = false;
+    let digits = int.bytes().map(|b| (b, false));
+    for (b, fractional) in digits.chain(frac.bytes().map(|b| (b, true))) {
+        let digit = u64::from(char::from(b).to_digit(16)?);
+        if m >> 60 == 0 {
+            m = m << 4 | digit;
+            e -= i64::from(fractional) * 4;
+        } else {
+            sticky |= digit != 0;
+            e += i64::from(!fractional) * 4;
+        }
+    }
+    if m == 0 {
+        return Some(0.0);
+    }
+    let leading = m.leading_zeros();
+    let m = m << leading;
+    // The value is `m * 2^e` with the top bit of `m` set: its unbiased exponent is `top`.
+    let top = 63 + e - i64::from(leading);
+    if top > 1023 {
+        return Some(f64::INFINITY);
+    }
+    // The bits of `m` below the 53 kept (fewer for a subnormal) are rounded off.
+    let shift = 11 + (-1022 - top).max(0);
+    if shift > 64 {
+        // Below half the least subnormal.
+        return Some(0.0);
+    }
+    let shift = shift as u32;
+    let wide = u128::from(m);
+    let mut kept = (wide >> shift) as u64;
+    let rest = wide & ((1u128 << shift) - 1);
+    let half = 1u128 << (shift - 1);
+    if rest > half || rest == half && (sticky || kept & 1 == 1) {
+        kept += 1;
+    }
+    // A normal value adds its biased exponent minus one to the mantissa and its implicit
+    // bit, so that a rounding carry moves to the next exponent (up to infinity).
+    let bits = if top >= -1022 {
+        (((top + 1022) as u64) << 52) + kept
+    } else {
+        kept
+    };
+    Some(f64::from_bits(bits))
 }
 
 fn tolong(stack: &mut Stack) -> Result<()> {
