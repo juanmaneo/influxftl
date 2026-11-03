@@ -299,13 +299,18 @@ fn urldecode(stack: &mut Stack) -> Result<()> {
     Ok(())
 }
 
+const ILLEGAL_ARGUMENT: &str = "java.lang.IllegalArgumentException";
+
 /// A hexadecimal digit of a `%xx` escape (`HexFormat.fromHexDigit`).
 fn url_hex_digit(c: char) -> Result<u8> {
     c.to_digit(16).map(|d| d as u8).ok_or_else(|| {
-        Error::new(format!(
-            "URLDecoder: Illegal hex characters in escape (%) pattern - not a hexadecimal digit: \"{c}\" = {}",
-            utf16_lead(c)
-        ))
+        Error::runtime(
+            ILLEGAL_ARGUMENT,
+            format!(
+                "URLDecoder: Illegal hex characters in escape (%) pattern - not a hexadecimal digit: \"{c}\" = {}",
+                utf16_lead(c)
+            ),
+        )
     })
 }
 
@@ -332,7 +337,8 @@ pub(crate) fn java_url_decode(input: &str) -> Result<String> {
                             i += 3;
                         }
                         Some(['%', ..]) => {
-                            return Err(Error::new(
+                            return Err(Error::runtime(
+                                ILLEGAL_ARGUMENT,
                                 "URLDecoder: Incomplete trailing escape (%) pattern",
                             ));
                         }

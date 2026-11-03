@@ -3,9 +3,11 @@
 
 //! The filters of `FILTER` (`WarpScriptFilterFunction`): `filter.byclass`, `filter.bylabels`
 //! / `byattr` / `bylabelsattr`, `filter.bysize`, `filter.last.*`, `filter.any.*` /
-//! `filter.all.*` and `MACROFILTER`. A filter receives the labels of an equivalence class and
-//! its series, one list per collection, and returns the series it retains.
+//! `filter.all.*`, `MACROFILTER`, `filter.byselector`, `filter.bymetadata` and
+//! `filter.latencies`. A filter receives the labels of an equivalence class and its series,
+//! one list per collection, and returns the series it retains.
 
+use std::cell::Ref;
 use std::cmp::Ordering;
 use std::rc::Rc;
 
@@ -14,9 +16,10 @@ use indexmap::IndexMap;
 use crate::error::{Error, Result};
 use crate::functions::Entry;
 use crate::functions::functional::java_double_compare;
-use crate::functions::strings::CompiledPattern;
-use crate::gts::{GeoTimeSerie, Gts};
+
+use crate::gts::{GeoTimeSerie, Gts, Metadata, NO_ELEVATION, NO_LOCATION};
 use crate::macros::Macro;
+use crate::selector::{MetadataSelectorMatcher, Selector, build_selector};
 use crate::snapshot::value_snapshot;
 use crate::stack::Stack;
 use crate::value::{FunctionObject, Value};
@@ -111,6 +114,9 @@ pub const FUNCTIONS: &[(&str, Entry)] = &[
         Entry::Builder(|s, n| any_builder(s, n, Comparison::Ne, true)),
     ),
     ("MACROFILTER", Entry::Builder(macrofilter_builder)),
+    ("filter.byselector", Entry::Builder(byselector_builder)),
+    ("filter.bymetadata", Entry::Builder(bymetadata_builder)),
+    ("filter.latencies", Entry::Builder(latencies_builder)),
 ];
 
 /// A filter.
@@ -178,33 +184,6 @@ fn retain(
         }
     }
     Ok(retained)
-}
-
-/// A class, label or attribute selector: `=value` or `value` (exact) or `~regexp`.
-enum Selector {
-    Exact(String),
-    Regex(CompiledPattern),
-}
-
-impl Selector {
-    /// Parse a selector.
-    fn parse(selector: &str) -> Result<Selector> {
-        Ok(if let Some(exact) = selector.strip_prefix('=') {
-            Selector::Exact(exact.to_owned())
-        } else if let Some(regex) = selector.strip_prefix('~') {
-            Selector::Regex(CompiledPattern::compile(regex)?)
-        } else {
-            Selector::Exact(selector.to_owned())
-        })
-    }
-
-    /// Whether `value` matches entirely (`Matcher.matches()`).
-    fn matches(&self, value: &str) -> Result<bool> {
-        Ok(match self {
-            Selector::Exact(exact) => exact == value,
-            Selector::Regex(regex) => !regex.full_match(value)?.is_empty(),
-        })
-    }
 }
 
 /// `FilterByClass`: the series whose class name matches.
@@ -626,5 +605,285 @@ fn macrofilter_builder(stack: &mut Stack, name: &'static str) -> Result<()> {
         )));
     };
     push(stack, name, MacroFilter { name, wrapped });
+    Ok(())
+}
+
+/// `FilterBySelector`: the series whose metadata match a `class{labels}{attributes}` selector.
+struct BySelector {
+    source: String,
+    matcher: MetadataSelectorMatcher,
+}
+
+impl Filter for BySelector {
+    fn filter(
+        &self,
+        _stack: &mut Stack,
+        _labels: &IndexMap<String, String>,
+        series: &[Vec<Gts>],
+    ) -> Result<Vec<Value>> {
+        retain(series, |gts| self.matcher.matches(&gts.metadata))
+    }
+
+    fn snapshot(&self, name: &str) -> String {
+        format!(
+            "{} {name}",
+            value_snapshot(&Value::string(&self.source)).trim_end()
+        )
+    }
+}
+
+/// `FilterBySelector.Builder`: `'selector' filter.byselector`.
+fn byselector_builder(stack: &mut Stack, name: &'static str) -> Result<()> {
+    let Value::String(source) = stack.pop()? else {
+        return Err(Error::new(format!("{name} expects a STRING selector")));
+    };
+    let matcher = MetadataSelectorMatcher::new(&source)?;
+    push(
+        stack,
+        name,
+        BySelector {
+            source: source.to_string(),
+            matcher,
+        },
+    );
+    Ok(())
+}
+
+/// `FilterByMetadata`: the series whose metadata (name, labels, attributes and ids) equal those
+/// of one of the reference series.
+struct ByMetadata {
+    metadatas: Vec<Metadata>,
+}
+
+impl Filter for ByMetadata {
+    fn filter(
+        &self,
+        _stack: &mut Stack,
+        _labels: &IndexMap<String, String>,
+        series: &[Vec<Gts>],
+    ) -> Result<Vec<Value>> {
+        retain(series, |gts| Ok(self.metadatas.contains(&gts.metadata)))
+    }
+
+    /// `[ 'selector' PARSESELECTOR NEWGTS SWAP RELABEL SWAP RENAME … ] name`.
+    fn snapshot(&self, name: &str) -> String {
+        let mut out = String::from("[ ");
+        for metadata in &self.metadatas {
+            out.push_str(value_snapshot(&Value::string(build_selector(metadata))).trim_end());
+            out.push_str(" PARSESELECTOR NEWGTS SWAP RELABEL SWAP RENAME ");
+        }
+        out.push_str("] ");
+        out.push_str(name);
+        out
+    }
+}
+
+/// `FilterByMetadata.Builder`: `[ series ] filter.bymetadata`.
+fn bymetadata_builder(stack: &mut Stack, name: &'static str) -> Result<()> {
+    let invalid = || Error::new(format!("{name} expects a list of GTS on top of the stack."));
+    let Value::List(list) = stack.pop()? else {
+        return Err(invalid());
+    };
+    let mut metadatas: Vec<Metadata> = Vec::new();
+    for element in list.borrow().iter() {
+        let Value::Gts(gts) = element else {
+            return Err(invalid());
+        };
+        let metadata = &gts.borrow().metadata;
+        if !metadatas.contains(metadata) {
+            metadatas.push(metadata.clone());
+        }
+    }
+    push(stack, name, ByMetadata { metadatas });
+    Ok(())
+}
+
+/// `LatencyFilter`: not a filter per se. The values of the series are packet hashes; the
+/// single series of the first collection is the uplink, the series of the others downlinks.
+/// Each uplink packet is matched with the same hashes on the downlinks received between `min`
+/// and `max` time units later, producing the series selected by `options` (latencies,
+/// matches, bitset of the downlinks…) at the ticks of the uplink.
+struct Latencies {
+    min: i64,
+    max: i64,
+    /// The `toString` of each option.
+    options: Vec<String>,
+}
+
+/// The outputs of a [`Latencies`] filter, in the order Warp 10 returns them.
+const LATENCY_OPTIONS: [&str; 8] = [
+    "uplink.latency.min",
+    "uplink.latency.max",
+    "downlink.latency.min",
+    "downlink.latency.max",
+    "downlink.matches",
+    "downlinks.bitset",
+    "downlinks.totalmatches",
+    "downlinks.withmatches",
+];
+
+/// `((Number) value).longValue()` of a packet hash.
+fn hash_of(value: &Value) -> Result<i64> {
+    value
+        .as_i64()
+        .ok_or_else(|| Error::class_cast(value.java_class(), "java.lang.Number"))
+}
+
+/// A `cloneEmpty` of `gts` named after it with `suffix`.
+fn latency_output(gts: &GeoTimeSerie, suffix: &str) -> GeoTimeSerie {
+    let mut out = gts.clone_empty();
+    out.metadata.name = Some(format!("{}:{suffix}", gts.name().unwrap_or("null")));
+    out
+}
+
+impl Latencies {
+    fn wants(&self, option: &str) -> bool {
+        self.options.iter().any(|o| o == option)
+    }
+}
+
+impl Filter for Latencies {
+    fn filter(
+        &self,
+        _stack: &mut Stack,
+        _labels: &IndexMap<String, String>,
+        series: &[Vec<Gts>],
+    ) -> Result<Vec<Value>> {
+        if series.first().map(Vec::len) != Some(1) {
+            return Ok(Vec::new());
+        }
+        let all: Vec<&Gts> = series.iter().flatten().collect();
+        for gts in &all {
+            gts.borrow_mut().value_sort(false);
+        }
+        let all: Vec<Ref<'_, GeoTimeSerie>> = all.iter().map(|gts| gts.borrow()).collect();
+        let uplink = &*all[0];
+        let downlinks = &all[1..];
+        let or_none = |v: i64, none: i64| if v == none { -1 } else { v };
+        // One output per option: the uplink ones, then one per downlink.
+        let mut uplink_out: Vec<GeoTimeSerie> = LATENCY_OPTIONS
+            .iter()
+            .map(|option| latency_output(uplink, option))
+            .collect();
+        let mut downlink_out: Vec<Vec<GeoTimeSerie>> = (2..5)
+            .map(|k| {
+                downlinks
+                    .iter()
+                    .map(|gts| latency_output(gts, LATENCY_OPTIONS[k]))
+                    .collect()
+            })
+            .collect();
+        let mut indices = vec![0usize; downlinks.len()];
+        for up in 0..uplink.size() {
+            let hash = hash_of(&uplink.value_at(up))?;
+            let tick = uplink.tick_at(up);
+            let (mut min, mut max) = (i64::MAX, i64::MIN);
+            let (mut total, mut with_matches, mut mask) = (0i64, 0i64, 0i64);
+            for (i, gts) in downlinks.iter().enumerate() {
+                let mut start = indices[i];
+                let (mut down_min, mut down_max, mut matches) = (i64::MAX, i64::MIN, 0i64);
+                while indices[i] < gts.size() {
+                    let idx = indices[i];
+                    let down_hash = hash_of(&gts.value_at(idx))?;
+                    let down_tick = gts.tick_at(idx);
+                    // A hash too low, or the same hash received too early, is skipped for good;
+                    // a higher hash or a later reception ends the matches of this packet.
+                    let skip = match down_hash.cmp(&hash) {
+                        Ordering::Less => true,
+                        Ordering::Greater => break,
+                        Ordering::Equal => down_tick < tick.wrapping_add(self.min),
+                    };
+                    if skip {
+                        indices[i] += 1;
+                        start = indices[i];
+                        continue;
+                    }
+                    let latency = down_tick.wrapping_sub(tick);
+                    if latency > self.max {
+                        break;
+                    }
+                    (min, max) = (min.min(latency), max.max(latency));
+                    (down_min, down_max) = (down_min.min(latency), down_max.max(latency));
+                    matches += 1;
+                    total += 1;
+                    if start == indices[i] {
+                        with_matches += 1;
+                        mask |= 1i64.wrapping_shl(i as u32);
+                    }
+                    indices[i] += 1;
+                }
+                let values = [
+                    or_none(down_min, i64::MAX),
+                    or_none(down_max, i64::MIN),
+                    matches,
+                ];
+                for (out, value) in downlink_out.iter_mut().zip(values) {
+                    set(&mut out[i], tick, value);
+                }
+            }
+            let values = [
+                or_none(min, i64::MAX),
+                or_none(max, i64::MIN),
+                mask,
+                total,
+                with_matches,
+            ];
+            for (k, value) in [0, 1, 5, 6, 7].into_iter().zip(values) {
+                set(&mut uplink_out[k], tick, value);
+            }
+        }
+        let mut result = Vec::new();
+        for (k, option) in LATENCY_OPTIONS.iter().enumerate() {
+            if !self.wants(option) {
+                continue;
+            }
+            match k {
+                2..=4 => result.append(&mut downlink_out[k - 2]),
+                _ => result.push(std::mem::take(&mut uplink_out[k])),
+            }
+        }
+        Ok(result
+            .into_iter()
+            .map(|gts| Value::Gts(gts.shared()))
+            .collect())
+    }
+
+    /// `min max [ 'option' … ] name`.
+    fn snapshot(&self, name: &str) -> String {
+        let mut out = format!("{} {} [ ", self.min, self.max);
+        for option in &self.options {
+            out.push_str(value_snapshot(&Value::string(option)).trim_end());
+            out.push(' ');
+        }
+        out.push_str("] ");
+        out.push_str(name);
+        out
+    }
+}
+
+/// `GTSHelper.setValue(gts, tick, value)`.
+fn set(gts: &mut GeoTimeSerie, tick: i64, value: i64) {
+    gts.set_value(tick, NO_LOCATION, NO_ELEVATION, &Value::Long(value), false);
+}
+
+/// `LatencyFilter.Builder`: `min max [ options ] filter.latencies`.
+fn latencies_builder(stack: &mut Stack, name: &'static str) -> Result<()> {
+    let Value::List(options) = stack.pop()? else {
+        return Err(Error::new(format!(
+            "{name} expects a list of options on top of the stack."
+        )));
+    };
+    let Value::Long(max) = stack.pop()? else {
+        return Err(Error::new(format!(
+            "{name} expects a maximum latency under the list of options."
+        )));
+    };
+    let Value::Long(min) = stack.pop()? else {
+        return Err(Error::new(format!(
+            "{name} expects a minimum latency under the list of options."
+        )));
+    };
+    let options = options.borrow().iter().map(ToString::to_string).collect();
+    push(stack, name, Latencies { min, max, options });
     Ok(())
 }

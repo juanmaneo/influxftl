@@ -256,38 +256,12 @@ pub fn snapshot_encode_readable(input: &str) -> String {
     out
 }
 
-/// `WarpURLDecoder.decode`: percent-decoding only (a literal `+` stays a `+`), applied only
-/// when the input contains a `%`. Invalid sequences are errors; invalid UTF-8 is replaced
-/// with U+FFFD like `new String(bytes, UTF_8)`.
+/// `WarpURLDecoder.decode`: `java.net.URLDecoder.decode` applied only when the input contains a
+/// `%`, with the `+`s escaped first so that they stay `+`s. Invalid sequences raise the
+/// `IllegalArgumentException` of `URLDecoder`.
 pub fn url_decode(input: &str) -> Result<String> {
     if !input.contains('%') {
         return Ok(input.to_owned());
     }
-    let bytes = input.as_bytes();
-    let mut out = Vec::with_capacity(bytes.len());
-    let mut i = 0;
-    while i < bytes.len() {
-        if bytes[i] == b'%' {
-            if i + 2 >= bytes.len() {
-                return Err(Error::new(
-                    "URLDecoder: Incomplete trailing escape (%) pattern",
-                ));
-            }
-            let hi = (bytes[i + 1] as char).to_digit(16);
-            let lo = (bytes[i + 2] as char).to_digit(16);
-            match (hi, lo) {
-                (Some(hi), Some(lo)) => out.push((hi * 16 + lo) as u8),
-                _ => {
-                    return Err(Error::new(format!(
-                        "URLDecoder: Illegal hex characters in escape (%) pattern - Error at index {i} in: \"{input}\""
-                    )));
-                }
-            }
-            i += 3;
-        } else {
-            out.push(bytes[i]);
-            i += 1;
-        }
-    }
-    Ok(String::from_utf8_lossy(&out).into_owned())
+    crate::functions::strings::java_url_decode(&input.replace('+', "%2B"))
 }

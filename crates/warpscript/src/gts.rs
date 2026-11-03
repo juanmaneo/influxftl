@@ -243,7 +243,7 @@ fn string_to_double(s: &str) -> f64 {
 }
 
 /// The metadata of a series (`io.warp10.continuum.store.thrift.data.Metadata`).
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Metadata {
     /// The class name (`null` for a series that was never named).
     pub name: Option<String>,

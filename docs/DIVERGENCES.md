@@ -541,6 +541,14 @@ unstable, order), `GeoTimeSerie.toString` and `dump` (`TOSTRING`), and the JSON 
   difference: the bit conversions of a series build the result directly where Warp 10
   round-trips through a `GTSEncoder` (same datapoints, metadata and order). `BIGDECIMAL`,
   matrix and vector operands are not modelled (§3).
+- **Selectors** (`PARSESELECTOR`, `TOSELECTOR`, `filter.byselector`) behave as with
+  `warp10.absent.label.support` enabled (the oracle configuration): `label=` selects the
+  series without that label. `filter.bymetadata` compares the name, labels, attributes and
+  ids of the metadata like Thrift's `Metadata.equals`, except that an unset map and an empty
+  one are equal; while `FILTER` runs, the series carry the class ids Warp 10 numbers them with
+  (so, as in Warp 10, only the first series of the first list can equal a reference series
+  with a class id of `0`). Its `SNAPSHOT` lists the reference metadata in insertion order
+  where Warp 10 follows the order of a `HashSet`.
 - **`CLONE` and the functions returning a copy** (`TIMESHIFT`, `TIMESCALE`, `CROP`…) reset the
   `renamed` flag like `GeoTimeSerie.clone`; the flag is only read by `UPDATE`.
 - **`VALUESORT` / `RVALUESORT` / `VALUEDEDUP` on a `BOOLEAN` series** whose `false` or

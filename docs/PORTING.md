@@ -201,7 +201,7 @@ The project is Apache-2.0 and must stay redistributable under it (see `README.md
 
 ## 9. Status and next steps
 
-1792 / 2193 functions are ported (`docs/FUNCTIONS.md`; the inventory includes the names
+1797 / 2193 functions are ported (`docs/FUNCTIONS.md`; the inventory includes the names
 Warp 10 registers through `Builder`s and constants). The Geo Time Series model, the
 `GTSHelper` transforms (time, datapoints, statistics), `BUCKETIZE` and `MAP` with the
 shared aggregators (`sum`, `mean`, `min`, `max`, `first`, `last`, `count`, `and`, `or`,
@@ -239,10 +239,10 @@ the order that unlocks the most:
    the current tick in the window (`mapper.product`, `mapper.dotproduct`…) get it from
    `Window::tick_index` (`None` under `BUCKETIZE`, where Java would read past the
    arguments array).
-2. `PARSESELECTOR` / `TOSELECTOR` with `filter.byselector` / `filter.bymetadata` and
-   `filter.latencies`. `APPLY` / `PAPPLY` and the `op.*` operations
-   (`functions/gts_apply.rs`, `aggregators/ops.rs`), `FILTER` / `PFILTER` with most
-   `filter.*` and `MACROFILTER` (`filters.rs`), the operators on series (`+ - * /`, the
+2. Done: `APPLY` / `PAPPLY` and the `op.*` operations (`functions/gts_apply.rs`, `aggregators/ops.rs`), `FILTER` /
+   `PFILTER` with every `filter.*` and `MACROFILTER` (`filters.rs`; the selectors of
+   `PARSESELECTOR`, `TOSELECTOR` and `filter.byselector` are in `selector.rs`,
+   `functions/selectors.rs`), the operators on series (`+ - * /`, the
    comparisons, `&& || !`, the bitwise and bit conversion operators and the numerical
    functions, `functions/gts_operators.rs`) and `FILL` with every filler, `FILLPREVIOUS`,
    `FILLNEXT`, `FILLVALUE`, `FILLTICKS` and `INTERPOLATE` are in (`fillers.rs`,

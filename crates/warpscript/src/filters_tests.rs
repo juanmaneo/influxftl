@@ -269,3 +269,24 @@ fn builders_and_errors() {
     assert_top("[ [] [] 'a' filter.byclass ] PFILTER ->JSON", "{}");
     assert!(crate::filters::filter_of(&crate::value::Value::Long(1)).is_none());
 }
+
+#[test]
+fn byselector_regex_failures() {
+    // The backtracking limit of the regular expression engine, in the class, label and
+    // attribute patterns of `filter.byselector` (Warp 10 would run for an unbounded time).
+    let catastrophic = "(a|a)*\\1b";
+    let long = "a".repeat(46);
+    let series = format!(
+        "NEWGTS '{long}' RENAME {{ 'l' '{long}' }} RELABEL {{ 'a' '{long}' }} SETATTRIBUTES"
+    );
+    for selector in [
+        format!("~{catastrophic}{{}}"),
+        format!("~.*{{l~{catastrophic}}}{{}}"),
+        format!("~.*{{}}{{a~{catastrophic}}}"),
+    ] {
+        assert_fails(
+            &format!("[ [ {series} ] [] '{selector}' filter.byselector ] FILTER"),
+            "Max limit for backtracking count exceeded",
+        );
+    }
+}

@@ -113,11 +113,15 @@ fn filter(stack: &mut Stack, name: &str, flatten: bool) -> Result<()> {
     };
     let collections = series_collections(&params[..size - 2], not_series)?;
     let classes = partition_collections(&collections, bylabels.as_deref());
-    let mut results = Vec::with_capacity(classes.len());
-    for (labels, subseries) in classes {
-        let retained = function.filter(stack, &labels, &subseries)?;
-        results.push((labels, retained));
-    }
+    let results: Result<Vec<_>> = classes
+        .into_iter()
+        .map(|(labels, subseries)| {
+            let retained = function.filter(stack, &labels, &subseries)?;
+            Ok((labels, retained))
+        })
+        .collect();
+    unset_ids(&collections);
+    let results = results?;
     if flatten {
         stack.push(Value::list(
             results
@@ -321,10 +325,33 @@ fn apply(stack: &mut Stack, name: &str, flatten: bool) -> Result<()> {
         validator,
     } = parse(&params, opidx, name)?;
     let classes = partition_collections(&collections, bylabels.as_deref());
+    let results = apply_classes(stack, op, validator.as_ref(), classes);
+    unset_ids(&collections);
+    let results = results?;
+    if flatten {
+        stack.push(Value::list(
+            results
+                .into_iter()
+                .flat_map(|(_, results)| results.into_iter().map(Value::Gts))
+                .collect(),
+        ));
+    } else {
+        stack.push(classes_value(results));
+    }
+    Ok(())
+}
+
+/// The results of `op` on each class (when the validator, if any, accepts it).
+fn apply_classes(
+    stack: &mut Stack,
+    op: &dyn Aggregator,
+    validator: Option<&Rc<Macro>>,
+    classes: Vec<(Labels, Vec<Vec<Gts>>)>,
+) -> Result<Vec<(Labels, Vec<Gts>)>> {
     let mut results = Vec::with_capacity(classes.len());
     for (labels, subseries) in classes {
         let mut proceed = true;
-        if let Some(validator) = &validator {
+        if let Some(validator) = validator {
             stack.push(Value::list(
                 subseries
                     .iter()
@@ -341,24 +368,26 @@ fn apply(stack: &mut Stack, name: &str, flatten: bool) -> Result<()> {
         }
         results.push((labels, result));
     }
-    if flatten {
-        stack.push(Value::list(
-            results
-                .into_iter()
-                .flat_map(|(_, results)| results.into_iter().map(Value::Gts))
-                .collect(),
-        ));
-    } else {
-        stack.push(classes_value(results));
+    Ok(results)
+}
+
+/// Unset the ids [`partition_collections`] numbered the series with (`unsetClassId`,
+/// `unsetLabelsId` in the `finally` block of Warp 10).
+fn unset_ids(collections: &[Vec<Gts>]) {
+    for gts in collections.iter().flatten() {
+        let mut gts = gts.borrow_mut();
+        gts.metadata.class_id = 0;
+        gts.metadata.labels_id = 0;
     }
-    Ok(())
 }
 
 /// `GTSHelper.partitionAndApplyUnflattened`: the classes of the series of `collections`
 /// (only the collections of more than one series are partitioned, each series once; the
 /// first collection when there are none), each with its series of every collection (all of
-/// a collection of a single series). The class and labels ids of the series, which Java uses
-/// to find them, are unset.
+/// a collection of a single series). While the classes are processed, Java numbers the series
+/// through their class id (and zeroes their labels id) to find them by binary search, which
+/// `filter.bymetadata` can observe: the ids are set the same way here, and [`unset_ids`]
+/// unsets them afterwards.
 pub(super) fn partition_collections(
     collections: &[Vec<Gts>],
     bylabels: Option<&[String]>,
@@ -374,10 +403,9 @@ pub(super) fn partition_collections(
     if all.is_empty() {
         all.clone_from(&collections[0]);
     }
-    // Java uses the class and labels ids to find the series; they are unset afterwards.
-    for gts in collections.iter().flatten() {
+    for (idx, gts) in (0i64..).zip(collections.iter().flatten()) {
         let mut gts = gts.borrow_mut();
-        gts.metadata.class_id = 0;
+        gts.metadata.class_id = idx;
         gts.metadata.labels_id = 0;
     }
     partition(&all, bylabels)

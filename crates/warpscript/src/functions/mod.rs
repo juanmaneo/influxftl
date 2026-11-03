@@ -32,6 +32,7 @@ pub mod operators;
 pub mod pack;
 pub mod quaternions;
 pub mod runtime;
+pub mod selectors;
 pub mod stack_ops;
 pub mod stringformat;
 pub mod strings;
@@ -95,6 +96,7 @@ const TABLES: &[&[(&str, Entry)]] = &[
     gts_reduce::FUNCTIONS,
     gts_apply::FUNCTIONS,
     gts_fill::FUNCTIONS,
+    selectors::FUNCTIONS,
     crate::aggregators::basic::FUNCTIONS,
     crate::aggregators::stats::FUNCTIONS,
     crate::aggregators::order::FUNCTIONS,
@@ -264,6 +266,8 @@ mod pack_tests;
 mod quaternions_tests;
 #[cfg(test)]
 mod runtime_tests;
+#[cfg(test)]
+mod selectors_tests;
 #[cfg(test)]
 mod stack_ops_tests;
 #[cfg(test)]
