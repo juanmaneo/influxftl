@@ -20,6 +20,7 @@ mod join_tests;
 pub mod kernel;
 #[cfg(test)]
 mod kernel_tests;
+pub mod macro_wrapper;
 pub mod motion;
 #[cfg(test)]
 mod motion_tests;
@@ -158,6 +159,13 @@ pub trait Aggregator {
     /// (`true` for `true bucketizer.var`), which the snapshot puts before the name like the
     /// Java `toString()`; `None` for the parameterless aggregators (`'name' FUNCREF`).
     fn parameters(&self) -> Option<String> {
+        None
+    }
+
+    /// The macro of a `MACROMAPPER` / `MACROREDUCER` / `MACROBUCKETIZER` wrapper, which the
+    /// frameworks run on their stack (with the arguments as lists) instead of calling
+    /// [`Aggregator::apply`].
+    fn wrapped_macro(&self) -> Option<&Rc<crate::macros::Macro>> {
         None
     }
 }

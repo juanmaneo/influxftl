@@ -201,7 +201,7 @@ The project is Apache-2.0 and must stay redistributable under it (see `README.md
 
 ## 9. Status and next steps
 
-1715 / 2193 functions are ported (`docs/FUNCTIONS.md`; the inventory includes the names
+1722 / 2193 functions are ported (`docs/FUNCTIONS.md`; the inventory includes the names
 Warp 10 registers through `Builder`s and constants). The Geo Time Series model, the
 `GTSHelper` transforms (time, datapoints, statistics), `BUCKETIZE` and `MAP` with the
 shared aggregators (`sum`, `mean`, `min`, `max`, `first`, `last`, `count`, `and`, `or`,
@@ -216,7 +216,10 @@ configured with constants (`mapper.add`, `mul`, `mod`, `min.x`, `max.x`, `pow`, 
 change and motion mappers (`mapper.delta`, `rate`, `highest`, `lowest`, `hdist`, `hspeed`,
 `vdist`, `vspeed`, `truecourse`, `aggregators/motion.rs`), the kernel smoothers
 (`aggregators/kernel.rs`) and `mapper.regexp.match` / `replace` (`aggregators/pattern.rs`).
-`MAP` covers `GTSHelper.map` entirely: pre/post windows in
+`REDUCE` / `PREDUCE` and `PARTITION` / `STRICTPARTITION` (`functions/gts_reduce.rs`, with
+Java's `HashMap` order of the classes) and the `MACROMAPPER` / `MACROREDUCER` /
+`MACROBUCKETIZER` wrappers (`aggregators/macro_wrapper.rs`, run by
+`gts_frameworks::aggregate`) are in too. `MAP` covers `GTSHelper.map` entirely: pre/post windows in
 ticks or in time, occurrences (negative: backwards), output ticks, step, the tick override,
 the `MACROMAPPER` protocol and the multi-output maps. The Java runtime exceptions Warp 10
 lets escape (`ClassCastException`, `InformativeEmptyStackException`,
@@ -225,10 +228,9 @@ wrapping `WarpScriptException`s (`MAP was given invalid parameters. (…)`) let 
 like Java and `ERROR` reports their class (§19 of `DIVERGENCES.md`). The remaining work, in
 the order that unlocks the most:
 
-1. **The remaining aggregators** (`io.warp10.script.aggregator`: `Argminmax`,
-   `ShannonEntropy`, `ResetCounter`) and the `io.warp10.script.mapper` package
-   still to port: `mapper.geo.within` / `outside` / `fence` / `approximate` (they need the
-   `GeoXPShape` cells of the `GEO.*` functions).
+1. **The remaining aggregators**: `reducer.argmin` / `argmax`, `reducer.shannonentropy.*`,
+   `STRICTMAPPER` / `STRICTREDUCER`, and `mapper.geo.within` / `outside` / `fence` /
+   `approximate` (they need the `GeoXPShape` cells of the `GEO.*` functions).
    Builders with parameters (`50 bucketizer.percentile`) are `Entry::Builder` stack functions
    (they receive their registered name) pushing a configured object whose `parameters()`
    make `snapshot()` reproduce Java's `toString()` (`50.0 'type1' bucketizer.percentile `);
@@ -236,8 +238,7 @@ the order that unlocks the most:
    the current tick in the window (`mapper.product`, `mapper.dotproduct`…) get it from
    `Window::tick_index` (`None` under `BUCKETIZE`, where Java would read past the
    arguments array).
-2. **`REDUCE`** (`GTSHelper.reduce`: partitioning by labels, `null` filling across series,
-   `reducer.*`), **`APPLY`** with the `op.*` N-ary operators and the `==` / `+` / `*`…
+2. **`APPLY`** with the `op.*` N-ary operators and the `==` / `+` / `*`…
    operators on series (§18 of `DIVERGENCES.md`), **`FILTER`** with `filter.*`, and the
    fillers (`FILL`, `FILLPREVIOUS`, `FILLNEXT`, `FILLVALUE`, `FILLTICKS`, `INTERPOLATE`).
 3. **`DEDUP` with a mapper**, `UNBUCKETIZE`, `LTTB` / `TLTTB`, the exponential smoothings,

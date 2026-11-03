@@ -704,6 +704,24 @@ as in Warp 10 and snapshot as that builder call. The differences:
   and spaces are trimmed, one `f` / `F` / `d` / `D` suffix is accepted, hexadecimal
   literals (`0x1.8p3`) are parsed and correctly rounded, and the Rust-only forms (`inf`,
   `nan`, `infinity`) are rejected (`For input string: "nan"`, `empty String`).
-- **`REDUCE`, `APPLY`, `FILTER`** and the other mapper-only aggregators (`delta`, `rate`,
-  `mapper.add`…) are not ported yet; names that are not listed in `docs/FUNCTIONS.md` are
-  unknown functions.
+- **`REDUCE` / `PREDUCE` and `PARTITION` / `STRICTPARTITION`** port `GTSHelper.partition`
+  and `GTSHelper.reduceUnflattened`: the classes, their common labels and attributes, the
+  bucketization of the results (same span, congruent last buckets), the `Long.MIN_VALUE`
+  ticks and `null` values of the series without a datapoint at a tick, the extra label map
+  of the class handed to the reducer, repeated ticks reduced once each, the named outputs of
+  macro reducers (sorted like a `TreeMap`), the tick override and the in-place sort of the
+  input series. Unlike the other `HashMap`s of Warp 10, the order of the classes is
+  reproduced: it is computed from the Java hash codes of the label maps and the table sizes
+  Java uses (only buckets of eight colliding keys or more, which Java turns into trees,
+  could be ordered differently). The reducer reads copies of the series, so a macro reducer
+  modifying them does not affect the ticks being reduced; the name of a series that was never
+  named is the empty string in the arguments of a macro reducer (Java: `null`).
+- **`MACROMAPPER`, `MACROREDUCER` and `MACROBUCKETIZER`** wrap a macro into an aggregator of
+  the three roles that receives its arguments as lists (`[ tick [ names ] [ labels ] [ ticks ]
+  [ lats ] [ lons ] [ elevations ] [ values ] ]`, one name and label map for `BUCKETIZE`, one
+  per datapoint for `MAP`, plus the class labels for `REDUCE`) and snapshots as `<% <% … %>
+  MACROMAPPER %> EVAL`. A map result under `BUCKETIZE` raises the `ClassCastException` of
+  Java's cast to `Object[]`. `BUCKETIZE` works on a copy of the sorted series so that a
+  macro reaching the series cannot interfere with the bucketization.
+- **`APPLY`, `FILTER`** and the fillers are not ported yet; names that are not listed in
+  `docs/FUNCTIONS.md` are unknown functions.

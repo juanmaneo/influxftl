@@ -1,8 +1,8 @@
 // Copyright 2026 The influxftl Authors. Licensed under the Apache License, Version 2.0.
 // Derived from Warp 10 (Copyright 2018-2026 SenX S.A.S., Apache-2.0), ported to Rust and modified.
 
-//! The Geo Time Series frameworks: `BUCKETIZE` and `MAP` (`REDUCE`, `APPLY` and `FILTER` to
-//! come).
+//! The Geo Time Series frameworks `BUCKETIZE` and `MAP` (`REDUCE` is in `gts_reduce`;
+//! `APPLY` and `FILTER` to come), and the application of aggregators shared by them.
 
 use std::rc::Rc;
 
@@ -184,7 +184,8 @@ fn bucketize_gts(
         return Ok(bucketized.shared());
     }
     gts.borrow_mut().sort(false);
-    let source = gts.borrow();
+    // A copy, so that no borrow is held while macros (which may reach the series) run.
+    let source = gts.borrow().clone();
     // The index of the most recent datapoint within the buckets.
     let mut i: i64 = if lastbucket >= lasttick {
         n as i64 - 1
@@ -271,13 +272,21 @@ fn bucketize_gts(
                         tick_index: None,
                     }),
                 };
-                let aggregated = aggregator.apply(&args)?;
-                if !aggregated.value.is_null() {
+                // `(Object[]) applyOnSubLists(…)`: a map result cannot be cast.
+                let Mapped::Single(MappedDatapoint { datapoint, .. }) =
+                    aggregate(stack, *aggregator, &args)?
+                else {
+                    return Err(Error::class_cast(
+                        "java.util.LinkedHashMap",
+                        "[Ljava.lang.Object;",
+                    ));
+                };
+                if !datapoint.value.is_null() {
                     bucketized.set_value(
                         bucket_end,
-                        aggregated.location,
-                        aggregated.elevation,
-                        &aggregated.value,
+                        datapoint.location,
+                        datapoint.elevation,
+                        &datapoint.value,
                         false,
                     );
                 }
@@ -302,9 +311,9 @@ struct MapParams {
 
 /// A datapoint produced by a mapper, with whether its tick is the `Integer` zero of a
 /// single-element list result (which the tick override cannot cast to a `long`).
-struct MappedDatapoint {
-    datapoint: Datapoint,
-    integer_tick: bool,
+pub(super) struct MappedDatapoint {
+    pub(super) datapoint: Datapoint,
+    pub(super) integer_tick: bool,
 }
 
 impl MappedDatapoint {
@@ -317,7 +326,7 @@ impl MappedDatapoint {
     }
 
     /// The tick the datapoint is set at: its own when the tick override is on, else `tick`.
-    fn tick(&self, override_tick: bool, tick: i64) -> Result<i64> {
+    pub(super) fn tick(&self, override_tick: bool, tick: i64) -> Result<i64> {
         if !override_tick {
             return Ok(tick);
         }
@@ -330,7 +339,7 @@ impl MappedDatapoint {
 
 /// The result of one application of a mapper: a datapoint for the mapped series, or one per
 /// named output series.
-enum Mapped {
+pub(super) enum Mapped {
     Single(MappedDatapoint),
     Multiple(Vec<(String, MappedDatapoint)>),
 }
@@ -356,6 +365,82 @@ fn macro_result(stack: &mut Stack) -> Result<Mapped> {
             integer_tick: false,
         })),
     }
+}
+
+/// The arguments of an aggregator as the list `MacroMapperWrapper.apply` pushes for its
+/// macro: `[ tick [ names ] [ labels ] [ ticks ] [ lats ] [ lons ] [ elevations ] [ values ] ]`,
+/// a missing location or elevation being `NaN`.
+fn macro_arguments(args: &AggregatorArgs) -> Value {
+    let (lats, lons): (Vec<Value>, Vec<Value>) = args
+        .locations
+        .iter()
+        .map(|&location| {
+            let (lat, lon) = if location == NO_LOCATION {
+                (f64::NAN, f64::NAN)
+            } else {
+                geoxp::from_geoxp_point(location)
+            };
+            (Value::Double(lat), Value::Double(lon))
+        })
+        .unzip();
+    let elevations = args
+        .elevations
+        .iter()
+        .map(|&elevation| {
+            if elevation == NO_ELEVATION {
+                Value::Double(f64::NAN)
+            } else {
+                Value::Long(elevation)
+            }
+        })
+        .collect();
+    let labels = args
+        .labels
+        .iter()
+        .map(|labels| {
+            Value::map(
+                labels
+                    .iter()
+                    .map(|(k, v)| (Value::from(k.as_str()), Value::from(v.as_str())))
+                    .collect(),
+            )
+        })
+        .collect();
+    Value::list(vec![
+        Value::Long(args.tick),
+        Value::list(args.names.iter().map(|n| Value::from(n.as_str())).collect()),
+        Value::list(labels),
+        Value::list(args.ticks.iter().map(|&t| Value::Long(t)).collect()),
+        Value::list(lats),
+        Value::list(lons),
+        Value::list(elevations),
+        Value::list(args.values.to_vec()),
+    ])
+}
+
+/// Apply `aggregator` to `args`. A `MACROMAPPER` wrapper runs its macro on the stack with the
+/// arguments as lists and collects its output like a macro mapper (a list, a map of lists or
+/// five values); the caller must hold no borrow of a series the macro could reach.
+pub(super) fn aggregate(
+    stack: &mut Stack,
+    aggregator: &dyn Aggregator,
+    args: &AggregatorArgs,
+) -> Result<Mapped> {
+    let Some(wrapped) = aggregator.wrapped_macro().cloned() else {
+        let aggregated = aggregator.apply(args)?;
+        return Ok(Mapped::Single(MappedDatapoint {
+            datapoint: Datapoint {
+                tick: aggregated.tick,
+                location: aggregated.location,
+                elevation: aggregated.elevation,
+                value: aggregated.value,
+            },
+            integer_tick: false,
+        }));
+    };
+    stack.push(macro_arguments(args));
+    stack.exec_macro(&wrapped)?;
+    macro_result(stack)
 }
 
 /// The sliding window of `GTSHelper.map` at one output tick: the `[start, stop]` interval.
@@ -587,7 +672,9 @@ fn map_gts(stack: &mut Stack, gts: &Gts, mapper: &Value, params: &MapParams) -> 
                     .elevations
                     .extend((first..end).map(|j| source.elevation_at(j)));
                 let values: Vec<Value> = (first..end).map(|j| source.value_at(j)).collect();
-                let window_ticks = &source.ticks[first..end];
+                let window_ticks = source.ticks[first..end].to_vec();
+                // A macro wrapper may reach the series.
+                drop(source);
                 // The first (last when reversed) index of the current tick in the window,
                 // shifted along the repeated input ticks.
                 let mut tickidx = -1i64;
@@ -605,7 +692,7 @@ fn map_gts(stack: &mut Stack, gts: &Gts, mapper: &Value, params: &MapParams) -> 
                     tick,
                     names: &buffers.names[..n],
                     labels: &buffers.labels[..n],
-                    ticks: window_ticks,
+                    ticks: &window_ticks,
                     locations: &buffers.locations,
                     elevations: &buffers.elevations,
                     values: &values,
@@ -617,16 +704,7 @@ fn map_gts(stack: &mut Stack, gts: &Gts, mapper: &Value, params: &MapParams) -> 
                         tick_index: Some(tickidx),
                     }),
                 };
-                let aggregated = aggregator.apply(&args)?;
-                Mapped::Single(MappedDatapoint {
-                    datapoint: Datapoint {
-                        tick: aggregated.tick,
-                        location: aggregated.location,
-                        elevation: aggregated.elevation,
-                        value: aggregated.value,
-                    },
-                    integer_tick: false,
-                })
+                aggregate(stack, aggregator, &args)?
             }
         };
         match result {

@@ -17,6 +17,7 @@ pub mod functional;
 pub mod gts;
 pub mod gts_frameworks;
 pub mod gts_points;
+pub mod gts_reduce;
 pub mod gts_stats;
 pub mod gts_time;
 pub mod json;
@@ -88,6 +89,7 @@ const TABLES: &[&[(&str, Entry)]] = &[
     gts_points::FUNCTIONS,
     gts_stats::FUNCTIONS,
     gts_frameworks::FUNCTIONS,
+    gts_reduce::FUNCTIONS,
     crate::aggregators::basic::FUNCTIONS,
     crate::aggregators::stats::FUNCTIONS,
     crate::aggregators::order::FUNCTIONS,
@@ -99,6 +101,7 @@ const TABLES: &[&[(&str, Entry)]] = &[
     crate::aggregators::motion::FUNCTIONS,
     crate::aggregators::kernel::FUNCTIONS,
     crate::aggregators::pattern::FUNCTIONS,
+    crate::aggregators::macro_wrapper::FUNCTIONS,
 ];
 
 static REGISTRY: OnceLock<HashMap<&'static str, &'static Entry>> = OnceLock::new();
@@ -219,6 +222,8 @@ mod functional_tests;
 mod gts_frameworks_tests;
 #[cfg(test)]
 mod gts_points_tests;
+#[cfg(test)]
+mod gts_reduce_tests;
 #[cfg(test)]
 mod gts_stats_tests;
 #[cfg(test)]
