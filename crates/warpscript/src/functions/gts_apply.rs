@@ -21,7 +21,125 @@ use crate::value::Value;
 pub const FUNCTIONS: &[(&str, Entry)] = &[
     ("APPLY", Entry::Stack(|s| apply(s, "APPLY", true))),
     ("PAPPLY", Entry::Stack(|s| apply(s, "PAPPLY", false))),
+    ("FILTER", Entry::Stack(|s| filter(s, "FILTER", true))),
+    ("PFILTER", Entry::Stack(|s| filter(s, "PFILTER", false))),
 ];
+
+/// The partitioning labels of `APPLY` / `FILTER`: `NULL`, or a list or set of strings.
+fn label_names(
+    value: &Value,
+    invalid: impl Fn() -> Error,
+    not_string: impl Fn() -> Error,
+) -> Result<Option<Vec<String>>> {
+    let labels = match value {
+        Value::Null => return Ok(None),
+        Value::List(list) => list.borrow().clone(),
+        Value::Set(set) => set.borrow().iter().cloned().collect(),
+        _ => return Err(invalid()),
+    };
+    labels
+        .iter()
+        .map(|label| match label {
+            Value::String(s) => Ok(s.to_string()),
+            _ => Err(not_string()),
+        })
+        .collect::<Result<Vec<String>>>()
+        .map(Some)
+}
+
+/// The collections of series of `params`, lists of series only.
+fn series_collections(params: &[Value], not_series: impl Fn() -> Error) -> Result<Vec<Vec<Gts>>> {
+    let mut lists = Vec::with_capacity(params.len());
+    for param in params {
+        let Value::List(list) = param else {
+            return Err(not_series());
+        };
+        lists.push(list.clone());
+    }
+    let mut collections = Vec::with_capacity(lists.len());
+    for list in lists {
+        let mut series = Vec::new();
+        for item in list.borrow().iter() {
+            let Value::Gts(gts) = item else {
+                return Err(not_series());
+            };
+            series.push(gts.clone());
+        }
+        collections.push(series);
+    }
+    Ok(collections)
+}
+
+/// `FILTER` / `PFILTER`: `[ [ series ]+ labels|NULL filter ] FILTER`: the series of each
+/// class retained by the filter, as a list (`FILTER`) or a map of the class labels to them
+/// (`PFILTER`).
+fn filter(stack: &mut Stack, name: &str, flatten: bool) -> Result<()> {
+    let Value::List(params) = stack.pop()? else {
+        return Err(Error::new(format!("{name} expects a list as input.")));
+    };
+    let params = params.borrow().clone();
+    let size = params.len();
+    if size < 3 {
+        return Err(Error::new(format!("{name} expects at least 3 parameters.")));
+    }
+    let not_series = || {
+        Error::new(format!(
+            "{name} expects lists of Geo Time Series as first parameters."
+        ))
+    };
+    if params[..size - 2]
+        .iter()
+        .any(|p| !matches!(p, Value::List(_)))
+    {
+        return Err(not_series());
+    }
+    let bylabels = label_names(
+        &params[size - 2],
+        || {
+            Error::new(format!(
+                "{name} expects a list of label names or null as penultimate parameter."
+            ))
+        },
+        || {
+            Error::new(format!(
+                "{name} expects a list of label names as penultimate parameter."
+            ))
+        },
+    )?;
+    let Some(function) = crate::filters::filter_of(&params[size - 1]) else {
+        return Err(Error::new(format!(
+            "{name} expects a filter function as last parameter."
+        )));
+    };
+    let collections = series_collections(&params[..size - 2], not_series)?;
+    let classes = partition_collections(&collections, bylabels.as_deref());
+    let mut results = Vec::with_capacity(classes.len());
+    for (labels, subseries) in classes {
+        let retained = function.filter(stack, &labels, &subseries)?;
+        results.push((labels, retained));
+    }
+    if flatten {
+        stack.push(Value::list(
+            results
+                .into_iter()
+                .flat_map(|(_, retained)| retained)
+                .collect(),
+        ));
+    } else {
+        stack.push(Value::map(
+            results
+                .into_iter()
+                .map(|(labels, retained)| {
+                    (
+                        super::gts_reduce::labels_value(&labels),
+                        Value::list(retained),
+                    )
+                })
+                .collect(),
+        ));
+    }
+    Ok(())
+}
 
 /// The bucketization of the result of `applyNAryFunction` (`lastbucket`, `bucketcount`,
 /// `bucketspan`, all zero when not bucketized): the bucketized series (the others before the
@@ -157,48 +275,16 @@ fn parse(params: &[Value], opidx: usize, name: &str) -> Result<Params> {
         .checked_sub(1)
         .filter(|&i| i >= 1)
         .ok_or_else(labels_error)?;
-    let bylabels = match &params[labelsidx] {
-        Value::Null => None,
-        Value::List(list) => Some(list.borrow().clone()),
-        Value::Set(set) => Some(set.borrow().iter().cloned().collect()),
-        _ => return Err(labels_error()),
-    };
-    let bylabels = bylabels
-        .map(|labels| {
-            labels
-                .iter()
-                .map(|label| match label {
-                    Value::String(s) => Ok(s.to_string()),
-                    _ => Err(Error::new(format!(
-                        "{name} expects a list of label names as penultimate parameter."
-                    ))),
-                })
-                .collect::<Result<Vec<String>>>()
-        })
-        .transpose()?;
-    let not_series = || {
+    let bylabels = label_names(&params[labelsidx], labels_error, || {
+        Error::new(format!(
+            "{name} expects a list of label names as penultimate parameter."
+        ))
+    })?;
+    let collections = series_collections(&params[..labelsidx], || {
         Error::new(format!(
             "{name} expects lists of Geo Time Series as first parameters."
         ))
-    };
-    let mut lists = Vec::with_capacity(labelsidx);
-    for param in &params[..labelsidx] {
-        let Value::List(list) = param else {
-            return Err(not_series());
-        };
-        lists.push(list.clone());
-    }
-    let mut collections = Vec::with_capacity(labelsidx);
-    for list in lists {
-        let mut series = Vec::new();
-        for item in list.borrow().iter() {
-            let Value::Gts(gts) = item else {
-                return Err(not_series());
-            };
-            series.push(gts.clone());
-        }
-        collections.push(series);
-    }
+    })?;
     let validator = match params.get(opidx + 1) {
         Some(Value::Macro(m)) => Some(m.clone()),
         _ => None,
@@ -234,42 +320,9 @@ fn apply(stack: &mut Stack, name: &str, flatten: bool) -> Result<()> {
         bylabels,
         validator,
     } = parse(&params, opidx, name)?;
-    // The series of the collections of more than one series are partitioned (each once);
-    // when there are none, the first collection is.
-    let mut all: Vec<Gts> = Vec::new();
-    for collection in collections.iter().filter(|c| c.len() > 1) {
-        for gts in collection {
-            if !all.iter().any(|g| Rc::ptr_eq(g, gts)) {
-                all.push(gts.clone());
-            }
-        }
-    }
-    if all.is_empty() {
-        all.clone_from(&collections[0]);
-    }
-    // Java uses the class and labels ids to find the series; they are unset afterwards.
-    for gts in collections.iter().flatten() {
-        let mut gts = gts.borrow_mut();
-        gts.metadata.class_id = 0;
-        gts.metadata.labels_id = 0;
-    }
-    let classes = partition(&all, bylabels.as_deref());
+    let classes = partition_collections(&collections, bylabels.as_deref());
     let mut results = Vec::with_capacity(classes.len());
-    for (labels, members) in classes {
-        let subseries: Vec<Vec<Gts>> = collections
-            .iter()
-            .map(|collection| {
-                if collection.len() == 1 {
-                    collection.clone()
-                } else {
-                    members
-                        .iter()
-                        .filter(|gts| collection.iter().any(|g| Rc::ptr_eq(g, gts)))
-                        .cloned()
-                        .collect()
-                }
-            })
-            .collect();
+    for (labels, subseries) in classes {
         let mut proceed = true;
         if let Some(validator) = &validator {
             stack.push(Value::list(
@@ -299,4 +352,52 @@ fn apply(stack: &mut Stack, name: &str, flatten: bool) -> Result<()> {
         stack.push(classes_value(results));
     }
     Ok(())
+}
+
+/// `GTSHelper.partitionAndApplyUnflattened`: the classes of the series of `collections`
+/// (only the collections of more than one series are partitioned, each series once; the
+/// first collection when there are none), each with its series of every collection (all of
+/// a collection of a single series). The class and labels ids of the series, which Java uses
+/// to find them, are unset.
+pub(super) fn partition_collections(
+    collections: &[Vec<Gts>],
+    bylabels: Option<&[String]>,
+) -> Vec<(Labels, Vec<Vec<Gts>>)> {
+    let mut all: Vec<Gts> = Vec::new();
+    for collection in collections.iter().filter(|c| c.len() > 1) {
+        for gts in collection {
+            if !all.iter().any(|g| Rc::ptr_eq(g, gts)) {
+                all.push(gts.clone());
+            }
+        }
+    }
+    if all.is_empty() {
+        all.clone_from(&collections[0]);
+    }
+    // Java uses the class and labels ids to find the series; they are unset afterwards.
+    for gts in collections.iter().flatten() {
+        let mut gts = gts.borrow_mut();
+        gts.metadata.class_id = 0;
+        gts.metadata.labels_id = 0;
+    }
+    partition(&all, bylabels)
+        .into_iter()
+        .map(|(labels, members)| {
+            let subseries = collections
+                .iter()
+                .map(|collection| {
+                    if collection.len() == 1 {
+                        collection.clone()
+                    } else {
+                        members
+                            .iter()
+                            .filter(|gts| collection.iter().any(|g| Rc::ptr_eq(g, gts)))
+                            .cloned()
+                            .collect()
+                    }
+                })
+                .collect();
+            (labels, subseries)
+        })
+        .collect()
 }

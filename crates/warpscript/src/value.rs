@@ -52,6 +52,11 @@ pub trait FunctionObject {
         None
     }
 
+    /// The object as a filter (`WarpScriptFilterFunction`), for `FILTER`.
+    fn as_filter(&self) -> Option<&dyn crate::filters::Filter> {
+        None
+    }
+
     /// The object as an aggregator (`WarpScriptAggregatorFunction`), for the `BUCKETIZE`,
     /// `MAP` and `REDUCE` frameworks.
     fn as_aggregator(&self) -> Option<&dyn crate::aggregators::Aggregator> {

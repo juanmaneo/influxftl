@@ -741,5 +741,14 @@ as in Warp 10 and snapshot as that builder call. The differences:
   `op.*` operations reproduce the Java type rules (`true + 1.5` is `2.5`, a first string
   makes `op.add` and `op.mul` concatenate, `NaN` never breaks the order of `op.lt` …
   `op.ge`).
-- **`FILTER`** and the fillers are not ported yet; names that are not listed in
+- **`FILTER` / `PFILTER`** partition like `APPLY` and hand each class to the filter:
+  `filter.byclass`, `filter.bylabels` / `byattr` / `bylabelsattr`, `filter.bysize`,
+  `filter.last.*`, `filter.any.*` / `filter.all.*` and `MACROFILTER` (whose list result is
+  taken as is). The selectors `''` and `'='` of `filter.bylabels` require the label to be
+  absent, as with `warp10.absent.label.support = true` (the setting of the Warp 10 3.5
+  image); Warp 10 configured without it compiles them as exact matches of the empty string.
+  The snapshot of `filter.bylabels` reproduces Java's missing spaces (`{ 'a' 'b''c' 'd'}`).
+  `filter.bymetadata`, `filter.byselector` (they need `PARSESELECTOR`) and
+  `filter.latencies` are not ported yet.
+- **The fillers** are not ported yet; names that are not listed in
   `docs/FUNCTIONS.md` are unknown functions.

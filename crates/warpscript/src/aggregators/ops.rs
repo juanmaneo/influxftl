@@ -2,7 +2,7 @@
 // Derived from Warp 10 (Copyright 2018-2026 SenX S.A.S., Apache-2.0), ported to Rust and modified.
 
 //! The operations of `APPLY` (`io.warp10.script.op`, `WarpScriptNAryFunction`): `op.add`,
-//! `op.sub`, `op.mul`, `op.div`, `op.mask` / `op.negmask`, the comparisons `op.eq` \u2026
+//! `op.sub`, `op.mul`, `op.div`, `op.mask` / `op.negmask`, the comparisons `op.eq` …
 //! `op.ge` and the boolean `op.and` / `op.or`, applied tick by tick to the values of the
 //! series of an equivalence class (`null` for the series without a datapoint at that tick).
 

@@ -21,6 +21,9 @@ pub mod bitset;
 pub mod cmath;
 pub mod encoding;
 pub mod error;
+pub mod filters;
+#[cfg(test)]
+mod filters_tests;
 pub mod format;
 pub mod functions;
 pub mod geoxp;
