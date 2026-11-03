@@ -201,14 +201,16 @@ The project is Apache-2.0 and must stay redistributable under it (see `README.md
 
 ## 9. Status and next steps
 
-1640 / 2193 functions are ported (`docs/FUNCTIONS.md`; the inventory includes the names
+1652 / 2193 functions are ported (`docs/FUNCTIONS.md`; the inventory includes the names
 Warp 10 registers through `Builder`s and constants). The Geo Time Series model, the
 `GTSHelper` transforms (time, datapoints, statistics), `BUCKETIZE` and `MAP` with the
 shared aggregators (`sum`, `mean`, `min`, `max`, `first`, `last`, `count`, `and`, `or`,
 `rms`, `var` / `sd` and their `.welford` forms, `mean.circular`, `median`, `mad`,
 `percentile`, `join`) are in, with the single datapoint mappers (`mapper.abs`, `round`,
 `tolong`, `todouble`, `tostring`, `lat`, `lon`, `elev`, `geo.clear`, `tick`, the
-`year` … `second` date-time builders…, in `aggregators/single.rs`). `MAP` covers `GTSHelper.map` entirely: pre/post windows in
+`year` … `second` date-time builders…, in `aggregators/single.rs`) and the mappers
+configured with constants (`mapper.add`, `mul`, `mod`, `min.x`, `max.x`, `pow`, `sqrt`,
+`exp`, `log`, `replace`, `npdf`, `parsedouble`, in `aggregators/arithmetic.rs`). `MAP` covers `GTSHelper.map` entirely: pre/post windows in
 ticks or in time, occurrences (negative: backwards), output ticks, step, the tick override,
 the `MACROMAPPER` protocol and the multi-output maps. The Java runtime exceptions Warp 10
 lets escape (`ClassCastException`, `InformativeEmptyStackException`,
@@ -220,8 +222,7 @@ the order that unlocks the most:
 1. **The mapper-only aggregators** (`io.warp10.script.aggregator`: `Delta`, `Rate`,
    `Argminmax`, `Highest`, `Lowest`, `HDist`, `VDist`, `HSpeed`, `VSpeed`, `TrueCourse`,
    `ShannonEntropy`, `CompareTo`, `ResetCounter`) and the `io.warp10.script.mapper` package
-   still to port: the arithmetic builders (`mapper.add`, `mul`, `pow`, `sqrt`, `exp`, `log`,
-   `mod`, `min.x`, `max.x`, `parsedouble`, `replace`, `npdf`), the `MapperCompareTo` family
+   still to port: the `MapperCompareTo` family
    (`mapper.gt` … `mapper.lt.elev`), `mapper.product` / `dotproduct*`, the kernels,
    `mapper.geo.within` / `outside` / `fence` / `approximate`, `mapper.regexp.*`.
    Builders with parameters (`50 bucketizer.percentile`) are `Entry::Builder` stack functions

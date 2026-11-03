@@ -645,6 +645,22 @@ as in Warp 10 and snapshot as that builder call. The differences:
     `Long.MAX_VALUE`).
   - `mapper.tolong` parses with `Long.valueOf` restricted to ASCII digits; Java also
     accepts the other Unicode decimal digits (`'٥'` gives 5 in Warp 10, no value here).
+- **The mappers configured with constants** (`mapper.add`, `mul`, `mod`, `min.x`, `max.x`,
+  `pow`, `sqrt`, `exp`, `log`, `replace`, `npdf`, `parsedouble`) reproduce the Java
+  objects, quirks included: a `LONG` operand of `mapper.add` / `mapper.mul` truncates a
+  `DOUBLE` value and gives a `LONG` (`3 mapper.add` maps `2.7` to `5`), the integer
+  operations wrap, `0 mapper.mod` on a `LONG` raises the `ArithmeticException` `/ by zero`
+  that `MAP` lets through, `mapper.log` and `mapper.sqrt` snapshot as the stored operand
+  (`10 mapper.log` as `2.302585092994046 mapper.log`, `mapper.sqrt` as `0.5 mapper.sqrt`),
+  `mapper.parsedouble` as `'mapper.parsedouble' FUNCREF`, and `mapper.replace` takes no
+  single value check. `mapper.parsedouble` is `DecimalFormat.parse`: the longest numeric
+  prefix, grouping separators ignored, an `E` exponent (no `+`; an exponent beyond a
+  `long` is ignored, one within is truncated to an `int`), `∞` and `NaN`. The tag is read
+  like `Locale.forLanguageTag` (`fr_FR` is the root locale) and the separators are those of
+  the `STRINGFORMAT` locales (§15, JDK 11+ CLDR data: the French grouping separator is
+  U+202F and `NaN` is spelled `NaN`; Warp 10 3.5 on its JDK 8 image uses U+00A0 and
+  U+FFFD). Only ASCII digits are recognised (Java also reads the other Unicode decimal
+  digits).
 - **`Double.valueOf` is reproduced exactly** wherever Warp 10 uses it (`TODOUBLE`,
   `mapper.todouble`, string series converted to `DOUBLE`): surrounding control characters
   and spaces are trimmed, one `f` / `F` / `d` / `D` suffix is accepted, hexadecimal

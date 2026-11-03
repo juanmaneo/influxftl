@@ -5,6 +5,9 @@
 //! (`WarpScriptAggregatorFunction`): function objects applied to a window of datapoints
 //! (`bucketizer.sum`, `mapper.mean`, `reducer.max`…).
 
+pub mod arithmetic;
+#[cfg(test)]
+mod arithmetic_tests;
 pub mod basic;
 #[cfg(test)]
 mod basic_tests;
@@ -118,6 +121,13 @@ impl Roles {
         bucketizer: true,
         mapper: true,
         reducer: true,
+    };
+
+    /// `MAP` only, the role of the classes of the `io.warp10.script.mapper` package.
+    pub const MAPPER: Roles = Roles {
+        bucketizer: false,
+        mapper: true,
+        reducer: false,
     };
 }
 

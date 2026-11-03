@@ -83,16 +83,9 @@ pub const FUNCTIONS: &[(&str, Entry)] = &[
     ),
 ];
 
-/// The roles of every mapper of this module: `MAP` only.
-const MAPPER: Roles = Roles {
-    bucketizer: false,
-    mapper: true,
-    reducer: false,
-};
-
 /// The single value of the window, `None` for an empty window, failing with `<name> can
 /// only be applied to a single value.` on a larger one.
-fn single_value<'a>(args: &'a AggregatorArgs, name: &str) -> Result<Option<&'a Value>> {
+pub(super) fn single_value<'a>(args: &'a AggregatorArgs, name: &str) -> Result<Option<&'a Value>> {
     match args.values {
         [] => Ok(None),
         [value] => Ok(Some(value)),
@@ -103,7 +96,7 @@ fn single_value<'a>(args: &'a AggregatorArgs, name: &str) -> Result<Option<&'a V
 }
 
 /// The result of an empty window: `{ 0, NO_LOCATION, NO_ELEVATION, null }`.
-fn empty() -> Aggregated {
+pub(super) fn empty() -> Aggregated {
     Aggregated {
         tick: 0,
         ..Aggregated::none()
@@ -252,7 +245,7 @@ fn to_double(value: &Value) -> Value {
 
 impl Aggregator for Single {
     fn roles(&self) -> Roles {
-        MAPPER
+        Roles::MAPPER
     }
 
     fn apply(&self, args: &AggregatorArgs) -> Result<Aggregated> {
@@ -356,7 +349,7 @@ pub struct DateTime {
 
 impl Aggregator for DateTime {
     fn roles(&self) -> Roles {
-        MAPPER
+        Roles::MAPPER
     }
 
     fn apply(&self, args: &AggregatorArgs) -> Result<Aggregated> {
