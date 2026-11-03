@@ -17,6 +17,9 @@ mod compare_tests;
 pub mod join;
 #[cfg(test)]
 mod join_tests;
+pub mod motion;
+#[cfg(test)]
+mod motion_tests;
 pub mod order;
 #[cfg(test)]
 mod order_tests;

@@ -96,6 +96,7 @@ const TABLES: &[&[(&str, Entry)]] = &[
     crate::aggregators::arithmetic::FUNCTIONS,
     crate::aggregators::compare::FUNCTIONS,
     crate::aggregators::product::FUNCTIONS,
+    crate::aggregators::motion::FUNCTIONS,
 ];
 
 static REGISTRY: OnceLock<HashMap<&'static str, &'static Entry>> = OnceLock::new();

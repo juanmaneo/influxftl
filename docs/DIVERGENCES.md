@@ -628,6 +628,18 @@ as in Warp 10 and snapshot as that builder call. The differences:
   `mapper.dotproduct`…) read `Window::tick_index`; an output tick holding no datapoint
   (index `-1`) raises the `ArrayIndexOutOfBoundsException` Warp 10 raises, with the JDK 11+
   text (`Index -1 out of bounds for length 1`, Warp 10 on JDK 8: `-1`).
+- **The change and motion mappers** (`mapper.delta`, `rate`, `highest`, `lowest`, `hdist`,
+  `hspeed`, `vdist`, `vspeed`, `truecourse`, which the three frameworks accept) keep the Java
+  quirks: `delta` and `rate` are at the tick delta and follow the type of the last value
+  (wrapping `long` arithmetic, no result for non numeric values), `hspeed` sums the
+  distances in the window's order but divides by its span, `truecourse` uses the first and
+  last datapoints of the window and Williams' west-positive formula with the cosine of the
+  destination's longitude (heading east gives 270°), and a lone datapoint at
+  `Long.MAX_VALUE` / `Long.MIN_VALUE` makes `GTSHelper.getFirstLastTicks` return `-1`
+  (`Index -1 out of bounds for length 1`). The degree / radian conversions are those of
+  JDK 9+ (`x * (PI / 180)`); Warp 10 3.5 on JDK 8 computes `x / 180 * PI`, so its
+  `truecourse` may differ in the last digit (`315.08876647084264` there, `315.0887664708421`
+  here).
 - **`mapper.product` / `reducer.product`** compute the exact `BigDecimal` product: the
   wrapping product when all the values are `LONG`s, the correctly rounded product otherwise
   (`0.1 0.2 0.3` give `0.006`, `1e300 1e300 1e-300` give `1.0000000000000002E300`, a `-0.0`

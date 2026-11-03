@@ -57,6 +57,30 @@ pub fn from_geoxp_point(hhcode: i64) -> (f64, f64) {
     )
 }
 
+/// `GeoXPLib.loxodromicDistance`: the rhumb line distance in meters between two HHCodes, the
+/// longitude delta (the shorter way round) scaled at the mean latitude, a nautical mile being
+/// a minute of arc.
+pub fn loxodromic_distance(from: i64, to: i64) -> f64 {
+    const UNITS: f64 = 4_294_967_296.0;
+    const METERS_PER_LAT_UNIT: f64 = 180.0 * 60.0 * 1852.0 / UNITS;
+    const METERS_PER_LON_UNIT: f64 = 360.0 * 60.0 * 1852.0 / UNITS;
+    const RADIANS_PER_LAT_UNIT: f64 = std::f64::consts::PI / UNITS;
+    let (from_lat, from_lon) = split_hhcode(from);
+    let (to_lat, to_lon) = split_hhcode(to);
+    // `getLatScale`: the cosine of the mean latitude, as `cos(lat + PI / 2)` of the units.
+    // The units are non-negative: the midpoint truncates like Java's `(f + t) / 2`.
+    let scale = (from_lat.midpoint(to_lat) as f64 * RADIANS_PER_LAT_UNIT
+        + std::f64::consts::PI / 2.0)
+        .cos();
+    let delta_lat = (from_lat - to_lat) as f64 * METERS_PER_LAT_UNIT;
+    let mut dlon = (from_lon - to_lon).abs();
+    if dlon > 0x7FFF_FFFF {
+        dlon = 0xFFFF_FFFF - dlon;
+    }
+    let delta_lon = dlon as f64 * METERS_PER_LON_UNIT * scale;
+    (delta_lat * delta_lat + delta_lon * delta_lon).sqrt()
+}
+
 /// `HHCodeHelper.splitHHCode` at the maximum resolution: de-interleave the latitude and
 /// longitude units.
 fn split_hhcode(hhcode: i64) -> (i64, i64) {
