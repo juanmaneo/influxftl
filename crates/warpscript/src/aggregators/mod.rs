@@ -11,6 +11,9 @@ mod arithmetic_tests;
 pub mod basic;
 #[cfg(test)]
 mod basic_tests;
+pub mod compare;
+#[cfg(test)]
+mod compare_tests;
 pub mod join;
 #[cfg(test)]
 mod join_tests;

@@ -661,6 +661,15 @@ as in Warp 10 and snapshot as that builder call. The differences:
   U+202F and `NaN` is spelled `NaN`; Warp 10 3.5 on its JDK 8 image uses U+00A0 and
   U+FFFD). Only ASCII digits are recognised (Java also reads the other Unicode decimal
   digits).
+- **`CompareTo`** (`mapper.gt` … `mapper.lt.elev`, accepted by the three frameworks)
+  keeps the earliest passing datapoint of the window like Warp 10: a `LONG` reference
+  truncates `DOUBLE` values, a `DOUBLE` one uses `Double.compare` (`NaN` greatest), a
+  `STRING` one compares the `toString()` of any value by UTF-16 code unit, a `BOOLEAN` one
+  only matches booleans, and the latitude / longitude of a datapoint without location are
+  those of the `NO_LOCATION` HHCode. A `STRING` reference meeting a `null` value (a
+  `REDUCE` window) raises the `NullPointerException` Warp 10 raises; Java's has no message
+  (`ERROR` reports `null`), the port's message is `NullPointerException`, which is how Warp
+  10 renders it in the error message.
 - **`Double.valueOf` is reproduced exactly** wherever Warp 10 uses it (`TODOUBLE`,
   `mapper.todouble`, string series converted to `DOUBLE`): surrounding control characters
   and spaces are trimmed, one `f` / `F` / `d` / `D` suffix is accepted, hexadecimal

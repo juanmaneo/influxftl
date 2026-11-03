@@ -97,6 +97,13 @@ impl Error {
         )
     }
 
+    /// The `NullPointerException` of dereferencing a `null`. Java's has no message, which
+    /// Warp 10 renders as the simple class name (`ThrowableUtils.getErrorMessage`); that name
+    /// stands for the message here.
+    pub fn null_pointer() -> Self {
+        Error::runtime("java.lang.NullPointerException", "NullPointerException")
+    }
+
     /// `true` for the "abort the call" signals that macro execution lets through unwrapped.
     pub fn is_signal(&self) -> bool {
         !matches!(self, Error::Script(_))
