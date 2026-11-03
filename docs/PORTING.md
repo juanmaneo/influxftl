@@ -201,7 +201,7 @@ The project is Apache-2.0 and must stay redistributable under it (see `README.md
 
 ## 9. Status and next steps
 
-1703 / 2193 functions are ported (`docs/FUNCTIONS.md`; the inventory includes the names
+1715 / 2193 functions are ported (`docs/FUNCTIONS.md`; the inventory includes the names
 Warp 10 registers through `Builder`s and constants). The Geo Time Series model, the
 `GTSHelper` transforms (time, datapoints, statistics), `BUCKETIZE` and `MAP` with the
 shared aggregators (`sum`, `mean`, `min`, `max`, `first`, `last`, `count`, `and`, `or`,
@@ -214,7 +214,9 @@ configured with constants (`mapper.add`, `mul`, `mod`, `min.x`, `max.x`, `pow`, 
 `CompareTo` (`mapper.gt` … `mapper.lt.elev`, `aggregators/compare.rs`), `mapper.product`
 / `reducer.product` and the `mapper.dotproduct` family (`aggregators/product.rs`), the
 change and motion mappers (`mapper.delta`, `rate`, `highest`, `lowest`, `hdist`, `hspeed`,
-`vdist`, `vspeed`, `truecourse`, `aggregators/motion.rs`). `MAP` covers `GTSHelper.map` entirely: pre/post windows in
+`vdist`, `vspeed`, `truecourse`, `aggregators/motion.rs`), the kernel smoothers
+(`aggregators/kernel.rs`) and `mapper.regexp.match` / `replace` (`aggregators/pattern.rs`).
+`MAP` covers `GTSHelper.map` entirely: pre/post windows in
 ticks or in time, occurrences (negative: backwards), output ticks, step, the tick override,
 the `MACROMAPPER` protocol and the multi-output maps. The Java runtime exceptions Warp 10
 lets escape (`ClassCastException`, `InformativeEmptyStackException`,
@@ -225,8 +227,8 @@ the order that unlocks the most:
 
 1. **The remaining aggregators** (`io.warp10.script.aggregator`: `Argminmax`,
    `ShannonEntropy`, `ResetCounter`) and the `io.warp10.script.mapper` package
-   still to port: the kernels,
-   `mapper.geo.within` / `outside` / `fence` / `approximate`, `mapper.regexp.*`.
+   still to port: `mapper.geo.within` / `outside` / `fence` / `approximate` (they need the
+   `GeoXPShape` cells of the `GEO.*` functions).
    Builders with parameters (`50 bucketizer.percentile`) are `Entry::Builder` stack functions
    (they receive their registered name) pushing a configured object whose `parameters()`
    make `snapshot()` reproduce Java's `toString()` (`50.0 'type1' bucketizer.percentile `);

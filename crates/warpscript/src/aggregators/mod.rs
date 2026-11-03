@@ -17,12 +17,18 @@ mod compare_tests;
 pub mod join;
 #[cfg(test)]
 mod join_tests;
+pub mod kernel;
+#[cfg(test)]
+mod kernel_tests;
 pub mod motion;
 #[cfg(test)]
 mod motion_tests;
 pub mod order;
 #[cfg(test)]
 mod order_tests;
+pub mod pattern;
+#[cfg(test)]
+mod pattern_tests;
 pub mod product;
 #[cfg(test)]
 mod product_tests;

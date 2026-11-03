@@ -640,6 +640,17 @@ as in Warp 10 and snapshot as that builder call. The differences:
   JDK 9+ (`x * (PI / 180)`); Warp 10 3.5 on JDK 8 computes `x / 180 * PI`, so its
   `truecourse` may differ in the last digit (`315.08876647084264` there, `315.0887664708421`
   here).
+- **The kernel smoothers** (`step width mapper.kernel.*`) use the Java weights (a width of 1
+  divides 0 by 0, giving `NaN` weights for the kernels of `u`) and the Java failures: a
+  `0` step raises `/ by zero`, a negative one an `ArrayIndexOutOfBoundsException`, the
+  `int` width `-1` a `NegativeArraySizeException` (message `-2147483648`, JDK 11+) and
+  `-3` / `-5` the `OutOfMemoryError` `Requested array size exceeds VM limit`. The port
+  refuses kernels of more than 2^24 weights (a width beyond 2^25) with the
+  `OutOfMemoryError` `Java heap space`, where Java allocates as much as its heap allows.
+- **The regular expression mappers** use the `MATCH` / `REPLACE` engine (§8): a non
+  `STRING` value raises the `ClassCastException` of `Pattern.matcher((String) value)`, and
+  the replacement errors (`No group 2`, `Illegal group reference`) are the runtime
+  exceptions `MAP` lets through. Both snapshot as a `FUNCREF`, as in Warp 10.
 - **`mapper.product` / `reducer.product`** compute the exact `BigDecimal` product: the
   wrapping product when all the values are `LONG`s, the correctly rounded product otherwise
   (`0.1 0.2 0.3` give `0.006`, `1e300 1e300 1e-300` give `1.0000000000000002E300`, a `-0.0`
