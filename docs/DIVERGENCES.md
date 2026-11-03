@@ -531,9 +531,16 @@ unstable, order), `GeoTimeSerie.toString` and `dump` (`TOSTRING`), and the JSON 
 - **`CROP` of a bucketized series without datapoint on a bucket boundary** fails with the
   JDK message of the `NullPointerException` Warp 10 dies with (`Cannot load from long array
   because "cropped.ticks" is null`).
-- **Operators on series** (`==`, `!=`, `+`, `*`… with Geo Time Series operands, the `GTSHelper`
-  *ops* family) are not ported yet: `==` / `!=` compare series by identity and the arithmetic
-  operators reject them, where Warp 10 computes a new series tick by tick.
+- **Operators on series** (`+ - * /`, the comparisons, `&& || !`, the bitwise operators,
+  `->DOUBLEBITS` and friends, and the numerical functions such as `ABS`, `**`, `MAX` or
+  `ATAN2`; `GTSOpsHelper`) follow Warp 10, quirks included: two series are combined on their
+  common ticks after being sorted *in place*, the result of two bucketized series is
+  bucketized only on aligned grids, `GTS GTS ==` with a series of another type fails with
+  the message Warp 10 prints without a space after the operator name, an empty result of a
+  bitwise operator or of a `LONG` series compared to `NaN` keeps its type. The only
+  difference: the bit conversions of a series build the result directly where Warp 10
+  round-trips through a `GTSEncoder` (same datapoints, metadata and order). `BIGDECIMAL`,
+  matrix and vector operands are not modelled (§3).
 - **`CLONE` and the functions returning a copy** (`TIMESHIFT`, `TIMESCALE`, `CROP`…) reset the
   `renamed` flag like `GeoTimeSerie.clone`; the flag is only read by `UPDATE`.
 - **`VALUESORT` / `RVALUESORT` / `VALUEDEDUP` on a `BOOLEAN` series** whose `false` or

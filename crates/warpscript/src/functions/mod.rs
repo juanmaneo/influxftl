@@ -18,6 +18,7 @@ pub mod gts;
 pub mod gts_apply;
 pub mod gts_fill;
 pub mod gts_frameworks;
+pub mod gts_operators;
 pub mod gts_points;
 pub mod gts_reduce;
 pub mod gts_stats;
@@ -233,6 +234,8 @@ mod gts_apply_tests;
 mod gts_fill_tests;
 #[cfg(test)]
 mod gts_frameworks_tests;
+#[cfg(test)]
+mod gts_operators_tests;
 #[cfg(test)]
 mod gts_points_tests;
 #[cfg(test)]

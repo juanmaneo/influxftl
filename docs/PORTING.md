@@ -239,14 +239,16 @@ the order that unlocks the most:
    the current tick in the window (`mapper.product`, `mapper.dotproduct`…) get it from
    `Window::tick_index` (`None` under `BUCKETIZE`, where Java would read past the
    arguments array).
-2. The `==` / `+` / `*`… operators on series (§18 of `DIVERGENCES.md`; `APPLY` / `PAPPLY`
-   and the `op.*` operations are in, `functions/gts_apply.rs`, `aggregators/ops.rs`; `FILTER`
-   / `PFILTER` with most `filter.*` and `MACROFILTER` too, `filters.rs`), `PARSESELECTOR` /
-   `TOSELECTOR` with `filter.byselector` / `filter.bymetadata` and `filter.latencies`.
-   `FILL` with every filler, `FILLPREVIOUS`, `FILLNEXT`, `FILLVALUE`, `FILLTICKS` and
-   `INTERPOLATE` are in (`fillers.rs`, `functions/gts_fill.rs`, with the Commons Math
-   interpolators in `interpolation.rs`); their tests are generated from the answers of the
-   Warp 10 oracle to each script by a throw-away script (kept under `target/`).
+2. `PARSESELECTOR` / `TOSELECTOR` with `filter.byselector` / `filter.bymetadata` and
+   `filter.latencies`. `APPLY` / `PAPPLY` and the `op.*` operations
+   (`functions/gts_apply.rs`, `aggregators/ops.rs`), `FILTER` / `PFILTER` with most
+   `filter.*` and `MACROFILTER` (`filters.rs`), the operators on series (`+ - * /`, the
+   comparisons, `&& || !`, the bitwise and bit conversion operators and the numerical
+   functions, `functions/gts_operators.rs`) and `FILL` with every filler, `FILLPREVIOUS`,
+   `FILLNEXT`, `FILLVALUE`, `FILLTICKS` and `INTERPOLATE` are in (`fillers.rs`,
+   `functions/gts_fill.rs`, with the Commons Math interpolators in `interpolation.rs`). Their
+   tests are generated from the answers of the Warp 10 oracle to each script by throw-away
+   scripts (kept under `target/`).
 3. **`DEDUP` with a mapper**, `UNBUCKETIZE`, `LTTB` / `TLTTB`, the exponential smoothings,
    `PROB` / `CPROB`, `PATTERNS` / `DISCORDS`, `DTW`, `STL`, `LOWESS`.
 4. **GTS encoders** (`GTSEncoder` / `GTSDecoder`, Thrift compact + gzip wrappers): `WRAP` /

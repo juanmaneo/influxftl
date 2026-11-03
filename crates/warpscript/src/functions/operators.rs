@@ -3,15 +3,16 @@
 
 //! Arithmetic, comparison, bitwise and logical operators, and the scalar type conversions.
 //!
-//! The Geo Time Series, matrix, vector and `BIGDECIMAL` operand types of Warp 10 are not
-//! modelled yet; the operators implement the scalar (and, where relevant, list / set / macro /
-//! bytes) behaviour faithfully and raise the Warp 10 error message for the other operands.
+//! The Geo Time Series operands are handled in [`super::gts_operators`]. The matrix, vector and
+//! `BIGDECIMAL` operand types of Warp 10 are not modelled yet; the operators raise the Warp 10
+//! error message for them.
 
 use std::cmp::Ordering;
 use std::rc::Rc;
 
 use super::Entry;
 use super::args::fail;
+use super::gts_operators::{self, Arithmetic, Comparison};
 use super::numerical::{self, Binary};
 use crate::error::{Error, Result};
 use crate::jmath;
@@ -37,12 +38,12 @@ pub const FUNCTIONS: &[(&str, Entry)] = &[
     (">", Entry::Stack(gt)),
     ("<=", Entry::Stack(le)),
     (">=", Entry::Stack(ge)),
-    ("&&", Entry::Stack(and)),
-    ("AND", Entry::Stack(and)),
-    ("||", Entry::Stack(or)),
-    ("OR", Entry::Stack(or)),
-    ("!", Entry::Stack(not)),
-    ("NOT", Entry::Stack(not)),
+    ("&&", Entry::Builder(and)),
+    ("AND", Entry::Builder(and)),
+    ("||", Entry::Builder(or)),
+    ("OR", Entry::Builder(or)),
+    ("!", Entry::Builder(not)),
+    ("NOT", Entry::Builder(not)),
     ("~", Entry::Stack(complement)),
     ("&", Entry::Stack(bitwise_and)),
     ("|", Entry::Stack(bitwise_or)),
@@ -126,12 +127,15 @@ fn add(stack: &mut Stack) -> Result<()> {
             bytes.extend_from_slice(b);
             Value::bytes(bytes)
         }
-        _ => {
-            return Err(fail(
-                "+",
-                "can only operate on numeric, string, lists, matrices, vectors, Geo Time Series, byte array and macro values.",
-            ));
-        }
+        _ => match gts_operators::add(&op1, &op2) {
+            Some(result) => result?,
+            None => {
+                return Err(fail(
+                    "+",
+                    "can only operate on numeric, string, lists, matrices, vectors, Geo Time Series, byte array and macro values.",
+                ));
+            }
+        },
     };
     stack.push(result);
     Ok(())
@@ -143,39 +147,68 @@ const MUL_MSG: &str =
     "can only operate on numeric values, vectors, matrices and numeric Geo Time Series.";
 const DIV_MSG: &str = "can only operate on numeric values, vectors and numeric Geo Time Series.";
 
-fn sub(stack: &mut Stack) -> Result<()> {
+/// `-`, `*` and `/`: two numbers, or series operands.
+fn arithmetic(stack: &mut Stack, op: Arithmetic) -> Result<()> {
     let op2 = stack.pop()?;
     let op1 = stack.pop()?;
-    if op1.is_number() && op2.is_number() {
-        stack.push(numeric(&op1, &op2, i64::wrapping_sub, |x, y| x - y));
-        Ok(())
+    let result = if op1.is_number() && op2.is_number() {
+        match (&op1, &op2) {
+            (Value::Long(a), Value::Long(b)) => Value::Long((op.long)(*a, *b)?),
+            _ => Value::Double((op.double)(
+                op1.as_f64().unwrap_or(f64::NAN),
+                op2.as_f64().unwrap_or(f64::NAN),
+            )),
+        }
     } else {
-        Err(fail("-", SUB_MSG))
+        gts_operators::arithmetic(op, &op1, &op2)?
+    };
+    stack.push(result);
+    Ok(())
+}
+
+/// Java `long` division: `ArithmeticException` on a zero divisor, wrapping otherwise.
+fn long_div(a: i64, b: i64) -> Result<i64> {
+    if b == 0 {
+        Err(Error::new("/ by zero"))
+    } else {
+        Ok(a.wrapping_div(b))
     }
+}
+
+fn sub(stack: &mut Stack) -> Result<()> {
+    arithmetic(
+        stack,
+        Arithmetic {
+            name: "-",
+            message: SUB_MSG,
+            long: |a, b| Ok(a.wrapping_sub(b)),
+            double: |x, y| x - y,
+        },
+    )
 }
 
 fn mul(stack: &mut Stack) -> Result<()> {
-    let op2 = stack.pop()?;
-    let op1 = stack.pop()?;
-    if op1.is_number() && op2.is_number() {
-        stack.push(numeric(&op1, &op2, i64::wrapping_mul, |x, y| x * y));
-        Ok(())
-    } else {
-        Err(fail("*", MUL_MSG))
-    }
+    arithmetic(
+        stack,
+        Arithmetic {
+            name: "*",
+            message: MUL_MSG,
+            long: |a, b| Ok(a.wrapping_mul(b)),
+            double: |x, y| x * y,
+        },
+    )
 }
 
 fn div(stack: &mut Stack) -> Result<()> {
-    let op2 = stack.pop()?;
-    let op1 = stack.pop()?;
-    match (&op1, &op2) {
-        (Value::Long(_), Value::Long(0)) => Err(Error::new("/ by zero")),
-        (a, b) if a.is_number() && b.is_number() => {
-            stack.push(numeric(a, b, i64::wrapping_div, |x, y| x / y));
-            Ok(())
-        }
-        _ => Err(fail("/", DIV_MSG)),
-    }
+    arithmetic(
+        stack,
+        Arithmetic {
+            name: "/",
+            message: DIV_MSG,
+            long: long_div,
+            double: |x, y| x / y,
+        },
+    )
 }
 
 fn modulo(stack: &mut Stack) -> Result<()> {
@@ -264,10 +297,15 @@ fn compare_values(a: &Value, b: &Value) -> Option<Ordering> {
         (Value::Double(x), Value::Double(y)) => x.total_cmp(y),
         (Value::Long(l), Value::Double(d)) => compare_long_double(*l, *d),
         (Value::Double(d), Value::Long(l)) => compare_long_double(*l, *d).reverse(),
-        (Value::String(x), Value::String(y)) => x.as_ref().cmp(y.as_ref()),
+        (Value::String(x), Value::String(y)) => x.encode_utf16().cmp(y.encode_utf16()),
         (Value::Bytes(x), Value::Bytes(y)) => x.as_ref().cmp(y.as_ref()),
         _ => return None,
     })
+}
+
+/// `EQ.compare` of two numbers (`Equal` for operands that are not two numbers).
+pub(super) fn compare_numbers(a: &Value, b: &Value) -> Ordering {
+    compare_values(a, b).unwrap_or(Ordering::Equal)
 }
 
 /// The ordering comparison shared by `<`, `>`, `<=`, `>=` (and the numeric part of `==`/`!=`).
@@ -278,8 +316,18 @@ fn comparison(
     one_nan: bool,
     two_nan: bool,
     operator: fn(Ordering) -> bool,
-    name: &str,
+    name: &'static str,
 ) -> Result<()> {
+    let cmp = Comparison {
+        name,
+        operator,
+        one_nan,
+        two_nan,
+    };
+    if let Some(result) = gts_operators::compare(cmp, op1, op2) {
+        stack.push(result?);
+        return Ok(());
+    }
     let nan1 = matches!(op1, Value::Double(d) if d.is_nan());
     let nan2 = matches!(op2, Value::Double(d) if d.is_nan());
     let result = if nan1 && nan2 {
@@ -289,13 +337,26 @@ fn comparison(
     } else if let Some(ordering) = compare_values(op1, op2) {
         operator(ordering)
     } else {
-        return Err(fail(
-            name,
-            "can only operate when GTS values and the top stack operand have the same type.",
-        ));
+        return Err(gts_operators::same_type(name));
     };
     stack.push(result);
     Ok(())
+}
+
+/// `EQ` / `NE` hand numbers, series, and a series with a scalar to the comparison.
+fn compared_by_eq(op1: &Value, op2: &Value) -> bool {
+    let scalar = |v: &Value| {
+        matches!(
+            v,
+            Value::Long(_) | Value::Double(_) | Value::String(_) | Value::Boolean(_)
+        )
+    };
+    match (op1, op2) {
+        (Value::Gts(_), other) | (other, Value::Gts(_)) => {
+            scalar(other) || matches!(other, Value::Gts(_))
+        }
+        _ => op1.is_number() && op2.is_number(),
+    }
 }
 
 fn lt(stack: &mut Stack) -> Result<()> {
@@ -357,7 +418,7 @@ fn ge(stack: &mut Stack) -> Result<()> {
 fn eq(stack: &mut Stack) -> Result<()> {
     let op2 = stack.pop()?;
     let op1 = stack.pop()?;
-    if op1.is_number() && op2.is_number() {
+    if compared_by_eq(&op1, &op2) {
         comparison(
             stack,
             &op1,
@@ -376,7 +437,7 @@ fn eq(stack: &mut Stack) -> Result<()> {
 fn ne(stack: &mut Stack) -> Result<()> {
     let op2 = stack.pop()?;
     let op1 = stack.pop()?;
-    if op1.is_number() && op2.is_number() {
+    if compared_by_eq(&op1, &op2) {
         comparison(
             stack,
             &op1,
@@ -426,11 +487,18 @@ fn short_circuit(stack: &mut Stack, name: &str, trigger: bool) -> Result<()> {
         }
         op2 => {
             let op1 = stack.pop()?;
+            let op: fn(bool, bool) -> bool = if trigger {
+                |a, b| a || b
+            } else {
+                |a, b| a && b
+            };
             match (op1, op2) {
                 (Value::Boolean(a), Value::Boolean(b)) => {
-                    // `&&` is `a && b`, `||` is `a || b`; both equal `trigger == (a ? ... )`.
-                    let result = if trigger { a || b } else { a && b };
-                    stack.push(result);
+                    stack.push(op(a, b));
+                    Ok(())
+                }
+                (Value::Gts(a), Value::Gts(b)) => {
+                    stack.push(gts_operators::logical(name, &a, &b, op)?);
                     Ok(())
                 }
                 _ => Err(fail(name, MSG)),
@@ -439,22 +507,27 @@ fn short_circuit(stack: &mut Stack, name: &str, trigger: bool) -> Result<()> {
     }
 }
 
-fn and(stack: &mut Stack) -> Result<()> {
-    short_circuit(stack, "AND", false)
+fn and(stack: &mut Stack, name: &'static str) -> Result<()> {
+    short_circuit(stack, name, false)
 }
 
-fn or(stack: &mut Stack) -> Result<()> {
-    short_circuit(stack, "OR", true)
+fn or(stack: &mut Stack, name: &'static str) -> Result<()> {
+    short_circuit(stack, name, true)
 }
 
-fn not(stack: &mut Stack) -> Result<()> {
+fn not(stack: &mut Stack, name: &'static str) -> Result<()> {
     match stack.pop()? {
         Value::Boolean(b) => {
             stack.push(!b);
             Ok(())
         }
+        Value::Gts(gts) => {
+            let result = gts_operators::not(name, &gts.borrow())?;
+            stack.push(result);
+            Ok(())
+        }
         _ => Err(fail(
-            "!",
+            name,
             "can only operate on a boolean value or a boolean GTS.",
         )),
     }
@@ -467,12 +540,16 @@ fn not(stack: &mut Stack) -> Result<()> {
 fn bitwise(stack: &mut Stack, name: &str, op: fn(i64, i64) -> i64) -> Result<()> {
     let op2 = stack.pop()?;
     let op1 = stack.pop()?;
-    match (op1, op2) {
-        (Value::Long(a), Value::Long(b)) => {
-            stack.push(op(a, b));
+    let result = match (&op1, &op2) {
+        (Value::Long(a), Value::Long(b)) => Some(Value::Long(op(*a, *b))),
+        _ => gts_operators::bitwise(&op1, &op2, op),
+    };
+    match result {
+        Some(result) => {
+            stack.push(result);
             Ok(())
         }
-        _ => Err(fail(
+        None => Err(fail(
             name,
             "can only operate on two LONG, or two LONG GTS, or one LONG GTS and a LONG, or a BIGDECIMAL/LONG combination .",
         )),
@@ -825,57 +902,64 @@ fn from_radix(stack: &mut Stack, name: &str, radix: u32, max_digits: usize) -> R
     }
 }
 
-fn to_double_bits(stack: &mut Stack) -> Result<()> {
-    match stack.pop()? {
-        ref n if n.is_number() => {
-            stack.push(n.as_f64().unwrap_or(f64::NAN).to_bits() as i64);
-            Ok(())
+/// `TOBITS`: the IEEE 754 bits of a number (`Double.doubleToRawLongBits` of `doubleValue()`,
+/// or the unsigned `Float.floatToRawIntBits` of `floatValue()`), or of each value of a series.
+fn to_bits(stack: &mut Stack, name: &str, convert: fn(&Value) -> i64) -> Result<()> {
+    let result = match stack.pop()? {
+        ref n if n.is_number() => Value::Long(convert(n)),
+        Value::Gts(gts) => gts_operators::to_bits(name, &gts.borrow(), convert)?,
+        _ => {
+            return Err(fail(
+                name,
+                "operates on a DOUBLE, LONG or Geo Time Series thereof.",
+            ));
         }
-        _ => Err(fail(
-            "->DOUBLEBITS",
-            "operates on a DOUBLE, LONG or Geo Time Series thereof.",
-        )),
-    }
+    };
+    stack.push(result);
+    Ok(())
+}
+
+/// `FROMBITS`: the number of IEEE 754 bits, or of each value of a `LONG` series.
+fn from_bits(stack: &mut Stack, name: &str, convert: fn(i64) -> f64) -> Result<()> {
+    let result = match stack.pop()? {
+        Value::Long(bits) => Value::Double(convert(bits)),
+        Value::Gts(gts) => gts_operators::from_bits(name, &gts.borrow(), convert)?,
+        _ => {
+            return Err(fail(
+                name,
+                "operates on a LONG or a Geo Time Series thereof.",
+            ));
+        }
+    };
+    stack.push(result);
+    Ok(())
+}
+
+fn to_double_bits(stack: &mut Stack) -> Result<()> {
+    to_bits(stack, "->DOUBLEBITS", |n| {
+        n.as_f64().unwrap_or(f64::NAN).to_bits() as i64
+    })
 }
 
 fn from_double_bits(stack: &mut Stack) -> Result<()> {
-    match stack.pop()? {
-        Value::Long(bits) => {
-            stack.push(f64::from_bits(bits as u64));
-            Ok(())
-        }
-        _ => Err(fail(
-            "DOUBLEBITS->",
-            "operates on a LONG or a Geo Time Series thereof.",
-        )),
-    }
+    from_bits(stack, "DOUBLEBITS->", |bits| f64::from_bits(bits as u64))
 }
 
 fn to_float_bits(stack: &mut Stack) -> Result<()> {
-    match stack.pop()? {
-        ref n if n.is_number() => {
-            let bits = (n.as_f64().unwrap_or(f64::NAN) as f32).to_bits();
-            stack.push(i64::from(bits));
-            Ok(())
-        }
-        _ => Err(fail(
-            "->FLOATBITS",
-            "operates on a DOUBLE, LONG or Geo Time Series thereof.",
-        )),
-    }
+    to_bits(stack, "->FLOATBITS", |n| {
+        // `Number.floatValue()`: a `LONG` is rounded to a float directly.
+        let float = match n {
+            Value::Long(l) => *l as f32,
+            _ => n.as_f64().unwrap_or(f64::NAN) as f32,
+        };
+        i64::from(float.to_bits())
+    })
 }
 
 fn from_float_bits(stack: &mut Stack) -> Result<()> {
-    match stack.pop()? {
-        Value::Long(bits) => {
-            stack.push(f64::from(f32::from_bits((bits & 0xFFFF_FFFF) as u32)));
-            Ok(())
-        }
-        _ => Err(fail(
-            "FLOATBITS->",
-            "operates on a LONG or a Geo Time Series thereof.",
-        )),
-    }
+    from_bits(stack, "FLOATBITS->", |bits| {
+        f64::from(f32::from_bits((bits & 0xFFFF_FFFF) as u32))
+    })
 }
 
 // -----------------------------------------------------------------------------------------

@@ -3,14 +3,26 @@
 
 //! Ports of `NumericalUnaryFunction` and `NumericalBinaryFunction`: the machinery that applies
 //! a `java.lang.Math` style operator to numbers and to lists of numbers, with Java's numeric
-//! promotion rules.
-//!
-//! Geo Time Series operands are not modelled yet and raise the Warp 10 "unhandled" message.
+//! promotion rules, to lists of numbers and to the values of numeric Geo Time Series.
 
 use super::args::fail;
+use super::gts_operators::try_unary_op;
 use crate::error::{Error, Result};
+use crate::gts::{GeoTimeSerie, Type};
 use crate::stack::Stack;
 use crate::value::Value;
+
+/// Whether a series can be an operand: `LONG`, `DOUBLE` or untyped (empty).
+fn numeric_series(gts: &GeoTimeSerie) -> bool {
+    matches!(gts.type_of(), Type::Long | Type::Double | Type::Undefined)
+}
+
+/// `cloneEmpty` of `gts` filled with `op` applied to each value.
+fn map_series(gts: &GeoTimeSerie, op: &mut dyn FnMut(&Value) -> Result<Value>) -> Result<Value> {
+    let mut result = gts.clone_empty();
+    try_unary_op(&mut result, gts, op)?;
+    Ok(Value::Gts(result.shared()))
+}
 
 const UNARY_MSG: &str =
     "can only operate on numerical values, list of numerical values or numerical GTSs.";
@@ -55,6 +67,16 @@ pub fn unary(stack: &mut Stack, name: &str, op: Unary) -> Result<()> {
 fn apply_recursive(value: &Value, name: &str, op: Unary) -> Result<Value> {
     match value {
         n if n.is_number() => op.apply(n),
+        Value::Gts(gts) => {
+            let gts = gts.borrow();
+            if !numeric_series(&gts) {
+                return Err(fail(
+                    name,
+                    "can only operate on LONG, DOUBLE or empty GTSs.",
+                ));
+            }
+            map_series(&gts, &mut |v| op.apply(v))
+        }
         Value::List(list) => {
             let items = list.borrow();
             let mut out = Vec::with_capacity(items.len());
@@ -134,8 +156,38 @@ pub fn binary(stack: &mut Stack, name: &str, op: Binary, apply_in_list: bool) ->
                     stack.push(Value::list(out));
                     Ok(())
                 }
+                Value::Gts(gts) if numeric_series(&gts.borrow()) => {
+                    let result = map_series(&gts.borrow(), &mut |v| op.apply(v, top))?;
+                    stack.push(result);
+                    Ok(())
+                }
                 _ => Err(Error::new(message)),
             }
+        }
+        Value::Gts(ref gts) if !numeric_series(&gts.borrow()) => Err(Error::new(message)),
+        Value::Gts(gts) if apply_in_list => {
+            let values: Vec<Value> = {
+                let gts = gts.borrow();
+                (0..gts.size()).map(|i| gts.value_at(i)).collect()
+            };
+            let mut result: Option<Value> = None;
+            for element in &values {
+                result = Some(match result {
+                    None => op.first(element),
+                    Some(acc) => op.apply(&acc, element)?,
+                });
+            }
+            stack.push(result.unwrap_or(Value::Null));
+            Ok(())
+        }
+        Value::Gts(gts) => {
+            let op1 = stack.pop()?;
+            if !op1.is_number() {
+                return Err(Error::new(message));
+            }
+            let result = map_series(&gts.borrow(), &mut |v| op.apply(&op1, v))?;
+            stack.push(result);
+            Ok(())
         }
         Value::List(list) if apply_in_list => {
             let items = list.borrow();

@@ -229,7 +229,9 @@ fn logical() {
     assert_top("[ ] OR", false);
     assert_top("[ <% true %> <% false %> ] AND", false);
     assert_top("[ <% false %> <% true %> ] OR", true);
-    assert_fails("1 true &&", "AND can only operate on two boolean values");
+    // The error names the operator as invoked (`&&` and `AND` are two registrations).
+    assert_fails("1 true &&", "&& can only operate on two boolean values");
+    assert_fails("1 true ||", "|| can only operate on two boolean values");
     assert_fails("[ 1 ] AND", "AND can only operate on two boolean values");
     assert_fails(
         "[ <% 1 %> ] AND",
