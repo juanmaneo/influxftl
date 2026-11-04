@@ -581,6 +581,18 @@ unstable, order), `GeoTimeSerie.toString` and `dump` (`TOSTRING`), and the JSON 
   without datapoint fail with `NullPointerException`. The geographic distances use the JDK
   9+ `Math.toRadians` (a multiplication), as Warp 10 does on a current JDK; on JDK 8 the last
   digits differ.
+- **`PATTERNS` / `PATTERNDETECTION` / `DISCORDS`** (and their `Z` forms) produce the bSAX
+  words of Warp 10 (`SAXUtils`: Acklam's inverse normal CDF refined with Cody's `erfc`; a
+  breakpoint computed by the transcendental functions may differ by an ulp, which only
+  matters for an aggregate exactly on it) and keep its quirks: `DISCORDS` only looks for
+  nearest neighbours among the windows of the same word and of the words before it in
+  lexicographic order, skips the second of two overlapping discords twice, and fails with
+  `Index -1 out of bounds for length 0` for a count of `0`. The differences: **a
+  non positive window** fails with `Index n out of bounds for length n` (the number of
+  datapoints): Warp 10 reads past the datapoints into the tick array, which is exactly sized
+  for a series built by `BUCKETIZE` (the usual input) but holds stale slots otherwise; **a
+  `DISCORDS` distance ratio** that keeps the last candidate (its distance times the ratio is
+  not below the best one) ends the pruning, where Warp 10 loops forever.
 - **`PROB` / `CPROB` / `PROBABILITY`** follow Warp 10: `CPROB` with a separator sorts its
   input by value in place and fails with `NullPointerException` when an event has leading or
   trailing blanks (it counts the trimmed events but looks the untrimmed ones up). The

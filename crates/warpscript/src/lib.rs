@@ -40,6 +40,7 @@ mod interpolation_tests;
 pub mod jmath;
 pub mod jrandom;
 pub mod macros;
+pub mod sax;
 pub mod selector;
 pub mod snapshot;
 pub mod stack;

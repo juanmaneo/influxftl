@@ -207,7 +207,7 @@ The project is Apache-2.0 and must stay redistributable under it (see `README.md
 
 ## 9. Status and next steps
 
-1814 / 2193 functions are ported (`docs/FUNCTIONS.md`; the inventory includes the names
+1820 / 2193 functions are ported (`docs/FUNCTIONS.md`; the inventory includes the names
 Warp 10 registers through `Builder`s and constants). The Geo Time Series model, the
 `GTSHelper` transforms (time, datapoints, statistics), `BUCKETIZE` and `MAP` with the
 shared aggregators (`sum`, `mean`, `min`, `max`, `first`, `last`, `count`, `and`, `or`,
@@ -261,9 +261,10 @@ the order that unlocks the most:
    on the bit-exact port of Commons Math's `PolynomialCurveFitter` /
    `LevenbergMarquardtOptimizer` in `curvefit.rs`, checked against the Java library by
    `curvefit_tests.rs`), `PROB` / `CPROB` / `PROBABILITY` (`functions/gts_prob.rs`) and
-   `DTW` / `ZDTW` / `RAWDTW` / `OPTDTW` (`functions/dtw.rs`) are in. Next: `PATTERNS` /
-   `PATTERNDETECTION` / `DISCORDS` and their `Z` forms (bSAX), `STL` (it reuses
-   `pointwise_lowess`), `POLYFUNC`, `RANDPDF`.
+   `DTW` / `ZDTW` / `RAWDTW` / `OPTDTW` (`functions/dtw.rs`), `PATTERNS` /
+   `PATTERNDETECTION` / `DISCORDS` and their `Z` forms (`functions/patterns.rs` on the SAX
+   breakpoints of `sax.rs`) are in. Next: `STL` (it reuses `pointwise_lowess`), `POLYFUNC`
+   and `RANDPDF` (function objects that are also mappers or need `java.util.Random`).
 4. **GTS encoders** (`GTSEncoder` / `GTSDecoder`, Thrift compact + gzip wrappers): `WRAP` /
    `UNWRAP` and the `ENCODER` type; then the sorted `MERGE`, `->ENCODER`, `OPTIMIZE`.
 5. **BigDecimal** (`BD*`, `MUSIGMA`, `NSUMSUMSQ`, `LR`): either a spec-derived decimal

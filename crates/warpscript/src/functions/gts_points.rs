@@ -77,7 +77,7 @@ fn flatten_series(name: &str, params: &[Value], message: &str) -> Result<Vec<Gts
 
 /// `GTSHelper.dedup`: a copy without duplicate ticks, keeping the last datapoint of each
 /// tick in storage order (and the sort flags of the input).
-fn dedup_gts(gts: &GeoTimeSerie) -> GeoTimeSerie {
+pub(super) fn dedup_gts(gts: &GeoTimeSerie) -> GeoTimeSerie {
     let n = gts.size();
     if n < 2 {
         return gts.clone();
