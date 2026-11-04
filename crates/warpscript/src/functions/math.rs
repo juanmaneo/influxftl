@@ -134,9 +134,15 @@ pub(crate) fn push_secure_double(
     stack: &mut Stack,
     entropy: core::result::Result<u64, getrandom::Error>,
 ) -> Result<()> {
-    let bits = entropy.map_err(entropy_error)?;
-    stack.push((bits >> 11) as f64 / (1u64 << 53) as f64);
+    let value = secure_double(entropy)?;
+    stack.push(value);
     Ok(())
+}
+
+/// A uniform double in `[0, 1)` from 64 bits of entropy (`SecureRandom.nextDouble`).
+pub(crate) fn secure_double(entropy: core::result::Result<u64, getrandom::Error>) -> Result<f64> {
+    let bits = entropy.map_err(entropy_error)?;
+    Ok((bits >> 11) as f64 / (1u64 << 53) as f64)
 }
 
 fn rand(stack: &mut Stack) -> Result<()> {

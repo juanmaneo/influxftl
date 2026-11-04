@@ -593,6 +593,13 @@ unstable, order), `GeoTimeSerie.toString` and `dump` (`TOSTRING`), and the JSON 
   for a series built by `BUCKETIZE` (the usual input) but holds stale slots otherwise; **a
   `DISCORDS` distance ratio** that keeps the last candidate (its distance times the ratio is
   not below the best one) ends the pruning, where Warp 10 loops forever.
+- **`POLYFUNC` / `RANDPDF` / `SRANDPDF`** follow Warp 10: `POLYFUNC` drops the trailing
+  zero coefficients like `PolynomialFunction`, builds a series without metadata (or
+  bucketization) and evaluates a bucketized series on every bucket (or bucket index), most
+  recent first; it is a mapper too (`TYPEOF` is `AGGREGATOR`). `RANDPDF` sorts the values
+  of the histogram in their natural order (`TreeMap`: they must be of one comparable class)
+  and leaves the stack below untouched. The unseeded `RANDPDF` draws from the system entropy
+  (§5.3), `SRANDPDF` from the `PRNG` sequence exactly like Warp 10.
 - **`PROB` / `CPROB` / `PROBABILITY`** follow Warp 10: `CPROB` with a separator sorts its
   input by value in place and fails with `NullPointerException` when an event has leading or
   trailing blanks (it counts the trimmed events but looks the untrimmed ones up). The

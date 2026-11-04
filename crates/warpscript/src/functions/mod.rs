@@ -36,6 +36,7 @@ pub mod numerical;
 pub mod operators;
 pub mod pack;
 pub mod patterns;
+pub mod polyfunc;
 pub mod quaternions;
 pub mod runtime;
 pub mod selectors;
@@ -108,6 +109,7 @@ const TABLES: &[&[(&str, Entry)]] = &[
     gts_prob::FUNCTIONS,
     dtw::FUNCTIONS,
     patterns::FUNCTIONS,
+    polyfunc::FUNCTIONS,
     selectors::FUNCTIONS,
     crate::aggregators::basic::FUNCTIONS,
     crate::aggregators::stats::FUNCTIONS,
@@ -288,6 +290,8 @@ mod operators_tests;
 mod pack_tests;
 #[cfg(test)]
 mod patterns_tests;
+#[cfg(test)]
+mod polyfunc_tests;
 #[cfg(test)]
 mod quaternions_tests;
 #[cfg(test)]

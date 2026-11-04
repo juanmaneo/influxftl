@@ -34,6 +34,16 @@ pub trait StackObject: fmt::Debug {
         format!("{} EVAL", self.to_snapshot())
     }
 
+    /// The type `TYPEOF` reports for the object pushed on the stack.
+    fn type_name(&self) -> &'static str {
+        "FUNCTION"
+    }
+
+    /// The object as an aggregator, when it can also serve as a mapper (`POLYFUNC`).
+    fn as_aggregator(&self) -> Option<&dyn crate::aggregators::Aggregator> {
+        None
+    }
+
     /// Invoke the function on `stack`.
     fn apply(&self, stack: &mut Stack) -> Result<()>;
 }
@@ -114,7 +124,17 @@ impl FunctionObject for StackFunction {
     }
 
     fn type_name(&self) -> &'static str {
-        "FUNCTION"
+        match &self.0 {
+            Callable::Object(object) => object.type_name(),
+            _ => "FUNCTION",
+        }
+    }
+
+    fn as_aggregator(&self) -> Option<&dyn crate::aggregators::Aggregator> {
+        match &self.0 {
+            Callable::Object(object) => object.as_aggregator(),
+            _ => None,
+        }
     }
 
     /// `'name' FUNCREF`, or the Java `toString()` of a function object built at run time.

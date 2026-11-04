@@ -207,7 +207,7 @@ The project is Apache-2.0 and must stay redistributable under it (see `README.md
 
 ## 9. Status and next steps
 
-1820 / 2193 functions are ported (`docs/FUNCTIONS.md`; the inventory includes the names
+1823 / 2193 functions are ported (`docs/FUNCTIONS.md`; the inventory includes the names
 Warp 10 registers through `Builder`s and constants). The Geo Time Series model, the
 `GTSHelper` transforms (time, datapoints, statistics), `BUCKETIZE` and `MAP` with the
 shared aggregators (`sum`, `mean`, `min`, `max`, `first`, `last`, `count`, `and`, `or`,
@@ -263,8 +263,12 @@ the order that unlocks the most:
    `curvefit_tests.rs`), `PROB` / `CPROB` / `PROBABILITY` (`functions/gts_prob.rs`) and
    `DTW` / `ZDTW` / `RAWDTW` / `OPTDTW` (`functions/dtw.rs`), `PATTERNS` /
    `PATTERNDETECTION` / `DISCORDS` and their `Z` forms (`functions/patterns.rs` on the SAX
-   breakpoints of `sax.rs`) are in. Next: `STL` (it reuses `pointwise_lowess`), `POLYFUNC`
-   and `RANDPDF` (function objects that are also mappers or need `java.util.Random`).
+   breakpoints of `sax.rs`), `POLYFUNC` and `RANDPDF` / `SRANDPDF` (`functions/polyfunc.rs`,
+   run-time function objects: `StackObject`s that `EVAL` applies and that may also be
+   aggregators) are in. Next: `STL` (it reuses `pointwise_lowess`, but relies on the
+   capacity of `GeoTimeSerie`'s arrays: port it on explicit arrays), the outlier tests
+   (`THRESHOLDTEST`, `ZSCORETEST`, `GRUBBSTEST`, `ESDTEST`, `HYBRIDTEST`… need Commons
+   Math's `TDistribution`).
 4. **GTS encoders** (`GTSEncoder` / `GTSDecoder`, Thrift compact + gzip wrappers): `WRAP` /
    `UNWRAP` and the `ENCODER` type; then the sorted `MERGE`, `->ENCODER`, `OPTIMIZE`.
 5. **BigDecimal** (`BD*`, `MUSIGMA`, `NSUMSUMSQ`, `LR`): either a spec-derived decimal

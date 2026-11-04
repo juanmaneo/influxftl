@@ -75,24 +75,25 @@ struct Problem {
     sqrt_weights: Vec<f64>,
 }
 
-impl Problem {
-    /// `PolynomialFunction.evaluate`: Horner's scheme from the highest coefficient.
-    fn value(coefficients: &[f64], x: f64) -> f64 {
-        let n = coefficients.len();
-        let mut result = coefficients[n - 1];
-        for j in (0..n - 1).rev() {
-            result = x * result + coefficients[j];
-        }
-        result
+/// `PolynomialFunction.evaluate`: Horner's scheme from the highest coefficient (there is at
+/// least one).
+pub fn polynomial_value(coefficients: &[f64], x: f64) -> f64 {
+    let n = coefficients.len();
+    let mut result = coefficients[n - 1];
+    for j in (0..n - 1).rev() {
+        result = x * result + coefficients[j];
     }
+    result
+}
 
+impl Problem {
     /// The weighted residuals `√w (target - model)` (`DenseWeightedEvaluation`).
     fn residuals(&self, point: &[f64]) -> Vec<f64> {
         self.x
             .iter()
             .zip(&self.target)
             .zip(&self.sqrt_weights)
-            .map(|((&x, &target), &w)| w * (target - Problem::value(point, x)))
+            .map(|((&x, &target), &w)| w * (target - polynomial_value(point, x)))
             .collect()
     }
 
