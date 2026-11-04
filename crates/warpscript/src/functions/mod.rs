@@ -13,6 +13,7 @@ pub mod collections;
 pub mod compression;
 pub mod control;
 pub mod crypto;
+pub mod dtw;
 pub mod functional;
 pub mod gts;
 pub mod gts_apply;
@@ -22,6 +23,7 @@ pub mod gts_frameworks;
 pub mod gts_lowess;
 pub mod gts_operators;
 pub mod gts_points;
+pub mod gts_prob;
 pub mod gts_reduce;
 pub mod gts_smoothing;
 pub mod gts_stats;
@@ -102,6 +104,8 @@ const TABLES: &[&[(&str, Entry)]] = &[
     gts_calendar::FUNCTIONS,
     gts_smoothing::FUNCTIONS,
     gts_lowess::FUNCTIONS,
+    gts_prob::FUNCTIONS,
+    dtw::FUNCTIONS,
     selectors::FUNCTIONS,
     crate::aggregators::basic::FUNCTIONS,
     crate::aggregators::stats::FUNCTIONS,
@@ -237,6 +241,8 @@ mod crypto_tests;
 #[cfg(test)]
 mod dedup_tests;
 #[cfg(test)]
+mod dtw_tests;
+#[cfg(test)]
 mod functional_tests;
 #[cfg(test)]
 mod gts_apply_tests;
@@ -252,6 +258,8 @@ mod gts_lowess_tests;
 mod gts_operators_tests;
 #[cfg(test)]
 mod gts_points_tests;
+#[cfg(test)]
+mod gts_prob_tests;
 #[cfg(test)]
 mod gts_reduce_tests;
 #[cfg(test)]

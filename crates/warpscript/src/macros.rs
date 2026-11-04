@@ -26,8 +26,13 @@ pub trait StackObject: fmt::Debug {
     /// The name reported in error messages (`Exception at '<name>'`).
     fn name(&self) -> &str;
 
-    /// The WarpScript source of the statement in a macro snapshot.
-    fn snapshot(&self) -> String;
+    /// The Java `toString()` of the object: the WarpScript that pushes it.
+    fn to_snapshot(&self) -> String;
+
+    /// The WarpScript source of the statement in a macro snapshot: the object, then `EVAL`.
+    fn snapshot(&self) -> String {
+        format!("{} EVAL", self.to_snapshot())
+    }
 
     /// Invoke the function on `stack`.
     fn apply(&self, stack: &mut Stack) -> Result<()>;
@@ -110,6 +115,14 @@ impl FunctionObject for StackFunction {
 
     fn type_name(&self) -> &'static str {
         "FUNCTION"
+    }
+
+    /// `'name' FUNCREF`, or the Java `toString()` of a function object built at run time.
+    fn snapshot(&self) -> String {
+        match &self.0 {
+            Callable::Object(object) => object.to_snapshot(),
+            _ => format!("'{}' FUNCREF", crate::format::url_encode(self.name())),
+        }
     }
 
     fn as_any(&self) -> Option<&dyn Any> {

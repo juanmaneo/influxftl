@@ -432,7 +432,7 @@ fn valuesplit(stack: &mut Stack) -> Result<()> {
 /// `GTSHelper.valueHistogram`: the number of occurrences of each value, in order of first
 /// appearance, plus the number of empty buckets under the `null` key for a bucketized
 /// series.
-fn value_histogram(gts: &GeoTimeSerie) -> Value {
+pub(super) fn value_counts(gts: &GeoTimeSerie) -> IndexMap<Value, i64> {
     let mut occurrences: IndexMap<Value, i64> = IndexMap::new();
     for i in 0..gts.size() {
         *occurrences.entry(gts.value_at(i)).or_insert(0) += 1;
@@ -440,8 +440,13 @@ fn value_histogram(gts: &GeoTimeSerie) -> Value {
     if gts.is_bucketized() && gts.bucketcount != gts.size() as i64 {
         occurrences.insert(Value::Null, gts.bucketcount.wrapping_sub(gts.size() as i64));
     }
+    occurrences
+}
+
+/// [`value_counts`] as a map value.
+fn value_histogram(gts: &GeoTimeSerie) -> Value {
     Value::map(
-        occurrences
+        value_counts(gts)
             .into_iter()
             .map(|(value, count)| (value, Value::Long(count)))
             .collect(),

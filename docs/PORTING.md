@@ -39,7 +39,13 @@ and for coding agents alike: follow it literally and `cargo xtask dev-check` sta
   settle a doubt, then embed the observed values in the tests as literals. Since `BUCKETIZE`
   is available on both sides, bucketized series can be built on the oracle with
   `[ gts bucketizer.sum 100 10 0 ] BUCKETIZE 0 GET` and in Rust tests with
-  `GeoTimeSerie::with_buckets`.
+  `GeoTimeSerie::with_buckets`. The image's fat jar (`podman cp
+  w10:/opt/warp10/bin/warp10-3.5.0.jar target/ref/`) also runs Warp 10's own classes on the
+  local JDK (a scratch `main` calling e.g. `DTW.compute` or `PolynomialCurveFitter`): use it
+  when the JDK 8 answer of the oracle differs from JDK 11+ (`Math.toRadians`, exception
+  texts). The oracle runs 3.5.0 while the reference sources are a later `master`: when they
+  disagree (a bug fixed since), the port follows the sources and the test overrides the
+  oracle's answer.
 - Geo Time Series internals (`GeoTimeSerie`, `GTSHelper`, `GTSEncoder`/`GTSDecoder`) are
   under `reference/warp10/warp10/src/main/java/io/warp10/continuum/gts/`; the GeoXP point
   conversions come from GeoXP Lib (`reference/geoxplib/`, Apache-2.0, see `NOTICE`).
@@ -201,7 +207,7 @@ The project is Apache-2.0 and must stay redistributable under it (see `README.md
 
 ## 9. Status and next steps
 
-1807 / 2193 functions are ported (`docs/FUNCTIONS.md`; the inventory includes the names
+1814 / 2193 functions are ported (`docs/FUNCTIONS.md`; the inventory includes the names
 Warp 10 registers through `Builder`s and constants). The Geo Time Series model, the
 `GTSHelper` transforms (time, datapoints, statistics), `BUCKETIZE` and `MAP` with the
 shared aggregators (`sum`, `mean`, `min`, `max`, `first`, `last`, `count`, `and`, `or`,
@@ -254,8 +260,10 @@ the order that unlocks the most:
    `DEDUP` with a mapper, `LOWESS` / `RLOWESS` and `POLYFIT` (`functions/gts_lowess.rs`,
    on the bit-exact port of Commons Math's `PolynomialCurveFitter` /
    `LevenbergMarquardtOptimizer` in `curvefit.rs`, checked against the Java library by
-   `curvefit_tests.rs`) are in. Next: `PROB` / `CPROB`, `PATTERNS` / `DISCORDS`, `DTW`,
-   `STL` (it reuses `pointwise_lowess`).
+   `curvefit_tests.rs`), `PROB` / `CPROB` / `PROBABILITY` (`functions/gts_prob.rs`) and
+   `DTW` / `ZDTW` / `RAWDTW` / `OPTDTW` (`functions/dtw.rs`) are in. Next: `PATTERNS` /
+   `PATTERNDETECTION` / `DISCORDS` and their `Z` forms (bSAX), `STL` (it reuses
+   `pointwise_lowess`), `POLYFUNC`, `RANDPDF`.
 4. **GTS encoders** (`GTSEncoder` / `GTSDecoder`, Thrift compact + gzip wrappers): `WRAP` /
    `UNWRAP` and the `ENCODER` type; then the sorted `MERGE`, `->ENCODER`, `OPTIMIZE`.
 5. **BigDecimal** (`BD*`, `MUSIGMA`, `NSUMSUMSQ`, `LR`): either a spec-derived decimal

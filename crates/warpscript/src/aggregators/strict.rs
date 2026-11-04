@@ -129,10 +129,10 @@ impl StackObject for StrictMacro {
         self.name
     }
 
-    /// The Java `toString()` followed by the `EVAL` the macro snapshot adds.
-    fn snapshot(&self) -> String {
+    /// The Java `toString()`.
+    fn to_snapshot(&self) -> String {
         format!(
-            "<% {} {} {} {} %> EVAL EVAL",
+            "<% {} {} {} {} %> EVAL",
             self.mapper.snapshot(true),
             self.bounds.min,
             self.bounds.max,

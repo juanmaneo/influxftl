@@ -568,6 +568,24 @@ unstable, order), `GeoTimeSerie.toString` and `dump` (`TOSTRING`), and the JSON 
   an `ArrayIndexOutOfBoundsException` (`-1`) there. `SINGLEEXPONENTIALSMOOTHING` and
   `DOUBLEEXPONENTIALSMOOTHING` sort their input in place and accept a `NaN` factor, as in
   Warp 10.
+- **`DTW` / `ZDTW` / `RAWDTW` on `'locations'` or `'elevations'`** compare the locations or
+  elevations of the datapoints. Warp 10 reads the whole backing arrays of the series
+  (`getOriginalLocations`), whose unused capacity (at least 64 slots for a series built by
+  `ADDVALUE`) holds zeros, i.e. extra datapoints at latitude -90, longitude -180 or at
+  elevation 0, which skew the min-max normalization of `DTW`; it also fills the elevations of
+  the second series using the length of the first one. Otherwise the family follows Warp 10,
+  quirks included: `ZDTW` divides the second series by its variance, `DoubleUtils.muvar`
+  shifts by the first zero value (and adds back a `n`-th of it), the first row of the warping
+  matrix starts from zeros, `OPTDTW` bounds the search with the distance found at position
+  `count - 1` of its heap array (not the `count`-th best one), the timestamps of a series
+  without datapoint fail with `NullPointerException`. The geographic distances use the JDK
+  9+ `Math.toRadians` (a multiplication), as Warp 10 does on a current JDK; on JDK 8 the last
+  digits differ.
+- **`PROB` / `CPROB` / `PROBABILITY`** follow Warp 10: `CPROB` with a separator sorts its
+  input by value in place and fails with `NullPointerException` when an event has leading or
+  trailing blanks (it counts the trimmed events but looks the untrimmed ones up). The
+  `PROBABILITY` function lists its values in insertion order in its snapshot (Warp 10:
+  `HashMap` order).
 - **`LOWESS` / `RLOWESS` / `POLYFIT`** compute bit-identical results (the polynomial fits
   of degree two and more go through a port of Commons Math's Levenberg-Marquardt optimizer,
   `curvefit.rs`) and keep Warp 10's quirks: a negative `RLOWESS` radius is truncated to `0`

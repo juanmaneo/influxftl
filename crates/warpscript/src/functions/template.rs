@@ -142,7 +142,7 @@ fn mustache_error(message: &str, line: u32) -> Error {
 }
 
 /// Java `String.trim()`.
-fn java_trim(s: &str) -> &str {
+pub(super) fn java_trim(s: &str) -> &str {
     s.trim_matches(|c: char| c <= ' ')
 }
 
