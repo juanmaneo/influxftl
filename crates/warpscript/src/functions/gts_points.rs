@@ -12,7 +12,9 @@ use super::Entry;
 use super::args::fail;
 use super::functional::java_double_compare;
 use super::gts::{gts_or_list, long_value, tuple_at_index};
+use super::gts_frameworks::{MapParams, map_gts};
 use super::misc::TIME_UNITS_PER_MS;
+use crate::aggregators::aggregator_of;
 use crate::error::{Error, Result};
 use crate::gts::{GeoTimeSerie, Gts, Metadata, Values};
 use crate::stack::Stack;
@@ -103,17 +105,39 @@ fn dedup_gts(gts: &GeoTimeSerie) -> GeoTimeSerie {
 }
 
 /// `DEDUP`: remove the duplicate ticks of a Geo Time Series or of every series of a (nested)
-/// list, keeping the last value of each tick.
+/// list, keeping the last value of each tick. With a macro or mapper on top, each series is
+/// mapped instead, the mapper being applied once per distinct tick (on the window of that
+/// tick alone, which holds all its datapoints).
 fn dedup(stack: &mut Stack) -> Result<()> {
     const NAME: &str = "DEDUP";
-    fn apply(value: &Value) -> Result<Value> {
+    fn apply(stack: &mut Stack, value: &Value, mapper: Option<&Value>) -> Result<Value> {
         match value {
-            Value::Gts(gts) => Ok(Value::Gts(dedup_gts(&gts.borrow()).shared())),
+            Value::Gts(gts) => match mapper {
+                None => Ok(Value::Gts(dedup_gts(&gts.borrow()).shared())),
+                Some(mapper) => {
+                    let params = MapParams {
+                        prewindow: 0,
+                        postwindow: 0,
+                        occurrences: 0,
+                        reversed: false,
+                        step: 1,
+                        override_tick: false,
+                        output_ticks: None,
+                        dedup: true,
+                    };
+                    let mut results = map_gts(stack, gts, mapper, &params)?;
+                    Ok(if results.len() == 1 {
+                        Value::Gts(results.remove(0))
+                    } else {
+                        Value::list(results.into_iter().map(Value::Gts).collect())
+                    })
+                }
+            },
             Value::List(list) => {
                 let items = list.borrow().clone();
                 let mut result = Vec::with_capacity(items.len());
                 for item in &items {
-                    result.push(apply(item)?);
+                    result.push(apply(stack, item, mapper)?);
                 }
                 Ok(Value::list(result))
             }
@@ -124,14 +148,14 @@ fn dedup(stack: &mut Stack) -> Result<()> {
         }
     }
     let top = stack.pop()?;
-    if matches!(top, Value::Macro(_) | Value::Function(_)) {
-        // `GTSHelper.map` with the macro or mapper: the `MAP` framework.
-        return Err(fail(
-            NAME,
-            "with a macro or mapper requires the MAP framework, which is not supported yet.",
-        ));
-    }
-    let result = apply(&top)?;
+    let is_mapper = matches!(top, Value::Macro(_))
+        || aggregator_of(&top).is_some_and(|aggregator| aggregator.roles().mapper);
+    let (mapper, target) = if is_mapper {
+        (Some(top), stack.pop()?)
+    } else {
+        (None, top)
+    };
+    let result = apply(stack, &target, mapper.as_ref())?;
     stack.push(result);
     Ok(())
 }

@@ -557,9 +557,17 @@ unstable, order), `GeoTimeSerie.toString` and `dump` (`TOSTRING`), and the JSON 
   tick (`0` or a stale value). The port sorts within bounds and otherwise follows Warp 10,
   including the stale `reversed` flag it consults to decide the reading direction of each
   half (`[ 3 1 2 ] true` values come out as ticks `3 2 1`).
-- **`DEDUP` with a macro or mapper** on top of the stack (`GTSHelper.map`) fails with `DEDUP
-  with a macro or mapper requires the MAP framework, which is not supported yet.` instead
-  of applying the mapper.
+- **`DEDUP` with a macro or mapper** runs `GTSHelper.map` in its deduplicating mode (one
+  application per distinct tick, on the window of that tick) like Warp 10, with the same
+  differences as `MAP` (§19).
+- **`LTTB` / `TLTTB`** reproduce Warp 10, quirks included: the reference vertex of every
+  triangle stays the first datapoint (Warp 10 never moves it), `TLTTB` divides by a time
+  bucket of `0` (`/ by zero`) on series spanning two time units, and small, `STRING` and
+  `BOOLEAN` series are returned as they are (the same object). A bucket whose triangles
+  all have a `NaN` area is skipped, as in the reference revision; Warp 10 3.5.0 fails with
+  an `ArrayIndexOutOfBoundsException` (`-1`) there. `SINGLEEXPONENTIALSMOOTHING` and
+  `DOUBLEEXPONENTIALSMOOTHING` sort their input in place and accept a `NaN` factor, as in
+  Warp 10.
 - **`LASTSORT` with series of mixed value types** compares the values as strings (`"10"`
   before `"2"`), an inconsistent order for which Java's TimSort and Rust's merge sort may
   produce different permutations; consistent comparisons (same type, or `LONG` / `DOUBLE`)
@@ -578,6 +586,24 @@ unstable, order), `GeoTimeSerie.toString` and `dump` (`TOSTRING`), and the JSON 
   `KURTOSIS` use the plain double arithmetic of their Java counterparts.
 
 ## 19. `BUCKETIZE`, `MAP` and the aggregators
+
+`BUCKETIZE.CALENDAR` / `UNBUCKETIZE.CALENDAR` are ports of `BUCKETIZECALENDAR` (the search
+of the index and offset of the last bucket, `durationBucketize`, `addNonNegativePeriod` and
+its error) on the `ADDDURATION` arithmetic of §14. Like Warp 10, `BUCKETIZE.CALENDAR`
+removes the time zone from the parameter list it is given, sorts its input series in place,
+hands the bucketizers the datapoints of each bucket most recent first and reuses a single
+sub-series for the macro bucketizers. The differences:
+
+- **The three calendar attributes are inserted in the order Warp 10's `HashMap` lists
+  them** (`.buckettimezone`, `.bucketduration`, `.bucketoffset`), after the attributes of the
+  input series (§18: insertion order elsewhere).
+- **Periods overflowing the date arithmetic** fail with `The calculation caused an
+  overflow.`; Joda reports its own limits (`Value cannot fit in an int: …`, `Value … for
+  year must be in the range [-292275054,292278993]`), and `chrono` stops at year ±262143
+  where Joda goes on to ±292 million. Periods with a field beyond a Java `int` parse
+  differently (Warp 10 ends with `/ by zero`).
+- **An empty duration** fails with the JDK 17+ text `Index 0 out of bounds for length 0`
+  (JDK 8: `String index out of range: 0`).
 
 `BUCKETIZE` is a port of `GTSHelper.bucketize` (parameter derivation included: a `0` last
 bucket aligns the last tick on the span, a `0` span derives from the count and a `-1` span

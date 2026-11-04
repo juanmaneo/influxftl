@@ -27,7 +27,7 @@ pub const FUNCTIONS: &[(&str, Entry)] = &[
 
 /// `MACROMAPPER.stackToObjects`: the `tick lat lon elevation value` a macro leaves on the
 /// stack, as a datapoint.
-fn datapoint_from_stack(stack: &mut Stack, value: Value) -> Result<Datapoint> {
+pub(super) fn datapoint_from_stack(stack: &mut Stack, value: Value) -> Result<Datapoint> {
     let elevation = stack.pop()?;
     let longitude = stack.pop()?;
     let latitude = stack.pop()?;
@@ -297,16 +297,18 @@ fn bucketize_gts(
 }
 
 /// The parameters of `GTSHelper.map`.
-struct MapParams {
-    prewindow: i64,
-    postwindow: i64,
+pub(super) struct MapParams {
+    pub(super) prewindow: i64,
+    pub(super) postwindow: i64,
     /// The number of applications (`0`: every tick), as an absolute value.
-    occurrences: i64,
-    reversed: bool,
-    step: i32,
-    override_tick: bool,
+    pub(super) occurrences: i64,
+    pub(super) reversed: bool,
+    pub(super) step: i32,
+    pub(super) override_tick: bool,
     /// The ticks to compute a result for instead of the series' own.
-    output_ticks: Option<Vec<i64>>,
+    pub(super) output_ticks: Option<Vec<i64>>,
+    /// Skip a tick equal to the previous one (`DEDUP` with a mapper).
+    pub(super) dedup: bool,
 }
 
 /// A datapoint produced by a mapper, with whether its tick is the `Integer` zero of a
@@ -570,7 +572,12 @@ impl ArgBuffers {
 /// `GTSHelper.map`: apply `mapper` to the sliding window around each tick of `gts` (or of the
 /// output ticks), producing the mapped series — several when the mapper names its outputs.
 /// The series is sorted in place.
-fn map_gts(stack: &mut Stack, gts: &Gts, mapper: &Value, params: &MapParams) -> Result<Vec<Gts>> {
+pub(super) fn map_gts(
+    stack: &mut Stack,
+    gts: &Gts,
+    mapper: &Value,
+    params: &MapParams,
+) -> Result<Vec<Gts>> {
     let mut mapped = gts.borrow().clone();
     let is_bucketized = mapped.is_bucketized();
     if mapped.size() == 0 && !is_bucketized && params.output_ticks.is_none() {
@@ -641,8 +648,13 @@ fn map_gts(stack: &mut Stack, gts: &Gts, mapper: &Value, params: &MapParams) -> 
                 tick
             }
         };
-        // Repeated input ticks map one datapoint each.
+        // Repeated input ticks map one datapoint each, unless deduplicating (they then count
+        // as a single occurrence).
         if idx != 0 && last_tick == tick {
+            if params.dedup {
+                idx += i64::from(params.step);
+                continue;
+            }
             duplicates += 1;
         } else {
             duplicates = 0;
@@ -871,6 +883,7 @@ fn map_with_params(stack: &mut Stack, params: &IndexMap<Value, Value>) -> Result
         step: step.max(1),
         override_tick,
         output_ticks,
+        dedup: false,
     };
     // A series, a list of series or a list of lists of series.
     let top = stack.pop()?;

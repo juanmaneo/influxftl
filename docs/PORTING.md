@@ -201,7 +201,7 @@ The project is Apache-2.0 and must stay redistributable under it (see `README.md
 
 ## 9. Status and next steps
 
-1797 / 2193 functions are ported (`docs/FUNCTIONS.md`; the inventory includes the names
+1804 / 2193 functions are ported (`docs/FUNCTIONS.md`; the inventory includes the names
 Warp 10 registers through `Builder`s and constants). The Geo Time Series model, the
 `GTSHelper` transforms (time, datapoints, statistics), `BUCKETIZE` and `MAP` with the
 shared aggregators (`sum`, `mean`, `min`, `max`, `first`, `last`, `count`, `and`, `or`,
@@ -249,8 +249,11 @@ the order that unlocks the most:
    `functions/gts_fill.rs`, with the Commons Math interpolators in `interpolation.rs`). Their
    tests are generated from the answers of the Warp 10 oracle to each script by throw-away
    scripts (kept under `target/`).
-3. **`DEDUP` with a mapper**, `UNBUCKETIZE`, `LTTB` / `TLTTB`, the exponential smoothings,
-   `PROB` / `CPROB`, `PATTERNS` / `DISCORDS`, `DTW`, `STL`, `LOWESS`.
+3. `BUCKETIZE.CALENDAR`, `UNBUCKETIZE.CALENDAR`, `UNBUCKETIZE` (`functions/gts_calendar.rs`),
+   `LTTB` / `TLTTB` and the exponential smoothings (`functions/gts_smoothing.rs`) are in.
+   Next: `LOWESS` / `RLOWESS` and `POLYFIT` (they need Commons Math's
+   `PolynomialCurveFitter`, i.e. its Levenberg-Marquardt optimizer), `PROB` / `CPROB`,
+   `PATTERNS` / `DISCORDS`, `DTW`, `STL`.
 4. **GTS encoders** (`GTSEncoder` / `GTSDecoder`, Thrift compact + gzip wrappers): `WRAP` /
    `UNWRAP` and the `ENCODER` type; then the sorted `MERGE`, `->ENCODER`, `OPTIMIZE`.
 5. **BigDecimal** (`BD*`, `MUSIGMA`, `NSUMSUMSQ`, `LR`): either a spec-derived decimal

@@ -869,7 +869,7 @@ fn humanduration(stack: &mut Stack) -> Result<()> {
 // -----------------------------------------------------------------------------------------
 
 /// `ADDDURATION.durationToPeriod`: a period and its sub-second offset in time units.
-fn duration_to_period(text: &str) -> Result<(Period, i64)> {
+pub(crate) fn duration_to_period(text: &str) -> Result<(Period, i64)> {
     let tokens: Vec<&str> = text.split('.').collect();
     if tokens.len() > 2 {
         return Err(Error::new("Invalid ISO8601 duration"));
@@ -880,9 +880,15 @@ fn duration_to_period(text: &str) -> Result<(Period, i64)> {
         let fraction = &tokens[1][..tokens[1].len().saturating_sub(1)];
         text = format!("{}S", tokens[0]);
         let value: f64 = format!("0.{fraction}").parse().map_err(|_| {
-            Error::new(format!(
-                "Parsing of sub second precision part of duration has failed. tried to parse: {fraction}"
-            ))
+            Error::with_cause(
+                format!(
+                    "Parsing of sub second precision part of duration has failed. tried to parse: {fraction}"
+                ),
+                Error::runtime(
+                    "java.lang.NumberFormatException",
+                    format!("For input string: \"0.{fraction}\""),
+                ),
+            )
         })?;
         offset = (value * TIME_UNITS_PER_S as f64) as i64;
     }

@@ -117,10 +117,6 @@ fn dedup_keeps_the_last_datapoint_of_each_tick() {
             "DEDUP expects a Geo Time Series instance or a list thereof under an optional macro or mapper.",
         );
     }
-    assert_fails(
-        &format!("{DUPES} <% %> DEDUP"),
-        "DEDUP with a macro or mapper requires the MAP framework, which is not supported yet.",
-    );
 }
 
 #[test]
