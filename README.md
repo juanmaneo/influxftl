@@ -285,7 +285,7 @@ obligations of its section 4:
 | [GeoXP](https://github.com/senx/geoxplib) (SenX S.A.S.) | Apache-2.0 | HHCode geo-indexing scheme |
 | [InfluxDB 3 Core](https://github.com/influxdata/influxdb) (InfluxData) | MIT or Apache-2.0 | **Runtime dependency only** — no InfluxDB source code is included; it is used through its HTTP API |
 | [mustache.java 0.9.6](https://github.com/spullara/mustache.java) (RightTime, Inc.) | Apache-2.0 | `TEMPLATE` (template compiler and renderer) |
-| [Apache Commons Math 3.6.1](https://commons.apache.org/math/) (ASF) | Apache-2.0 | numerical routines of `cmath.rs` |
+| [Apache Commons Math 3.6.1](https://commons.apache.org/math/) (ASF) | Apache-2.0 | numerical routines of `cmath.rs`, interpolators of `interpolation.rs`, Levenberg-Marquardt polynomial fitting of `curvefit.rs` |
 | [Bouncy Castle](https://www.bouncycastle.org) (Legion of the Bouncy Castle) | MIT-style | Argon2 engine of `ARGON2` |
 | [fdlibm](https://www.netlib.org/fdlibm/) (Sun Microsystems) | permissive Sun notice | `IEEEREMAINDER` algorithm |
 
@@ -329,7 +329,9 @@ This project would not exist without the work of others:
 - **[mustache.java](https://github.com/spullara/mustache.java)** (Sam Pullara, RightTime,
   Inc., Apache-2.0), whose compiler is ported for `TEMPLATE`.
 - **[Apache Commons Math](https://commons.apache.org/math/)** (The Apache Software
-  Foundation, Apache-2.0) for the numerical routines ported in `cmath.rs`.
+  Foundation, Apache-2.0) for the numerical routines ported in `cmath.rs`, the
+  interpolators of `interpolation.rs` and the Levenberg-Marquardt polynomial fitting of
+  `curvefit.rs`.
 - **[The Legion of the Bouncy Castle](https://www.bouncycastle.org)** (MIT-style license)
   for the Argon2 implementation ported for `ARGON2`.
 - **fdlibm** (Sun Microsystems) for the IEEE remainder algorithm.

@@ -70,8 +70,8 @@ port of the template compiler and renderer of mustache.java 0.9.6
 Apache Commons Math — Apache License, Version 2.0
 ========================================================================
 
-Numerical routines (crates/warpscript/src/cmath.rs) are ports of Apache
-Commons Math 3.6.1. From its NOTICE file:
+Numerical routines (crates/warpscript/src/cmath.rs, interpolation.rs and
+curvefit.rs) are ports of Apache Commons Math 3.6.1. From its NOTICE file:
 
    Apache Commons Math
    Copyright 2001-2016 The Apache Software Foundation

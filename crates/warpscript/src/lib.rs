@@ -19,6 +19,9 @@ pub mod aggregators;
 pub mod argon2;
 pub mod bitset;
 pub mod cmath;
+pub mod curvefit;
+#[cfg(test)]
+mod curvefit_tests;
 pub mod encoding;
 pub mod error;
 pub mod fillers;

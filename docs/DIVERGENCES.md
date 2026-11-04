@@ -568,6 +568,21 @@ unstable, order), `GeoTimeSerie.toString` and `dump` (`TOSTRING`), and the JSON 
   an `ArrayIndexOutOfBoundsException` (`-1`) there. `SINGLEEXPONENTIALSMOOTHING` and
   `DOUBLEEXPONENTIALSMOOTHING` sort their input in place and accept a `NaN` factor, as in
   Warp 10.
+- **`LOWESS` / `RLOWESS` / `POLYFIT`** compute bit-identical results (the polynomial fits
+  of degree two and more go through a port of Commons Math's Levenberg-Marquardt optimizer,
+  `curvefit.rs`) and keep Warp 10's quirks: a negative `RLOWESS` radius is truncated to `0`
+  (`(long) Math.pow(10, d)` is `0`), a first tick of `-1` is reported as a duplicate tick, a
+  tick skipped without radius (a series starting before `-1`) and a bucketized series with
+  missing values and locations or elevations fail with `NullPointerException`, and `POLYFIT`
+  never limits its iterations (Warp 10 drops the fitter `withMaxIterations` returns). The
+  Commons Math exceptions escape unwrapped with their own texts (`illegal state: maximal
+  count (2,147,483,647) exceeded: iterations`, `empty polynomials coefficients array`…).
+  The difference: **on non finite values** the optimizer cycles through the same state and
+  Warp 10 spins through 2³¹ iterations (minutes to hours) before raising
+  `TooManyIterationsException`; the port detects the cycle and raises it at once. A degree
+  below `-1` fails with the JDK 11+ `NegativeArraySizeException` text (`-1`; JDK 8: none),
+  robustness iterations on a series without datapoint with `Index 0 out of bounds for
+  length 0` (JDK 8: `0`).
 - **`LASTSORT` with series of mixed value types** compares the values as strings (`"10"`
   before `"2"`), an inconsistent order for which Java's TimSort and Rust's merge sort may
   produce different permutations; consistent comparisons (same type, or `LONG` / `DOUBLE`)
