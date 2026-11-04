@@ -33,14 +33,14 @@ and for coding agents alike: follow it literally and `cargo xtask dev-check` sta
   `podman run -d --name w10 -p 18080:8080 docker.io/warp10io/warp10:3.5.0-alpine` (about 40 s
   to start) and answers `curl --data-binary 'script' http://127.0.0.1:18080/api/v0/exec`: the
   response is the stack as a JSON array, **top of the stack first**; errors come in the
-  `X-Warp10-Error-Message` header. `target/w10.sh 'script'` (recreate it under `target/`, see
-  §6) wraps that. The image runs JDK 8, whose exception texts (`-1`, `java.lang.String cannot
+  `X-Warp10-Error-Message` header. `port_helpers/w10.sh 'script'` (recreate it under the
+  git-ignored `port_helpers/`, see §6) wraps that. The image runs JDK 8, whose exception texts (`-1`, `java.lang.String cannot
   be cast to java.lang.Number`) differ from the JDK 11+ texts the port reproduces. Use it to
   settle a doubt, then embed the observed values in the tests as literals. Since `BUCKETIZE`
   is available on both sides, bucketized series can be built on the oracle with
   `[ gts bucketizer.sum 100 10 0 ] BUCKETIZE 0 GET` and in Rust tests with
   `GeoTimeSerie::with_buckets`. The image's fat jar (`podman cp
-  w10:/opt/warp10/bin/warp10-3.5.0.jar target/ref/`) also runs Warp 10's own classes on the
+  w10:/opt/warp10/bin/warp10-3.5.0.jar port_helpers/ref/`) also runs Warp 10's own classes on the
   local JDK (a scratch `main` calling e.g. `DTW.compute` or `PolynomialCurveFitter`): use it
   when the JDK 8 answer of the oracle differs from JDK 11+ (`Math.toRadians`, exception
   texts). The oracle runs 3.5.0 while the reference sources are a later `master`: when they
@@ -143,17 +143,20 @@ Test stacks (`crate::tests::test_stack`) have unlimited limits and the `limits` 
 
 `cargo xtask dev-check` takes about seven minutes (Kani included) and `cargo xtask coverage`
 about two. Run them detached from the editor so that closing it never kills the run, e.g.
-with the helper kept out of the sources in `target/bgjob.sh`:
+with the helper kept out of the sources in the git-ignored `port_helpers/bgjob.sh` (not
+under `target/`, which `cargo clean` wipes):
 
 ```
-target/bgjob.sh run devcheck /path/to/influxftl 'cargo xtask dev-check'
-target/bgjob.sh wait devcheck 700 ; tail -3 /tmp/influxftl-jobs/devcheck.log
+port_helpers/bgjob.sh run devcheck /path/to/influxftl 'cargo xtask dev-check'
+port_helpers/bgjob.sh wait devcheck 700 ; tail -3 /tmp/influxftl-jobs/devcheck.log
 ```
 
 (`run <name> <dir> '<cmd>'`, `status [name]`, `log <name> [lines]`, `wait <name> [seconds]`;
-the script is a `setsid nohup` wrapper writing `/tmp/influxftl-jobs/<name>.{log,pid,exit}`.)
+each job runs as its own `systemd-run --user` transient service with a memory ceiling, so a
+runaway build is OOM-killed alone instead of the editor, with a `setsid nohup` fallback
+without systemd; it writes `/tmp/influxftl-jobs/<name>.{log,pid,exit}`.)
 
-The oracle wrapper `target/w10.sh` is a four-liner: `curl -s -D - --data-binary "$1"
+The oracle wrapper `port_helpers/w10.sh` is a four-liner: `curl -s -D - --data-binary "$1"
 http://127.0.0.1:18080/api/v0/exec`, printing the `X-Warp10-Error-Message` header when
 present and the body (the JSON stack) otherwise.
 
@@ -254,7 +257,7 @@ the order that unlocks the most:
    `FILLNEXT`, `FILLVALUE`, `FILLTICKS` and `INTERPOLATE` are in (`fillers.rs`,
    `functions/gts_fill.rs`, with the Commons Math interpolators in `interpolation.rs`). Their
    tests are generated from the answers of the Warp 10 oracle to each script by throw-away
-   scripts (kept under `target/`).
+   scripts (kept in the git-ignored `port_helpers/`).
 3. `BUCKETIZE.CALENDAR`, `UNBUCKETIZE.CALENDAR`, `UNBUCKETIZE` (`functions/gts_calendar.rs`),
    `LTTB` / `TLTTB` and the exponential smoothings (`functions/gts_smoothing.rs`),
    `DEDUP` with a mapper, `LOWESS` / `RLOWESS` and `POLYFIT` (`functions/gts_lowess.rs`,

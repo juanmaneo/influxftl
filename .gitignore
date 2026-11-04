@@ -8,6 +8,10 @@
 /*.profraw
 /*.profdata
 
+# local porting helpers (oracle wrapper, probes, test generators, Java reference jars);
+# kept out of the sources and out of `target/` so `cargo clean` does not wipe them
+/port_helpers
+
 # read-only sparse checkout of the Warp 10 reference sources (see README §2)
 /reference
 
