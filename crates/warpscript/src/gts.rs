@@ -290,6 +290,17 @@ impl PartialEq for Metadata {
 }
 
 impl Metadata {
+    /// `GTSHelper.rename` on the class name: a name starting with `+` is appended to the
+    /// current one.
+    pub fn rename(&mut self, name: &str) {
+        let new_name = match name.strip_prefix('+') {
+            // `null + suffix` is `"null" + suffix` in Java.
+            Some(suffix) => format!("{}{suffix}", self.name.as_deref().unwrap_or("null")),
+            None => name.to_owned(),
+        };
+        self.name = Some(new_name);
+    }
+
     /// `GTSHelper.relabel`: apply `changes` to the labels. A `null` key means the existing
     /// labels are discarded first; a `null` or empty value removes the label.
     pub fn relabel(&mut self, changes: &[(Option<&str>, Option<&str>)]) {
@@ -858,15 +869,7 @@ impl GeoTimeSerie {
 
     /// `GTSHelper.rename`: set the name, or append to it when `name` starts with `+`.
     pub fn rename(&mut self, name: &str) {
-        let new_name = match name.strip_prefix('+') {
-            // `null + suffix` is `"null" + suffix` in Java.
-            Some(suffix) => format!(
-                "{}{suffix}",
-                self.metadata.name.as_deref().unwrap_or("null")
-            ),
-            None => name.to_owned(),
-        };
-        self.metadata.name = Some(new_name);
+        self.metadata.rename(name);
         self.renamed = true;
     }
 }

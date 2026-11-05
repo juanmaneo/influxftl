@@ -889,3 +889,91 @@ fn series_as_values() {
         Value::from("GTS")
     );
 }
+
+#[test]
+fn makegts() {
+    let json = |script: &str| top(&format!("{script} MAKEGTS ->JSON")).to_string();
+    let meta = r#""c":"","l":{},"a":{},"la":0"#;
+    for (script, values) in [
+        (
+            "[ 1 2 3 ] [ 10 20 ] [ 1 ] [ 5 6 7 ] [ 'a' 'b' ]",
+            r#"[[1,9.999999990686774,0.9999999403953552,5,"a"],[2,6,"b"],[3,7,"b"]]"#,
+        ),
+        ("[ ] [ ] [ ] [ ] [ 'a' 'b' ]", r#"[[0,"a"],[1,"b"]]"#),
+        ("[ ] [ ] [ ] [ ] [ ]", "[]"),
+        ("[ 3 ] [ ] [ ] [ ] [ 1 2 3 ]", "[[3,1],[4,2],[5,3]]"),
+        (
+            "[ 1.5 2 ] [ 1 ] [ 2 ] [ 2.7 ] [ 1 2.5 'x' NULL ]",
+            "[[1,0.9999999823048711,1.9999999646097422,2,1],[2,2],[3,0]]",
+        ),
+        (
+            "[ 1 ] [ NaN ] [ 2 ] [ ] [ 1 ]",
+            "[[1,-90.0,1.9999999646097422,1]]",
+        ),
+        ("[ 1 ] [ 1 ] [ 2 ] [ ] [ NEWGTS ]", "[]"),
+        (
+            "[ MAXLONG ] [ ] [ ] [ ] [ 1 2 ]",
+            "[[9223372036854775807,1],[-9223372036854775808,2]]",
+        ),
+        ("[ 1 ] [ ] [ ] [ NaN ] [ 1 ]", "[[1,0,1]]"),
+    ] {
+        assert_eq!(
+            json(script),
+            format!(r#"{{{meta},"v":{values}}}"#),
+            "{script}"
+        );
+    }
+    for (script, message) in [
+        (
+            "[ ] [ ] [ ] [ 1 ] [ ]",
+            "Index -1 out of bounds for length 0",
+        ),
+        (
+            "[ 1 ] [ ] [ ] [ ] [ ]",
+            "Index -1 out of bounds for length 0",
+        ),
+        (
+            "[ 'x' ] [ ] [ ] [ ] [ 1 ]",
+            "class java.lang.String cannot be cast to class java.lang.Number",
+        ),
+        (
+            "[ ] [ 'x' ] [ 1 ] [ ] [ 1 ]",
+            "class java.lang.String cannot be cast to class java.lang.Number",
+        ),
+        (
+            "[ ] [ 1 ] [ 'x' ] [ ] [ 1 ]",
+            "class java.lang.String cannot be cast to class java.lang.Number",
+        ),
+        (
+            "[ ] [ ] [ ] [ 'x' ] [ 1 ]",
+            "class java.lang.String cannot be cast to class java.lang.Number",
+        ),
+        ("[ ] [ ] [ ] [ NULL ] [ 1 ]", "NullPointerException"),
+        ("[ NULL ] [ ] [ ] [ ] [ 1 ]", "NullPointerException"),
+        ("[ ] [ NULL ] [ 1 ] [ ] [ 1 ]", "NullPointerException"),
+        ("[ ] [ 1 ] [ NULL ] [ ] [ 1 ]", "NullPointerException"),
+        (
+            "[ ] [ ] [ ] [ ] 42",
+            "MAKEGTS expects a list of values on top of the stack.",
+        ),
+        (
+            "[ ] [ ] [ ] 42 [ ]",
+            "MAKEGTS expects a list of elevations below the list of values.",
+        ),
+        (
+            "[ ] [ ] 42 [ ] [ ]",
+            "MAKEGTS expects a list of longitudes below the list of elevations.",
+        ),
+        (
+            "[ ] 42 [ ] [ ] [ ]",
+            "MAKEGTS expects a list of latitudes below the list of longitudes.",
+        ),
+        (
+            "42 [ ] [ ] [ ] [ ]",
+            "MAKEGTS expects a list of ticks below the list of latitudes.",
+        ),
+        ("[ ] [ ] [ ] [ ]", "Empty stack."),
+    ] {
+        assert_fails(&format!("{script} MAKEGTS"), message);
+    }
+}

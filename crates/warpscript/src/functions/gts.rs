@@ -1,7 +1,7 @@
 // Copyright 2026 The influxftl Authors. Licensed under the Apache License, Version 2.0.
 // Derived from Warp 10 (Copyright 2018-2026 SenX S.A.S., Apache-2.0), ported to Rust and modified.
 
-//! Geo Time Series construction and inspection: `NEWGTS`, `ADDVALUE`, `RENAME`, `RELABEL`,
+//! Geo Time Series construction and inspection: `NEWGTS`, `MAKEGTS`, `ADDVALUE`, `RENAME`, `RELABEL`,
 //! `TICKS`, `VALUES`, `SORT`, `ATINDEX`…
 
 use std::collections::BTreeSet;
@@ -11,13 +11,14 @@ use super::args::{compute_and_check_index, fail, fail_with_cause};
 use super::misc::TIME_UNITS_PER_MS;
 use crate::error::{Error, Result};
 use crate::geoxp;
-use crate::gts::{GeoTimeSerie, Gts, NO_ELEVATION, NO_LOCATION};
+use crate::gts::{GeoTimeSerie, Gts, Metadata, NO_ELEVATION, NO_LOCATION};
 use crate::stack::Stack;
 use crate::value::Value;
 
 /// The functions of this module.
 pub const FUNCTIONS: &[(&str, Entry)] = &[
     ("NEWGTS", Entry::Stack(newgts)),
+    ("MAKEGTS", Entry::Stack(makegts)),
     ("ADDVALUE", Entry::Stack(addvalue)),
     ("SETVALUE", Entry::Stack(setvalue)),
     ("REMOVETICK", Entry::Stack(removetick)),
@@ -166,6 +167,61 @@ pub(super) fn tuple_at_index(gts: &GeoTimeSerie, idx: Option<usize>) -> Value {
 /// `NEWGTS`: an empty Geo Time Series named `""`.
 fn newgts(stack: &mut Stack) -> Result<()> {
     let mut gts = GeoTimeSerie::new();
+    gts.metadata.name = Some(String::new());
+    stack.push(Value::Gts(gts.shared()));
+    Ok(())
+}
+
+/// `MAKEGTS`: a series built from lists of ticks, latitudes, longitudes, elevations and values,
+/// as long as the longest list. Missing ticks follow the previous one, missing values repeat the
+/// last one, missing elevations and locations are absent.
+fn makegts(stack: &mut Stack) -> Result<()> {
+    const NAME: &str = "MAKEGTS";
+    let mut pop_list = |what: &str| match stack.pop()? {
+        Value::List(list) => Ok(list.borrow().clone()),
+        _ => Err(fail(NAME, &format!("expects a list of {what}"))),
+    };
+    let values = pop_list("values on top of the stack.")?;
+    let elevations = pop_list("elevations below the list of values.")?;
+    let longitudes = pop_list("longitudes below the list of elevations.")?;
+    let latitudes = pop_list("latitudes below the list of longitudes.")?;
+    let ticks = pop_list("ticks below the list of latitudes.")?;
+    // `((Number) o)`: a `NullPointerException` for `null`, a `ClassCastException` otherwise.
+    let number = |value: &Value| match value {
+        Value::Null => Err(Error::null_pointer()),
+        _ if value.is_number() => Ok(value.clone()),
+        _ => Err(Error::class_cast(value.java_class(), "java.lang.Number")),
+    };
+    let len = [&values, &elevations, &longitudes, &latitudes, &ticks]
+        .iter()
+        .map(|list| list.len())
+        .max()
+        .unwrap_or_default();
+    let mut gts = GeoTimeSerie::new();
+    let mut lasttick = -1i64;
+    for i in 0..len {
+        let value = values
+            .get(i)
+            .or_else(|| values.last())
+            .ok_or_else(|| Error::index_out_of_bounds(-1, 0))?;
+        let elevation = match elevations.get(i) {
+            Some(elevation) => number(elevation)?.as_i64().unwrap_or_default(),
+            None => NO_ELEVATION,
+        };
+        let location = match (latitudes.get(i), longitudes.get(i)) {
+            (Some(lat), Some(lon)) => {
+                let lat = number(lat)?.as_f64().unwrap_or_default();
+                let lon = number(lon)?.as_f64().unwrap_or_default();
+                geoxp::to_geoxp_point(lat, lon)
+            }
+            _ => NO_LOCATION,
+        };
+        lasttick = match ticks.get(i) {
+            Some(tick) => number(tick)?.as_i64().unwrap_or_default(),
+            None => lasttick.wrapping_add(1),
+        };
+        gts.set_value(lasttick, location, elevation, value, false);
+    }
     gts.metadata.name = Some(String::new());
     stack.push(Value::Gts(gts.shared()));
     Ok(())
@@ -362,15 +418,32 @@ fn removetick(stack: &mut Stack) -> Result<()> {
 
 /// `NAME`: the class name of a Geo Time Series.
 fn name(stack: &mut Stack) -> Result<()> {
-    let Value::Gts(gts) = stack.pop()? else {
-        return Err(fail(
-            "NAME",
-            "expects a Geo Time Series or encoder instance on top of the stack.",
-        ));
-    };
-    let name = gts.borrow().name().map_or(Value::Null, Value::from);
+    let name = pop_metadata(stack, "NAME", |metadata| {
+        metadata.name.as_deref().map_or(Value::Null, Value::from)
+    })?;
     stack.push(name);
     Ok(())
+}
+
+/// `f` applied to the metadata of a Geo Time Series or of an encoder, `None` for any other
+/// value.
+fn with_metadata<T>(value: &Value, f: impl FnOnce(&mut Metadata) -> T) -> Option<T> {
+    match value {
+        Value::Gts(gts) => Some(f(&mut gts.borrow_mut().metadata)),
+        Value::Encoder(encoder) => Some(f(&mut encoder.borrow_mut().metadata)),
+        _ => None,
+    }
+}
+
+/// [`with_metadata`] on the value popped from the stack, which must be a Geo Time Series or
+/// an encoder.
+fn pop_metadata<T>(stack: &mut Stack, name: &str, f: impl FnOnce(&mut Metadata) -> T) -> Result<T> {
+    with_metadata(&stack.pop()?, f).ok_or_else(|| {
+        fail(
+            name,
+            "expects a Geo Time Series or encoder instance on top of the stack.",
+        )
+    })
 }
 
 /// `RENAME`: set the class name of a Geo Time Series (or of each of a list); a name starting
@@ -385,6 +458,10 @@ fn rename(stack: &mut Stack) -> Result<()> {
             gts.borrow_mut().rename(&new_name);
             Ok(element.clone())
         }
+        Value::Encoder(encoder) => {
+            encoder.borrow_mut().metadata.rename(&new_name);
+            Ok(element.clone())
+        }
         _ => Err(fail(
             NAME,
             "expects a GeoTimeSeries, a GTSEncoder or a list thereof under the new name.",
@@ -394,22 +471,16 @@ fn rename(stack: &mut Stack) -> Result<()> {
 
 /// The labels or attributes of the Geo Time Series on top of the stack, as a new map.
 fn metadata_map(stack: &mut Stack, name: &str, attributes: bool) -> Result<()> {
-    let Value::Gts(gts) = stack.pop()? else {
-        return Err(fail(
-            name,
-            "expects a Geo Time Series or encoder instance on top of the stack.",
-        ));
-    };
-    let gts = gts.borrow();
-    let map = if attributes {
-        &gts.metadata.attributes
-    } else {
-        &gts.metadata.labels
-    };
-    let entries = map
-        .iter()
-        .map(|(k, v)| (Value::from(k.as_str()), Value::from(v.as_str())))
-        .collect();
+    let entries = pop_metadata(stack, name, |metadata| {
+        let map = if attributes {
+            &metadata.attributes
+        } else {
+            &metadata.labels
+        };
+        map.iter()
+            .map(|(k, v)| (Value::from(k.as_str()), Value::from(v.as_str())))
+            .collect()
+    })?;
     stack.push(Value::map(entries));
     Ok(())
 }
@@ -433,15 +504,16 @@ fn relabel(stack: &mut Stack) -> Result<()> {
     let Some(changes) = string_entries(map.iter()) else {
         return Err(fail(NAME, "keys and values MUST be STRING or NULL"));
     };
-    element_or_list(stack, |element| match element {
-        Value::Gts(gts) => {
-            gts.borrow_mut().metadata.relabel(&changes);
-            Ok(element.clone())
-        }
-        _ => Err(fail(
-            NAME,
-            "expects a Geo Time Series, a GTSEncoder or a list thereof under the labels parameter.",
-        )),
+    element_or_list(stack, |element| {
+        with_metadata(element, |metadata| metadata.relabel(&changes))
+            .map(|()| element.clone())
+            .ok_or_else(|| {
+                fail(
+                    NAME,
+                    "expects a Geo Time Series, a GTSEncoder or a list thereof under the labels \
+                     parameter.",
+                )
+            })
     })
 }
 
@@ -454,12 +526,12 @@ fn setattributes(stack: &mut Stack) -> Result<()> {
     };
     let map = map.borrow();
     element_or_list(stack, |element| {
-        let Value::Gts(gts) = element else {
+        if !matches!(element, Value::Gts(_) | Value::Encoder(_)) {
             return Err(fail(
                 NAME,
                 "expects a GeoTimeSeries, a GTSEncoder or a list thereof under the attribute map.",
             ));
-        };
+        }
         // Unlike `RELABEL`, the entries are checked for each series, `null` keys skipped.
         let Some(changes) = string_entries(map.iter().filter(|(k, _)| !k.is_null())) else {
             return Err(fail(
@@ -467,24 +539,19 @@ fn setattributes(stack: &mut Stack) -> Result<()> {
                 "attribute key and value MUST be of type String.",
             ));
         };
-        let mut gts = gts.borrow_mut();
-        if map.contains_key(&Value::Null) {
-            gts.metadata.attributes.clear();
-        }
-        gts.metadata.update_attributes(&changes);
+        with_metadata(element, |metadata| {
+            if map.contains_key(&Value::Null) {
+                metadata.attributes.clear();
+            }
+            metadata.update_attributes(&changes);
+        });
         Ok(element.clone())
     })
 }
 
 /// `LASTACTIVITY`: the last activity timestamp of a Geo Time Series, in time units.
 fn lastactivity(stack: &mut Stack) -> Result<()> {
-    let Value::Gts(gts) = stack.pop()? else {
-        return Err(fail(
-            "LASTACTIVITY",
-            "expects a Geo Time Series or encoder instance on top of the stack.",
-        ));
-    };
-    let last_activity = gts.borrow().metadata.last_activity;
+    let last_activity = pop_metadata(stack, "LASTACTIVITY", |metadata| metadata.last_activity)?;
     stack.push(Value::Long(last_activity.wrapping_mul(TIME_UNITS_PER_MS)));
     Ok(())
 }

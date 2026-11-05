@@ -894,3 +894,7 @@ their JDK 11+ messages). The differences:
   owns its copy.
 - **Not ported**: the AES wrapping keys of encoders (encrypted blocks are skipped like a
   decoder without key does) and read-only encoders, neither of which WarpScript can create.
+- **`OPTIMIZE` only checks its arguments**: Rust vectors are not over-allocated the way the
+  Java arrays of series and encoder buffers are, so there is no spare capacity to release.
+- **`ENCODER->` pushes copies** of the labels and attributes maps; Java pushes the maps of
+  the decoder metadata themselves, which a later `PUT` on them would modify.

@@ -210,7 +210,7 @@ The project is Apache-2.0 and must stay redistributable under it (see `README.md
 
 ## 9. Status and next steps
 
-1835 / 2193 functions are ported (`docs/FUNCTIONS.md`; the inventory includes the names
+1842 / 2193 functions are ported (`docs/FUNCTIONS.md`; the inventory includes the names
 Warp 10 registers through `Builder`s and constants). The Geo Time Series model, the
 `GTSHelper` transforms (time, datapoints, statistics), `BUCKETIZE` and `MAP` with the
 shared aggregators (`sum`, `mean`, `min`, `max`, `first`, `last`, `count`, `and`, `or`,
@@ -276,13 +276,17 @@ the order that unlocks the most:
    library layer is in — `thrift.rs` (the `GTSWrapper` / `Metadata` compact protocol of
    libthrift 0.17, malformed input included) and `encoder.rs` (`GTSEncoder`,
    `GTSDecoder`, `Varint`, the `BigDecimal` values of optimized doubles and the
-   `GTSWrapperHelper` conversions), checked byte for byte against the oracle. Next: the
-   `Value::Encoder` type (`GTSENCODER`), then `NEWENCODER`, the `WRAP` family
-   (`WRAP`, `WRAPRAW`, `WRAPFAST`, `WRAPOPT`, `WRAPRAWOPT`, `WRAPMV`), `UNWRAP`,
-   `UNWRAPEMPTY`, `UNWRAPSIZE`, `UNWRAPENCODER`, `->ENCODER`, `ENCODER->`, `ASENCODERS`,
-   `->ENCODERS`, `->GTS`, `OPTIMIZE`, `MAKEGTS`, `PARSEVALUE`, the encoder `SNAPSHOT`
-   (`'…' UNWRAPENCODER`) and `->JSON`; then the existing GTS functions that also accept
-   encoders and the MV functions.
+   `GTSWrapperHelper` conversions), checked byte for byte against the oracle. The WarpScript
+   layer (`functions/encoders.rs`) has the `Value::Encoder` type (`GTSENCODER`, its
+   `SNAPSHOT` as `'…' UNWRAPENCODER` and its `->JSON`), `NEWENCODER`, the `WRAP` family,
+   `UNWRAP`, `UNWRAPEMPTY`, `UNWRAPSIZE`, `UNWRAPENCODER`, `->ENCODER`, `ENCODER->`,
+   `ASENCODERS`, `->ENCODERS`, `->GTS` and `OPTIMIZE`; `MAKEGTS` is in `functions/gts.rs`,
+   and `NAME`, `RENAME`, `LABELS`, `RELABEL`, `ATTRIBUTES`, `SETATTRIBUTES` and
+   `LASTACTIVITY` accept encoders. Next: the GTS `SNAPSHOT` as `'…' UNWRAP`, `PARSEVALUE`
+   (`GTSHelper.parseValue`, with its nested `[ … ]` encoders), `ADDVALUE` / `SETVALUE` on
+   encoders and series or encoders as values (stored wrapped), the other GTS functions that
+   accept encoders (`CHUNK`, `CLIP`, `CLONE`, `SIZE`, `TICKLIST`, `TIMECLIP`, `VALUES`…) and
+   the MV functions.
 5. **BigDecimal** (`BD*`, `MUSIGMA`, `NSUMSUMSQ`, `LR`): either a spec-derived decimal
    implementation or a vetted crate (`cargo deny` compatible).
 6. **Geo** (`GeoXPLib` shapes, `HAVERSINE`, `LOCATIONOFFSET`, `GEO.*`), **datastore**

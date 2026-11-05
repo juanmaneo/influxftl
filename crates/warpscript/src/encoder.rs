@@ -1065,13 +1065,19 @@ impl GtsDecoder {
         let mut gts = GeoTimeSerie::new();
         gts.metadata = self.metadata.clone();
         while self.next()? {
-            let (tick, location, elevation) = (self.timestamp(), self.location(), self.elevation());
-            match self.value() {
-                EncodedValue::Decimal(d) => gts.set_decimal(tick, location, elevation, d),
-                other => gts.set_value(tick, location, elevation, &other.to_value(), false),
-            }
+            self.set_value_on(&mut gts);
         }
         Ok(gts)
+    }
+
+    /// `GTSHelper.setValue(gts, timestamp, location, elevation, getBinaryValue(), false)`:
+    /// append the current datapoint to `gts`, converted to its type.
+    pub fn set_value_on(&self, gts: &mut GeoTimeSerie) {
+        let (tick, location, elevation) = (self.timestamp(), self.location(), self.elevation());
+        match self.binary_value() {
+            EncodedValue::Decimal(d) => gts.set_decimal(tick, location, elevation, d),
+            other => gts.set_value(tick, location, elevation, &other.to_value(), false),
+        }
     }
 }
 
@@ -1218,10 +1224,17 @@ pub fn wrapper_to_encoder(wrapper: &GtsWrapper) -> Result<GtsEncoder> {
         encoder.metadata = metadata;
         return Ok(encoder);
     }
-    let bytes = unwrap_encoded(wrapper, encoded)?;
-    let mut decoder = GtsDecoder::new(wrapper.base(), Rc::from(bytes));
-    decoder.metadata = metadata;
-    decoder.count = wrapper.count();
+    let mut decoder = wrapper_to_decoder(wrapper)?;
     decoder.next()?;
     decoder.encoder()
+}
+
+/// `GTSWrapperHelper.fromGTSWrapperToGTSDecoder`.
+pub fn wrapper_to_decoder(wrapper: &GtsWrapper) -> Result<GtsDecoder> {
+    let encoded = wrapper.encoded.as_deref().ok_or_else(Error::null_pointer)?;
+    let bytes = unwrap_encoded(wrapper, encoded)?;
+    let mut decoder = GtsDecoder::new(wrapper.base(), Rc::from(bytes));
+    decoder.metadata = wrapper.metadata.clone().unwrap_or_default();
+    decoder.count = wrapper.count();
+    Ok(decoder)
 }
