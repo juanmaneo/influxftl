@@ -20,6 +20,7 @@ use std::rc::Rc;
 use indexmap::{IndexMap, IndexSet};
 
 use crate::bitset::BitSet;
+use crate::encoder::GtsEncoder;
 use crate::format::java_double_to_string;
 use crate::gts::Gts;
 use crate::macros::Macro;
@@ -110,7 +111,12 @@ pub enum Value {
     Counter(Rc<Cell<i64>>),
     /// `GTS`: a Geo Time Series, shared and mutable like the Java object.
     Gts(Gts),
+    /// `GTSENCODER`: an encoder of datapoints, shared and mutable like the Java object.
+    Encoder(Encoder),
 }
+
+/// A `GTSENCODER` as held by the stack.
+pub type Encoder = Rc<RefCell<GtsEncoder>>;
 
 impl Value {
     /// Build a string value.
@@ -157,6 +163,7 @@ impl Value {
             Value::Context(_) => "CONTEXT",
             Value::Counter(_) => "COUNTER",
             Value::Gts(_) => "GTS",
+            Value::Encoder(_) => "GTSENCODER",
         }
     }
 
@@ -180,6 +187,7 @@ impl Value {
             Value::Context(_) => "io.warp10.script.MemoryWarpScriptStack$StackContext",
             Value::Counter(_) => "java.util.concurrent.atomic.AtomicLong",
             Value::Gts(_) => "io.warp10.continuum.gts.GeoTimeSerie",
+            Value::Encoder(_) => "io.warp10.continuum.gts.GTSEncoder",
         }
     }
 
@@ -240,6 +248,7 @@ impl Value {
             (Value::Context(a), Value::Context(b)) => Rc::ptr_eq(a, b),
             (Value::Counter(a), Value::Counter(b)) => Rc::ptr_eq(a, b),
             (Value::Gts(a), Value::Gts(b)) => Rc::ptr_eq(a, b),
+            (Value::Encoder(a), Value::Encoder(b)) => Rc::ptr_eq(a, b),
             (Value::String(a), Value::String(b)) => Rc::ptr_eq(a, b),
             (Value::Bytes(a), Value::Bytes(b)) => Rc::ptr_eq(a, b),
             _ => false,
@@ -281,7 +290,8 @@ impl PartialEq for Value {
             | (Value::Function(_), Value::Function(_))
             | (Value::Context(_), Value::Context(_))
             | (Value::Counter(_), Value::Counter(_))
-            | (Value::Gts(_), Value::Gts(_)) => self.same_object(other),
+            | (Value::Gts(_), Value::Gts(_))
+            | (Value::Encoder(_), Value::Encoder(_)) => self.same_object(other),
             _ => false,
         }
     }
@@ -327,6 +337,7 @@ impl Hash for Value {
             Value::Context(c) => (Rc::as_ptr(c) as usize).hash(state),
             Value::Counter(c) => (Rc::as_ptr(c) as usize).hash(state),
             Value::Gts(g) => (Rc::as_ptr(g) as usize).hash(state),
+            Value::Encoder(e) => (Rc::as_ptr(e) as usize).hash(state),
         }
     }
 }
@@ -378,6 +389,12 @@ impl fmt::Display for Value {
             Value::Context(_) => f.write_str("CONTEXT"),
             Value::Counter(c) => write!(f, "{}", c.get()),
             Value::Gts(g) => write!(f, "{}", g.borrow()),
+            // `Object.toString`, with the size standing for the identity hash.
+            Value::Encoder(e) => write!(
+                f,
+                "io.warp10.continuum.gts.GTSEncoder@{:x}",
+                e.borrow().size()
+            ),
         }
     }
 }

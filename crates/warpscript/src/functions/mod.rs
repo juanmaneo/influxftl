@@ -14,6 +14,7 @@ pub mod compression;
 pub mod control;
 pub mod crypto;
 pub mod dtw;
+pub mod encoders;
 pub mod functional;
 pub mod gts;
 pub mod gts_apply;
@@ -86,6 +87,7 @@ const TABLES: &[&[(&str, Entry)]] = &[
     pack::FUNCTIONS,
     crypto::FUNCTIONS,
     compression::FUNCTIONS,
+    encoders::FUNCTIONS,
     capabilities::FUNCTIONS,
     limits::FUNCTIONS,
     runtime::FUNCTIONS,
@@ -246,6 +248,8 @@ mod crypto_tests;
 mod dedup_tests;
 #[cfg(test)]
 mod dtw_tests;
+#[cfg(test)]
+mod encoders_tests;
 #[cfg(test)]
 mod functional_tests;
 #[cfg(test)]

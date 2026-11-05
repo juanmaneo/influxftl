@@ -27,10 +27,11 @@ use indexmap::IndexMap;
 use super::Entry;
 use super::args::{fail_with_cause, pop_string};
 use super::misc::ATTRIBUTE_JSON_STRICT;
+use crate::encoder::GtsEncoder;
 use crate::error::{Error, Result};
 use crate::format::java_double_to_string;
 use crate::geoxp;
-use crate::gts::{self, GeoTimeSerie};
+use crate::gts::{self, GeoTimeSerie, Metadata};
 use crate::stack::Stack;
 use crate::value::Value;
 
@@ -122,6 +123,37 @@ pub fn to_json(value: &Value, options: JsonOptions) -> std::result::Result<Strin
 /// `[tick, lat, lon, elevation, value]` arrays with the absent location and elevation left
 /// out.
 fn gts_entries(gts: &GeoTimeSerie) -> IndexMap<Value, Value> {
+    let datapoints = (0..gts.size()).map(|i| {
+        (
+            gts.tick_at(i),
+            gts.location_at(i),
+            gts.elevation_at(i),
+            gts.value_at(i),
+        )
+    });
+    series_entries(&gts.metadata, datapoints)
+}
+
+/// The JSON object of an encoder (`GTSEncoderSerializer`): the same fields as a series, the
+/// values of every type mixed. The decoding stops at a corrupt datapoint.
+fn encoder_entries(encoder: &GtsEncoder) -> IndexMap<Value, Value> {
+    let mut decoder = encoder.decoder();
+    let mut datapoints = Vec::new();
+    while let Ok(true) = decoder.next() {
+        datapoints.push((
+            decoder.timestamp(),
+            decoder.location(),
+            decoder.elevation(),
+            decoder.value().to_value(),
+        ));
+    }
+    series_entries(&encoder.metadata, datapoints.into_iter())
+}
+
+fn series_entries(
+    metadata: &Metadata,
+    datapoints: impl Iterator<Item = (i64, i64, i64, Value)>,
+) -> IndexMap<Value, Value> {
     let strings = |map: &IndexMap<String, String>| {
         Value::map(
             map.iter()
@@ -129,31 +161,29 @@ fn gts_entries(gts: &GeoTimeSerie) -> IndexMap<Value, Value> {
                 .collect(),
         )
     };
-    let datapoints = (0..gts.size())
-        .map(|i| {
-            let mut point = vec![Value::Long(gts.tick_at(i))];
-            let location = gts.location_at(i);
+    let datapoints = datapoints
+        .map(|(tick, location, elevation, value)| {
+            let mut point = vec![Value::Long(tick)];
             if location != gts::NO_LOCATION {
                 let (lat, lon) = geoxp::from_geoxp_point(location);
                 point.push(Value::Double(lat));
                 point.push(Value::Double(lon));
             }
-            let elevation = gts.elevation_at(i);
             if elevation != gts::NO_ELEVATION {
                 point.push(Value::Long(elevation));
             }
-            point.push(gts.value_at(i));
+            point.push(value);
             Value::list(point)
         })
         .collect();
     IndexMap::from([
         (
             Value::from("c"),
-            Value::from(gts.name().unwrap_or_default()),
+            Value::from(metadata.name.as_deref().unwrap_or_default()),
         ),
-        (Value::from("l"), strings(&gts.metadata.labels)),
-        (Value::from("a"), strings(&gts.metadata.attributes)),
-        (Value::from("la"), Value::Long(gts.metadata.last_activity)),
+        (Value::from("l"), strings(&metadata.labels)),
+        (Value::from("a"), strings(&metadata.attributes)),
+        (Value::from("la"), Value::Long(metadata.last_activity)),
         (Value::from("v"), Value::list(datapoints)),
     ])
 }
@@ -219,6 +249,10 @@ impl Serializer {
             // `GeoTimeSerieSerializer`: the metadata fields then the datapoints.
             Value::Gts(gts) => {
                 let entries = gts_entries(&gts.borrow());
+                self.write_object(&entries, depth)?;
+            }
+            Value::Encoder(encoder) => {
+                let entries = encoder_entries(&encoder.borrow());
                 self.write_object(&entries, depth)?;
             }
         }

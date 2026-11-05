@@ -10,12 +10,14 @@
 
 use indexmap::IndexMap;
 
+use crate::encoder::{DEFAULT_COMP_RATIO_THRESHOLD, encoder_to_wrapper};
 use crate::encoding::opb64_encode;
 use crate::error::{Error, Result};
 use crate::format::{java_double_to_string, snapshot_encode_readable, url_encode};
 use crate::geoxp;
 use crate::gts::{self, GeoTimeSerie};
 use crate::macros::{Macro, Statement};
+use crate::thrift::serialize_wrapper;
 use crate::value::Value;
 
 /// Maximum nesting of elements before giving up (`SNAPSHOT.MAX_RECURSION_LEVEL`).
@@ -184,6 +186,14 @@ fn append(out: &mut String, value: &Value, depth: usize, readable: bool) -> Resu
         }
         // Until `WRAP` is available, a reconstruction of the series.
         Value::Gts(gts) => append_gts(out, &gts.borrow(), depth, readable)?,
+        // `'…' UNWRAPENCODER`, the `WRAP` of the encoder.
+        Value::Encoder(encoder) => {
+            let wrapper =
+                encoder_to_wrapper(&encoder.borrow(), true, DEFAULT_COMP_RATIO_THRESHOLD, true);
+            out.push('\'');
+            out.push_str(&opb64_encode(&serialize_wrapper(&wrapper)));
+            out.push_str("' UNWRAPENCODER ");
+        }
     }
     Ok(())
 }

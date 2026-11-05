@@ -371,6 +371,7 @@ fn tojson_size_bound() {
         "{\n  \"a\" : 1\n}"
     );
     assert_eq!(json("MAXLONG MAXJSON [ 1 ] ->JSON"), "[1]");
+    assert_fails("10 MAXJSON NEWENCODER ->JSON", &format!("{TOO_BIG}10))"));
     assert_eq!(json("MAXLONG 1 - MAXJSON [ 1 ] ->JSON"), "[1]");
     let big = Value::string("x".repeat(10_000));
     assert_eq!(bounded(&big, false, 10_002).unwrap().len(), 10_002);
