@@ -895,3 +895,10 @@ their JDK 11+ messages). The differences:
   Java arrays of series and encoder buffers are, so there is no spare capacity to release.
 - **`ENCODER->` pushes copies** of the labels and attributes maps; Java pushes the maps of
   the decoder metadata themselves, which a later `PUT` on them would modify.
+- **`PARSEVALUE` pushes decimals as `DOUBLE`s.** `GTSHelper.parseValue` returns a
+  `BigDecimal` for inputs of at most 15 characters made of digits, signs and dots
+  (`'1.50' PARSEVALUE` is the `BIGDECIMAL` `1.50` in Warp 10); `BIGDECIMAL` values are not
+  modelled (§3), so the port pushes their double value, as for every decimal read from an
+  encoder. Inside a nested `[ … ]` encoder they are stored as `BigDecimal`s, so the bytes
+  match Warp 10's. Error causes carry the JDK 27 texts (`Index 0 out of bounds for length 0`,
+  `No digits found.`…) where the oracle prints JDK 8's.

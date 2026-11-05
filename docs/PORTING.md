@@ -210,7 +210,7 @@ The project is Apache-2.0 and must stay redistributable under it (see `README.md
 
 ## 9. Status and next steps
 
-1842 / 2193 functions are ported (`docs/FUNCTIONS.md`; the inventory includes the names
+1843 / 2193 functions are ported (`docs/FUNCTIONS.md`; the inventory includes the names
 Warp 10 registers through `Builder`s and constants). The Geo Time Series model, the
 `GTSHelper` transforms (time, datapoints, statistics), `BUCKETIZE` and `MAP` with the
 shared aggregators (`sum`, `mean`, `min`, `max`, `first`, `last`, `count`, `and`, `or`,
@@ -282,8 +282,9 @@ the order that unlocks the most:
    `UNWRAP`, `UNWRAPEMPTY`, `UNWRAPSIZE`, `UNWRAPENCODER`, `->ENCODER`, `ENCODER->`,
    `ASENCODERS`, `->ENCODERS`, `->GTS` and `OPTIMIZE`; `MAKEGTS` is in `functions/gts.rs`,
    and `NAME`, `RENAME`, `LABELS`, `RELABEL`, `ATTRIBUTES`, `SETATTRIBUTES` and
-   `LASTACTIVITY` accept encoders; the `SNAPSHOT` of a series is `'…' UNWRAP`. Next: `PARSEVALUE`
-   (`GTSHelper.parseValue`, with its nested `[ … ]` encoders), `ADDVALUE` / `SETVALUE` on
+   `LASTACTIVITY` accept encoders; the `SNAPSHOT` of a series is `'…' UNWRAP`;
+   `PARSEVALUE` (`valueparse.rs`, `GTSHelper.parseValue` with its nested `[ … ]` encoders).
+   Next: `ADDVALUE` / `SETVALUE` on
    encoders and series or encoders as values (stored wrapped), the other GTS functions that
    accept encoders (`CHUNK`, `CLIP`, `CLONE`, `SIZE`, `TICKLIST`, `TIMECLIP`, `VALUES`…) and
    the MV functions.

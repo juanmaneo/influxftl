@@ -661,3 +661,233 @@ fn encoder_metadata() {
     );
     assert_top("[ [ 1 2 ] ] ->ENCODER 1 ->LIST 'x' RENAME 0 GET NAME", "x");
 }
+
+#[test]
+fn parsevalue() {
+    let hex =
+        |script: &str, expected: &str| assert_top(&format!("{script} PARSEVALUE ->HEX"), expected);
+    assert_top("' 42 ' PARSEVALUE", 42);
+    assert_top("'+3' PARSEVALUE", 3);
+    assert_top("'1.5' PARSEVALUE", 1.5);
+    assert_top("'-1.50' PARSEVALUE", -1.5);
+    assert_top("'1.' PARSEVALUE", 1.0);
+    assert_top("'.5' PARSEVALUE", 0.5);
+    assert_top("'12345678901234.5' PARSEVALUE", 1.234_567_890_123_45E13);
+    assert_top("'1e3' PARSEVALUE", 1000.0);
+    assert_top("'1f' PARSEVALUE", 1.0);
+    assert_top("'1.0E400' PARSEVALUE", f64::INFINITY);
+    assert_top("'+NaN' PARSEVALUE TOSTRING", "NaN");
+    for (text, expected) in [("T", true), ("true", true), ("TRUE", true), ("t", true)] {
+        assert_top(&format!("'{text}' PARSEVALUE"), expected);
+    }
+    for (text, expected) in [("F", false), ("false", false), ("f", false)] {
+        assert_top(&format!("'{text}' PARSEVALUE"), expected);
+    }
+    assert_top(r#""'%C3%A9'" PARSEVALUE"#, "\u{e9}");
+    assert_top(r#""'a+b'" PARSEVALUE"#, "a+b");
+    assert_top(r#""''" PARSEVALUE"#, "");
+    assert_top(r#"'"x"' PARSEVALUE"#, "x");
+    assert_top("'HH:48.0:2.0' PARSEVALUE", -2_296_496_678_784_176_095_i64);
+    assert_top("'HH:91:0' PARSEVALUE", -6_149_522_308_886_033_752_i64);
+    assert_top("'Q:1:0:0:0' PARSEVALUE", -140_739_635_871_745_i64);
+    assert_top("'Q:2:0:0:0' PARSEVALUE", -140_739_635_871_745_i64);
+    hex("'hex:00ff'", "00ff");
+    for (text, expected) in [
+        ("b64:AAA=", "0000"),
+        ("b64:AAA", "0000"),
+        ("b64:A", ""),
+        ("b64:AA", "00"),
+        ("b64:-_8", "fbff"),
+        ("b64:A A=A", "00"),
+        ("b64:AAAA====AAAA", "000000"),
+        ("b64:/+8=", "ffef"),
+        ("b64:az09", "6b3d3d"),
+        ("b64:@@", ""),
+    ] {
+        hex(&format!("'{text}'"), expected);
+    }
+    // Nested encoders, serialized as their (uncounted) wrapper.
+    assert_top("'[ 1 2 ]' PARSEVALUE TYPEOF", "BYTES");
+    hex("'[ 1 2 ]'", "78042c022e0200");
+    hex("'[! 1 2 ]'", "78042c022e0200");
+    hex("'[1 2]'", "78042c022e0200");
+    hex("'[ ]'", "780000");
+    hex(
+        "'[ [ 1 ] 2/[! 3 ] ]'",
+        "780f3a0578022c02005a040578022c060000",
+    );
+    hex("'[ 1//2/[ 3 ] ]'", "780ada0c02040578022c060000");
+    hex(
+        "'[ 1/1:2/[ 2 ] ]'",
+        "7811da4002c0033cf0033cf0030578022c040000",
+    );
+    hex("'[ 1/2/3/4 ]'", "780dcc4c020000000000000002060800");
+    hex("'[ 1/2//4 ]'", "780ccc400200000000000000020800");
+    hex("'[ [ [ 1 ] ] ]'", "780c3a0a78073a0578022c02000000");
+    hex(
+        r#""[ 10/1 20/48.0:2.0/3 30//5/'x' 40/1234/7/T 50/48:2/-1/1.5 60/1.5 ]""#,
+        "78314c14028e4014e02134702134702104980c140a0178844e1400000000000004d204904e14e0213470213470210f011e111400",
+    );
+}
+
+#[test]
+fn parsevalue_errors() {
+    let error = |text: &str, index: usize, cause: &str| {
+        let shown = text.trim();
+        assert_fails(
+            &format!("{text} PARSEVALUE"),
+            &format!(
+                "PARSEVALUE encountered a parse error at index {index} for '{}'. ({cause})",
+                shown[1..shown.len() - 1].trim().replace("%25", "%")
+            ),
+        );
+    };
+    assert_fails("PARSEVALUE", "Empty stack.");
+    assert_fails("1 PARSEVALUE", "PARSEVALUE operates on a STRING.");
+    for (text, index, cause) in [
+        (
+            "'1.5 2 *'",
+            0,
+            "Cannot parse value. (For input string: \"1.5 2 *\")",
+        ),
+        (
+            "'99999999999999999999'",
+            0,
+            "Cannot parse value. (For input string: \"99999999999999999999\")",
+        ),
+        ("'tr'", 0, "Cannot parse value. (For input string: \"tr\")"),
+        (
+            "'abc'",
+            0,
+            "Cannot parse value. (For input string: \"abc\")",
+        ),
+        (
+            "'  '",
+            0,
+            "Cannot parse value. (Index 0 out of bounds for length 0)",
+        ),
+        (
+            "\"'\"",
+            0,
+            "Cannot parse value. (Range [1, 0) out of bounds for length 1)",
+        ),
+        (
+            "\"'%25zz'\"",
+            0,
+            "Cannot parse value. (URLDecoder: Illegal hex characters in escape (%) pattern - not a hexadecimal digit: \"z\" = 122)",
+        ),
+        (
+            "'HH:48.0'",
+            0,
+            "Invalid value for lat,lon conversion to HHCode.",
+        ),
+        (
+            "'HH:x:2'",
+            3,
+            "Cannot parse latitude. (For input string: \"x\")",
+        ),
+        (
+            "'HH:1:y'",
+            5,
+            "Cannot parse longitude. (For input string: \"y\")",
+        ),
+        (
+            "'Q:1:0:0'",
+            0,
+            "Invalid value for Quaternion, expected Q:w:x:y:z",
+        ),
+        (
+            "'Q:a:0:0:0'",
+            2,
+            "Cannot parse quaternion component. (For input string: \"a\")",
+        ),
+        (
+            "'Q:1:0:0:x'",
+            8,
+            "Cannot parse quaternion component. (For input string: \"x\")",
+        ),
+        (
+            "'Q:NaN:0:0:0'",
+            0,
+            "Quaternion values require finite elements.",
+        ),
+        (
+            "'hex:0'",
+            0,
+            "Cannot parse value. (Odd number of hexadecimal digits.)",
+        ),
+        ("':x:1'", 0, "Unsupported value ':x:1'"),
+        (
+            "'1.2.3'",
+            0,
+            "Cannot parse value. (Character array contains more than one decimal point.)",
+        ),
+        ("'+'", 0, "Cannot parse value. (No digits found.)"),
+        (
+            "'1-2'",
+            0,
+            "Cannot parse value. (Character - is neither a decimal digit number, decimal point, nor \"e\" notation exponential mark.)",
+        ),
+        ("'[ 1 2'", 0, "Missing closing bracket."),
+        (
+            "'['",
+            0,
+            "Cannot parse value. (Index 1 out of bounds for length 1)",
+        ),
+        ("'[!'", 0, "Missing closing bracket."),
+        ("'[ [ 1 ]'", 2, "Missing closing bracket."),
+        ("'[ 1/[ 2 ]'", 4, "Missing closing bracket."),
+        (
+            "'[ x/1 ]'",
+            0,
+            "Cannot parse value. (For input string: \"x\")",
+        ),
+        (
+            "'[ 1/a:2/3 ]'",
+            0,
+            "Cannot parse value. (For input string: \"a\")",
+        ),
+        (
+            "'[ 1/1:y/3 ]'",
+            0,
+            "Cannot parse value. (For input string: \"y\")",
+        ),
+        (
+            "'[ 1/z/3 ]'",
+            0,
+            "Cannot parse value. (For input string: \"z\")",
+        ),
+        (
+            "'[ 1//z/3 ]'",
+            0,
+            "Cannot parse value. (For input string: \"z\")",
+        ),
+        (
+            "'[ 1/abc ]'",
+            4,
+            "Cannot parse value. (For input string: \"abc\")",
+        ),
+        (
+            "'[ 1// ]'",
+            5,
+            "Cannot parse value. (Index 0 out of bounds for length 0)",
+        ),
+        (
+            "'[ 1/ ]'",
+            4,
+            "Cannot parse value. (Index 0 out of bounds for length 0)",
+        ),
+        (
+            "'[ 1/2/3/q ]'",
+            8,
+            "Cannot parse value. (For input string: \"q\")",
+        ),
+        (
+            "\"[ 'a b' ]\"",
+            2,
+            "Cannot parse value. (For input string: \"'a\")",
+        ),
+    ] {
+        error(text, index, cause);
+    }
+}

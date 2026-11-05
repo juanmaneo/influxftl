@@ -49,6 +49,7 @@ pub mod snapshot;
 pub mod stack;
 pub mod thrift;
 pub mod value;
+pub mod valueparse;
 
 pub use error::{Error, Result, ScriptError};
 pub use macros::{Callable, Macro, Statement};

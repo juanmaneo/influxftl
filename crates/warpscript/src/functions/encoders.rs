@@ -4,7 +4,7 @@
 //! Encoders and wrapped series: `NEWENCODER`, the `WRAP` family (`WRAP`, `WRAPRAW`,
 //! `WRAPFAST`, `WRAPOPT`, `WRAPRAWOPT`, `WRAPMV`, `WRAPMV!`) and `UNWRAP`, `UNWRAPEMPTY`,
 //! `UNWRAPSIZE`, `UNWRAPENCODER`, the conversions `->ENCODER`, `ENCODER->`, `ASENCODERS`,
-//! `->ENCODERS`, `->GTS` and `OPTIMIZE`, on the `GTSWrapper` Thrift structure of `thrift.rs`
+//! `->ENCODERS`, `->GTS`, `OPTIMIZE` and `PARSEVALUE`, on the `GTSWrapper` Thrift structure of `thrift.rs`
 //! and the encoders of `encoder.rs`.
 
 use std::cell::RefCell;
@@ -27,6 +27,7 @@ use crate::selector::MetadataSelectorMatcher;
 use crate::stack::Stack;
 use crate::thrift::{GtsWrapper, deserialize_wrapper, serialize_wrapper};
 use crate::value::Value;
+use crate::valueparse::parse_value;
 
 /// The functions of this module.
 pub const FUNCTIONS: &[(&str, Entry)] = &[
@@ -48,6 +49,7 @@ pub const FUNCTIONS: &[(&str, Entry)] = &[
     ("->ENCODERS", Entry::Builder(toencoders)),
     ("->GTS", Entry::Builder(togts)),
     ("OPTIMIZE", Entry::Builder(optimize)),
+    ("PARSEVALUE", Entry::Stack(parsevalue)),
 ];
 
 /// `NEWENCODER`: an empty encoder named `""`.
@@ -617,4 +619,24 @@ fn optimize(stack: &mut Stack, name: &'static str) -> Result<()> {
             " operates on a Geo Time Series or encoder instance or a list thereof.",
         )),
     })
+}
+
+/// `PARSEVALUE`: the value of a string in the syntax of the input format
+/// (`GTSHelper.parseValue`, see `valueparse.rs`), the string being trimmed first. Decimals
+/// are pushed as doubles and nested encoders as the bytes of their wrapper.
+fn parsevalue(stack: &mut Stack) -> Result<()> {
+    const NAME: &str = "PARSEVALUE";
+    let Value::String(text) = stack.pop()? else {
+        return Err(fail(NAME, "operates on a STRING."));
+    };
+    let text = text.trim_matches(|c: char| c <= ' ');
+    let value = parse_value(text).map_err(|error| {
+        let message = format!(
+            "{NAME} encountered a parse error at index {} for '{text}'.",
+            error.offset
+        );
+        Error::with_cause(message, error.into_error())
+    })?;
+    stack.push(value.to_value());
+    Ok(())
 }
