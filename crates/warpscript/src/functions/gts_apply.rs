@@ -378,6 +378,8 @@ fn unset_ids(collections: &[Vec<Gts>]) {
         let mut gts = gts.borrow_mut();
         gts.metadata.class_id = 0;
         gts.metadata.labels_id = 0;
+        gts.metadata.class_id_set = false;
+        gts.metadata.labels_id_set = false;
     }
 }
 
@@ -407,6 +409,8 @@ pub(super) fn partition_collections(
         let mut gts = gts.borrow_mut();
         gts.metadata.class_id = idx;
         gts.metadata.labels_id = 0;
+        gts.metadata.class_id_set = true;
+        gts.metadata.labels_id_set = true;
     }
     partition(&all, bylabels)
         .into_iter()

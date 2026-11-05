@@ -12,6 +12,7 @@ use std::rc::Rc;
 use base64::Engine as _;
 use indexmap::IndexMap;
 
+use crate::encoder::Decimal;
 use crate::format::{java_double_to_string, url_encode};
 use crate::geoxp;
 use crate::value::Value;
@@ -113,7 +114,7 @@ impl Values {
                 *self = match value {
                     Scalar::Boolean(_) => Values::Boolean(Vec::new()),
                     Scalar::Long(_) => Values::Long(Vec::new()),
-                    Scalar::Double(_) => Values::Double(Vec::new()),
+                    Scalar::Double(_) | Scalar::Decimal(_) => Values::Double(Vec::new()),
                     Scalar::String(_) => Values::String(Vec::new()),
                 };
                 self.store(idx, value);
@@ -173,6 +174,8 @@ enum Scalar {
     Long(i64),
     Double(f64),
     String(Rc<str>),
+    /// A `BigDecimal` decoded from an optimized encoding.
+    Decimal(Decimal),
 }
 
 impl Scalar {
@@ -183,6 +186,7 @@ impl Scalar {
             Scalar::Long(l) => *l,
             Scalar::Double(d) => crate::value::double_to_long(*d),
             Scalar::String(s) => string_to_long(s),
+            Scalar::Decimal(d) => d.long_value(),
         }
     }
 
@@ -193,6 +197,7 @@ impl Scalar {
             Scalar::Long(l) => *l as f64,
             Scalar::Double(d) => *d,
             Scalar::String(s) => string_to_double(s),
+            Scalar::Decimal(d) => d.double_value(),
         }
     }
 
@@ -203,6 +208,7 @@ impl Scalar {
             Scalar::Long(l) => *l != 0,
             Scalar::Double(d) => *d != 0.0,
             Scalar::String(s) => !s.is_empty(),
+            Scalar::Decimal(d) => d.double_value() != 0.0,
         }
     }
 
@@ -213,6 +219,7 @@ impl Scalar {
             Scalar::Long(l) => Rc::from(l.to_string()),
             Scalar::Double(d) => Rc::from(java_double_to_string(*d)),
             Scalar::String(s) => Rc::clone(s),
+            Scalar::Decimal(d) => Rc::from(d.to_string()),
         }
     }
 }
@@ -243,7 +250,7 @@ fn string_to_double(s: &str) -> f64 {
 }
 
 /// The metadata of a series (`io.warp10.continuum.store.thrift.data.Metadata`).
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Debug, Default, Eq)]
 pub struct Metadata {
     /// The class name (`null` for a series that was never named).
     pub name: Option<String>,
@@ -257,6 +264,29 @@ pub struct Metadata {
     pub labels_id: i64,
     /// The last activity timestamp (`lastActivity`).
     pub last_activity: i64,
+    /// Whether `classId` is set (Thrift `isSetClassId`), which `WRAP` serializes.
+    pub class_id_set: bool,
+    /// Whether `labelsId` is set (Thrift `isSetLabelsId`).
+    pub labels_id_set: bool,
+    /// Whether `lastActivity` is set (Thrift `isSetLastActivity`).
+    pub last_activity_set: bool,
+    /// The `source` field, only carried through wrapped series.
+    pub source: Option<String>,
+}
+
+impl PartialEq for Metadata {
+    /// The Thrift `equals`: the ids are always compared, the optional last activity only
+    /// when set.
+    fn eq(&self, other: &Metadata) -> bool {
+        self.name == other.name
+            && self.labels == other.labels
+            && self.attributes == other.attributes
+            && self.class_id == other.class_id
+            && self.labels_id == other.labels_id
+            && self.source == other.source
+            && self.last_activity_set == other.last_activity_set
+            && (!self.last_activity_set || self.last_activity == other.last_activity)
+    }
 }
 
 impl Metadata {
@@ -539,6 +569,23 @@ impl GeoTimeSerie {
                 return;
             }
         };
+        self.set_scalar(tick, location, elevation, &value, overwrite);
+    }
+
+    /// `GTSHelper.setValue` of a `BigDecimal` (appended, never overwriting): converted to the
+    /// type of the series, an untyped series becoming a `DOUBLE` one.
+    pub(crate) fn set_decimal(&mut self, tick: i64, location: i64, elevation: i64, value: Decimal) {
+        self.set_scalar(tick, location, elevation, &Scalar::Decimal(value), false);
+    }
+
+    fn set_scalar(
+        &mut self,
+        tick: i64,
+        location: i64,
+        elevation: i64,
+        value: &Scalar,
+        overwrite: bool,
+    ) {
         let n = self.size();
         let idx = if overwrite {
             self.index_of_tick(tick).unwrap_or(n)
@@ -573,7 +620,7 @@ impl GeoTimeSerie {
         if elevation != NO_ELEVATION && self.elevations.is_none() {
             self.elevations = Some(vec![NO_ELEVATION; n]);
         }
-        self.values.store(idx, &value);
+        self.values.store(idx, value);
         put(&mut self.ticks, idx, tick);
         if let Some(locations) = &mut self.locations {
             put(locations, idx, location);

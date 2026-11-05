@@ -871,3 +871,26 @@ as in Warp 10 and snapshot as that builder call. The differences:
   - A windowed fill of a bucketized series holding a tick on the bucket grid before its
     first bucket enumerates the grid up to that tick around the whole `long` range, like
     Java, until memory runs out (Java: `OutOfMemoryError`).
+
+## 20. Encoders and wrapped series (`GTSEncoder`, `GTSWrapper`)
+
+`encoder.rs` and `thrift.rs` port `GTSEncoder`, `GTSDecoder`, `GTSWrapperHelper` and the
+libthrift compact protocol byte for byte, including the errors of malformed payloads (the
+Java runtime exceptions — `BufferUnderflowException`, `IllegalArgumentException`… — carry
+their JDK 11+ messages). The differences:
+
+- **Gzipped content differs.** The deflate implementation (miniz) does not produce the
+  same bytes as the JDK's zlib, so compressed wraps differ from Warp 10's, and in borderline
+  cases the number of compression passes (or the choice not to compress) may too. Both
+  sides read each other's output.
+- **Label and attribute order** is the insertion order (§18), where Java serializes its
+  `HashMap` order.
+- **Nesting depth**: skipping unknown Thrift fields stops at 512 nested levels with a
+  `StackOverflowError`, where Java overflows its thread stack after thousands.
+- **Huge lengths** in a payload are rejected once they exceed the data, without emulating
+  the `OutOfMemoryError` Java may raise first.
+- **Metadata are copied, not shared**: after `merge` / `reset` Java encoders share the
+  metadata object of their source, so that later renames affect both; here each encoder
+  owns its copy.
+- **Not ported**: the AES wrapping keys of encoders (encrypted blocks are skipped like a
+  decoder without key does) and read-only encoders, neither of which WarpScript can create.

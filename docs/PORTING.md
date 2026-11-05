@@ -272,8 +272,17 @@ the order that unlocks the most:
    capacity of `GeoTimeSerie`'s arrays: port it on explicit arrays), the outlier tests
    (`THRESHOLDTEST`, `ZSCORETEST`, `GRUBBSTEST`, `ESDTEST`, `HYBRIDTEST`… need Commons
    Math's `TDistribution`).
-4. **GTS encoders** (`GTSEncoder` / `GTSDecoder`, Thrift compact + gzip wrappers): `WRAP` /
-   `UNWRAP` and the `ENCODER` type; then the sorted `MERGE`, `->ENCODER`, `OPTIMIZE`.
+4. **GTS encoders** (`GTSEncoder` / `GTSDecoder`, Thrift compact + gzip wrappers): the
+   library layer is in — `thrift.rs` (the `GTSWrapper` / `Metadata` compact protocol of
+   libthrift 0.17, malformed input included) and `encoder.rs` (`GTSEncoder`,
+   `GTSDecoder`, `Varint`, the `BigDecimal` values of optimized doubles and the
+   `GTSWrapperHelper` conversions), checked byte for byte against the oracle. Next: the
+   `Value::Encoder` type (`GTSENCODER`), then `NEWENCODER`, the `WRAP` family
+   (`WRAP`, `WRAPRAW`, `WRAPFAST`, `WRAPOPT`, `WRAPRAWOPT`, `WRAPMV`), `UNWRAP`,
+   `UNWRAPEMPTY`, `UNWRAPSIZE`, `UNWRAPENCODER`, `->ENCODER`, `ENCODER->`, `ASENCODERS`,
+   `->ENCODERS`, `->GTS`, `OPTIMIZE`, `MAKEGTS`, `PARSEVALUE`, the encoder `SNAPSHOT`
+   (`'…' UNWRAPENCODER`) and `->JSON`; then the existing GTS functions that also accept
+   encoders and the MV functions.
 5. **BigDecimal** (`BD*`, `MUSIGMA`, `NSUMSUMSQ`, `LR`): either a spec-derived decimal
    implementation or a vetted crate (`cargo deny` compatible).
 6. **Geo** (`GeoXPLib` shapes, `HAVERSINE`, `LOCATIONOFFSET`, `GEO.*`), **datastore**

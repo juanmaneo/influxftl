@@ -22,6 +22,9 @@ pub mod cmath;
 pub mod curvefit;
 #[cfg(test)]
 mod curvefit_tests;
+pub mod encoder;
+#[cfg(test)]
+mod encoder_tests;
 pub mod encoding;
 pub mod error;
 pub mod fillers;
@@ -44,6 +47,7 @@ pub mod sax;
 pub mod selector;
 pub mod snapshot;
 pub mod stack;
+pub mod thrift;
 pub mod value;
 
 pub use error::{Error, Result, ScriptError};
@@ -84,6 +88,8 @@ mod snapshot_tests;
 mod stack_tests;
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod thrift_tests;
 #[cfg(test)]
 mod value_tests;
 
