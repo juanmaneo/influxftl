@@ -503,10 +503,6 @@ unstable, order), `GeoTimeSerie.toString` and `dump` (`TOSTRING`), and the JSON 
   so `LABELS`, `->JSON`, `TOSTRING` and `SNAPSHOT` list them in Java's hash bucket order;
   here they come out in the order they were set. Scripts that depend on the Java order of
   more than one label see a different (but deterministic) order.
-- **`SNAPSHOT` of a series is a readable reconstruction** (`NEWGTS 'name' RENAME { … }
-  RELABEL { … } SETATTRIBUTES tick lat lon elev value ADDVALUE …`) until `WRAP` /
-  `UNWRAP` are ported; Warp 10 emits `'<opb64 wrapper>' UNWRAP`. Both evaluate back to an
-  equal series; the bucketization parameters are not carried by the reconstruction.
 - **A Geo Time Series or encoder used as a value** (`gts 1 NaN NaN NaN gts2 ADDVALUE`) fails
   with `ADDVALUE encountered an error while serializing the Geo Time Series.`; Warp 10 would
   store the Thrift-serialized wrapper as a byte array (`STRING` series), which needs `WRAP`.
@@ -880,7 +876,8 @@ Java runtime exceptions — `BufferUnderflowException`, `IllegalArgumentExceptio
 their JDK 11+ messages). The differences:
 
 - **Gzipped content differs.** The deflate implementation (miniz) does not produce the
-  same bytes as the JDK's zlib, so compressed wraps differ from Warp 10's, and in borderline
+  same bytes as the JDK's zlib, so compressed wraps (and the `SNAPSHOT` of large series and
+  encoders) differ from Warp 10's, and in borderline
   cases the number of compression passes (or the choice not to compress) may too. Both
   sides read each other's output.
 - **Label and attribute order** is the insertion order (§18), where Java serializes its

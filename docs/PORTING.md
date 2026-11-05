@@ -282,7 +282,7 @@ the order that unlocks the most:
    `UNWRAP`, `UNWRAPEMPTY`, `UNWRAPSIZE`, `UNWRAPENCODER`, `->ENCODER`, `ENCODER->`,
    `ASENCODERS`, `->ENCODERS`, `->GTS` and `OPTIMIZE`; `MAKEGTS` is in `functions/gts.rs`,
    and `NAME`, `RENAME`, `LABELS`, `RELABEL`, `ATTRIBUTES`, `SETATTRIBUTES` and
-   `LASTACTIVITY` accept encoders. Next: the GTS `SNAPSHOT` as `'…' UNWRAP`, `PARSEVALUE`
+   `LASTACTIVITY` accept encoders; the `SNAPSHOT` of a series is `'…' UNWRAP`. Next: `PARSEVALUE`
    (`GTSHelper.parseValue`, with its nested `[ … ]` encoders), `ADDVALUE` / `SETVALUE` on
    encoders and series or encoders as values (stored wrapped), the other GTS functions that
    accept encoders (`CHUNK`, `CLIP`, `CLONE`, `SIZE`, `TICKLIST`, `TIMECLIP`, `VALUES`…) and

@@ -829,11 +829,9 @@ fn series_as_values() {
         "NEWGTS 'a' STORE [ $a $a NEWGTS ] ->SET SIZE { $a 1 } $a GET",
         &[Value::Long(2), Value::Long(1)],
     );
-    // The snapshot rebuilds the series (in the readable form on request); the string form
-    // of the value is its `toString`.
-    let snapshot = "NEWGTS 'g' RENAME {} 'v' 'l' PUT RELABEL {} '1' 'a' PUT SETATTRIBUTES \
-        10 NaN NaN NaN 1 ADDVALUE 20 47.99999998882413 1.9999999646097422 35 2 ADDVALUE \
-        30 NaN NaN 5 3 ADDVALUE ";
+    // The snapshot is the compressed `WRAP` of the series (in every form) followed by
+    // `UNWRAP`; the string form of the value is its `toString`.
+    let snapshot = "'60V0Olg0X.4g.MNL.0N.5k57.L30BF0c4JkJ.ctB4D.WC6.WC6.WGV9D2WFv.WN5..' UNWRAP ";
     assert_top(
         &format!("{SERIES} {{ 'a' '1' }} SETATTRIBUTES SNAPSHOT"),
         snapshot,
@@ -844,17 +842,18 @@ fn series_as_values() {
     );
     assert_top(
         "NEWGTS 'g h' RENAME 1 NaN NaN NaN 'x y' ADDVALUE SNAPSHOT",
-        "NEWGTS 'g%20h' RENAME {} RELABEL {} SETATTRIBUTES 1 NaN NaN NaN 'x%20y' ADDVALUE ",
+        "'60V2Om0c5k.L.0N.5k..P.ON.VCs76ZL.V.' UNWRAP ",
     );
     assert_top(
         "NEWGTS 'g h' RENAME { 'l' 'v' } RELABEL 1 NaN NaN NaN 'x y' ADDVALUE SNAPSHOTREADABLE",
-        "NEWGTS 'g h' RENAME {\n'l' 'v' \n} RELABEL {\n} SETATTRIBUTES 1 NaN NaN NaN 'x y' ADDVALUE ",
+        "'60V2Om0c5k57.Lk0SWN.4V.Q..0c0_V1.rVVTGN1..' UNWRAP ",
     );
     assert_top(
         "[ NEWGTS 'g' RENAME ] SNAPSHOT",
-        "[] NEWGTS 'g' RENAME {} RELABEL {} SETATTRIBUTES +! ",
+        "[] '60V0Olg.4V.L.0g..5V.4V..' UNWRAP +! ",
     );
-    // The elements of a series count as one more nesting level, like the items of a list.
+    assert_top("NEWGTS SNAPSHOT", "'T..L...' UNWRAP ");
+    // A series is a leaf, like a string, for the nesting bound.
     let nest = |levels: usize| {
         let mut nested = Value::Gts(GeoTimeSerie::new().shared());
         for _ in 0..levels {
@@ -863,11 +862,11 @@ fn series_as_values() {
         nested
     };
     let mut stack = test_stack();
-    stack.push(nest(14));
-    stack.exec_checked("SNAPSHOT").unwrap();
-    assert!(stack.pop().unwrap().to_string().contains("NEWGTS"));
-    let mut stack = test_stack();
     stack.push(nest(15));
+    stack.exec_checked("SNAPSHOT SIZE").unwrap();
+    assert_eq!(stack.pop().unwrap(), Value::Long(107));
+    let mut stack = test_stack();
+    stack.push(nest(16));
     let error = stack.exec_checked("SNAPSHOT").unwrap_err();
     assert!(
         error
