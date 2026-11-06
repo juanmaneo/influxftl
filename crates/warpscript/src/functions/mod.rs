@@ -36,6 +36,7 @@ pub mod interpolators;
 pub mod json;
 pub mod limits;
 pub mod math;
+pub mod matrix;
 pub mod misc;
 pub mod mv;
 pub mod numbers;
@@ -44,6 +45,7 @@ pub mod operators;
 pub mod outliers;
 pub mod pack;
 pub mod patterns;
+pub mod platform;
 pub mod polyfunc;
 pub mod quaternions;
 pub mod runtime;
@@ -128,6 +130,8 @@ const TABLES: &[&[(&str, Entry)]] = &[
     interpolators::FUNCTIONS,
     bd::FUNCTIONS,
     numbers::FUNCTIONS,
+    matrix::FUNCTIONS,
+    platform::FUNCTIONS,
     selectors::FUNCTIONS,
     crate::aggregators::basic::FUNCTIONS,
     crate::aggregators::stats::FUNCTIONS,
@@ -311,6 +315,8 @@ mod limits_tests;
 #[cfg(test)]
 mod math_tests;
 #[cfg(test)]
+mod matrix_tests;
+#[cfg(test)]
 mod misc_tests;
 #[cfg(test)]
 mod mv_tests;
@@ -328,6 +334,8 @@ mod pack_tests;
 mod patterns_tests;
 #[cfg(test)]
 mod pivot_tests;
+#[cfg(test)]
+mod platform_tests;
 #[cfg(test)]
 mod polyfunc_tests;
 #[cfg(test)]

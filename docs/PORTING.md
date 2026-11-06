@@ -210,7 +210,7 @@ The project is Apache-2.0 and must stay redistributable under it (see `README.md
 
 ## 9. Status and next steps
 
-1949 / 2193 functions are ported (`docs/FUNCTIONS.md`; the inventory includes the names
+1990 / 2193 functions are ported (`docs/FUNCTIONS.md`; the inventory includes the names
 Warp 10 registers through `Builder`s and constants). The Geo Time Series model, the
 `GTSHelper` transforms (time, datapoints, statistics), `BUCKETIZE` and `MAP` with the
 shared aggregators (`sum`, `mean`, `min`, `max`, `first`, `last`, `count`, `and`, `or`,
@@ -311,6 +311,12 @@ the order that unlocks the most:
    type, `->BD`, `BD->`, every `BD*` function, the operators, `STRINGFORMAT`, `->HEX` /
    `->BIN`, `PARSEVALUE` and the decimals of encoders (DIVERGENCES §22); `MUSIGMA`,
    `NSUMSUMSQ`, `LR`, `->Z`, `Z->`, `NPDF` (`functions/numbers.rs`).
+   Matrices and vectors (`functions/matrix.rs`, Commons Math's `Array2DRowRealMatrix`,
+   `ArrayRealVector` and `LUDecomposition`): `->MAT`, `MAT->`, `TR`, `TRANSPOSE`, `DET`,
+   `INV`, `->VEC`, `VEC->`, and `+ - * /` on them.
+   Platform functions (`functions/platform.rs`, DIVERGENCES §24): the manager switches,
+   `WF*`, `TOKENINFO`, `GETHOOK`, `KVSTORE`, `KVLOAD`, `DUMP`, `RUNNER*`, `ACCEL.*`,
+   `LOGMSG`, `NOLOG`, `LOGINIT`, `WSAUDIT`, `WSAUDITMODE`, `SETMACROCONFIG`, `PIGSCHEMA`,
+   `[[]]`.
 6. **Geo** (`GeoXPLib` shapes, `HAVERSINE`, `LOCATIONOFFSET`, `GEO.*`), **datastore**
-   (`FETCH` / `FIND` / `UPDATE` / `META` / `DELETE` on InfluxDB 3), PKI crypto, Processing,
-   matrices.
+   (`FETCH` / `FIND` / `UPDATE` / `META` / `DELETE` on InfluxDB 3), PKI crypto, Processing.

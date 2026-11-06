@@ -536,8 +536,7 @@ unstable, order), `GeoTimeSerie.toString` and `dump` (`TOSTRING`), and the JSON 
   the message Warp 10 prints without a space after the operator name, an empty result of a
   bitwise operator or of a `LONG` series compared to `NaN` keeps its type. The only
   difference: the bit conversions of a series build the result directly where Warp 10
-  round-trips through a `GTSEncoder` (same datapoints, metadata and order). Matrix and
-  vector operands are not modelled (§3).
+  round-trips through a `GTSEncoder` (same datapoints, metadata and order).
 - **Selectors** (`PARSESELECTOR`, `TOSELECTOR`, `filter.byselector`) behave as with
   `warp10.absent.label.support` enabled (the oracle configuration): `label=` selects the
   series without that label. `filter.bymetadata` compares the name, labels, attributes and
@@ -925,3 +924,23 @@ Warp 10. The differences:
   passes, where Java sieves: the primes drawn from a given seed differ from Warp 10's.
 - **`BDRAND`** draws from a SHA-256 counter mode generator keyed by the operating system
   (Java: `SecureRandom`); `SBDRAND` reproduces Warp 10's draws from the seeded PRNG.
+
+## 23. Matrices and vectors
+
+`MATRIX` and `VECTOR` values follow Commons Math's `Array2DRowRealMatrix` and
+`ArrayRealVector` (arithmetic order, `LUDecomposition` with its `1e-11` singularity threshold,
+exception messages, `toString`). Commons Math switches to a `BlockRealMatrix` above 4096
+entries, whose products sum in another order (and whose `toString` differs): the port always
+computes like `Array2DRowRealMatrix`.
+
+## 24. Platform functions
+
+The runtime runs inside InfluxDB, which authenticates the requests: it knows no Warp 10
+token, so `TOKENINFO`, `GETHOOK`, `KVSTORE`, `KVLOAD` and `DUMP` behave as on a Warp 10
+instance that did not issue the token (`Invalid token.`), and `RUNNERNONCE` / `RUNNERPATH`,
+which need the runner key of a Warp 10 instance, push `NULL`. The manager switches
+(`UPDATEON`…), the WarpFleet repositories, the accelerator flags and `SETMACROCONFIG` act on
+the stack (attributes and configuration) rather than on a JVM-wide state; `ACCEL.REPORT`
+reports no accelerator; `LOGMSG`, `NOLOG` and `LOGINIT` log nothing; `WSAUDITMODE` does not
+change how scripts are parsed, so `WSAUDIT` returns an empty list. `[[]]` pushes a `LIST`
+where Warp 10 pushes a `java.util.Vector` (`VLIST`).

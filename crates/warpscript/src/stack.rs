@@ -513,6 +513,11 @@ impl Stack {
         self.config.get(key).map(String::as_str)
     }
 
+    /// Mutable access to the configuration properties (`SETMACROCONFIG`).
+    pub fn config_mut(&mut self) -> &mut IndexMap<String, String> {
+        &mut self.config
+    }
+
     /// Replace the configuration properties visible to `MACROCONFIG`.
     pub fn set_config(&mut self, config: IndexMap<String, String>) {
         self.config = config;

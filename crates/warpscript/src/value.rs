@@ -89,6 +89,10 @@ pub enum Value {
     Double(f64),
     /// `BIGDECIMAL` (Java `java.math.BigDecimal`).
     BigDecimal(Rc<crate::bigdecimal::BigDecimal>),
+    /// `MATRIX` (Commons Math `RealMatrix`).
+    Matrix(Rc<crate::functions::matrix::Matrix>),
+    /// `VECTOR` (Commons Math `RealVector`).
+    Vector(Rc<[f64]>),
     /// `STRING` (immutable, shared).
     String(Rc<str>),
     /// `BYTES` (Java `byte[]`).
@@ -154,6 +158,8 @@ impl Value {
             Value::Long(_) => "LONG",
             Value::Double(_) => "DOUBLE",
             Value::BigDecimal(_) => "BIGDECIMAL",
+            Value::Matrix(_) => "MATRIX",
+            Value::Vector(_) => "VECTOR",
             Value::String(_) => "STRING",
             Value::Bytes(_) => "BYTES",
             Value::BitSet(_) => "BITSET",
@@ -179,6 +185,8 @@ impl Value {
             Value::Long(_) => "java.lang.Long",
             Value::Double(_) => "java.lang.Double",
             Value::BigDecimal(_) => "java.math.BigDecimal",
+            Value::Matrix(_) => "org.apache.commons.math3.linear.Array2DRowRealMatrix",
+            Value::Vector(_) => "org.apache.commons.math3.linear.ArrayRealVector",
             Value::String(_) => "java.lang.String",
             Value::Bytes(_) => "[B",
             Value::BitSet(_) => "java.util.BitSet",
@@ -290,6 +298,10 @@ impl PartialEq for Value {
             (Value::Long(a), Value::Long(b)) => a == b,
             (Value::Double(a), Value::Double(b)) => double_bits(*a) == double_bits(*b),
             (Value::BigDecimal(a), Value::BigDecimal(b)) => a == b,
+            (Value::Matrix(a), Value::Matrix(b)) => Rc::ptr_eq(a, b) || a.same_entries(b),
+            (Value::Vector(a), Value::Vector(b)) => {
+                Rc::ptr_eq(a, b) || crate::functions::matrix::same_vector(a, b)
+            }
             (Value::String(a), Value::String(b)) => a == b,
             (Value::Bytes(a), Value::Bytes(b)) => a == b,
             (Value::BitSet(a), Value::BitSet(b)) => a == b,
@@ -318,6 +330,9 @@ impl Hash for Value {
             Value::Long(l) => l.hash(state),
             Value::Double(d) => double_bits(*d).hash(state),
             Value::BigDecimal(bd) => bd.hash(state),
+            // Consistent with the `==` comparison of the entries: the dimensions only.
+            Value::Matrix(m) => (m.rows, m.cols).hash(state),
+            Value::Vector(v) => v.len().hash(state),
             Value::String(s) => s.hash(state),
             Value::Bytes(b) => b.hash(state),
             Value::BitSet(b) => b.hash(state),
@@ -362,6 +377,8 @@ impl fmt::Display for Value {
             Value::Long(l) => write!(f, "{l}"),
             Value::Double(d) => f.write_str(&java_double_to_string(*d)),
             Value::BigDecimal(bd) => write!(f, "{bd}"),
+            Value::Matrix(m) => f.write_str(&m.java_string()),
+            Value::Vector(v) => f.write_str(&crate::functions::matrix::vector_string(v)),
             Value::String(s) => f.write_str(s),
             Value::Bytes(b) => write!(f, "[B@{:x}", b.len()),
             Value::BitSet(b) => write!(f, "{b}"),

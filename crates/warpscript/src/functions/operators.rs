@@ -14,6 +14,10 @@ use super::Entry;
 use super::args::fail;
 use super::bd::{bd_value, to_big_decimal, to_big_integer};
 use super::gts_operators::{self, Arithmetic, Comparison};
+use super::matrix::{
+    add_matrices, add_vectors, map_matrix, matrix_value, multiply, operate, pre_multiply,
+    vector_value,
+};
 use super::numerical::{self, Binary};
 use crate::bigdecimal::BigDecimal;
 use crate::error::{Error, Result};
@@ -132,6 +136,16 @@ fn add(stack: &mut Stack) -> Result<()> {
             bytes.extend_from_slice(b);
             Value::bytes(bytes)
         }
+        (Value::Matrix(a), Value::Matrix(b)) => matrix_value(add_matrices(a, b, 1.0)?),
+        (Value::Matrix(m), n) | (n, Value::Matrix(m)) if n.is_number() => {
+            let x = n.as_f64().unwrap_or_default();
+            matrix_value(map_matrix(m, |v| v + x))
+        }
+        (Value::Vector(a), Value::Vector(b)) => vector_value(add_vectors(a, b, 1.0)?),
+        (Value::Vector(v), n) | (n, Value::Vector(v)) if n.is_number() => {
+            let x = n.as_f64().unwrap_or_default();
+            vector_value(v.iter().map(|e| e + x).collect())
+        }
         _ => match gts_operators::add(&op1, &op2) {
             Some(result) => result?,
             None => {
@@ -166,6 +180,8 @@ fn arithmetic(stack: &mut Stack, op: Arithmetic) -> Result<()> {
             "*" => a.multiply(&b)?,
             _ => a.divide(&b)?,
         })
+    } else if let Some(result) = matrix_arithmetic(op.name, &op1, &op2) {
+        result?
     } else if op1.is_number() && op2.is_number() {
         match (&op1, &op2) {
             (Value::Long(a), Value::Long(b)) => Value::Long((op.long)(*a, *b)?),
@@ -179,6 +195,31 @@ fn arithmetic(stack: &mut Stack, op: Arithmetic) -> Result<()> {
     };
     stack.push(result);
     Ok(())
+}
+
+/// `-`, `*` and `/` on matrices and vectors (`None` for other operands).
+fn matrix_arithmetic(name: &str, op1: &Value, op2: &Value) -> Option<Result<Value>> {
+    let number = |v: &Value| v.is_number().then(|| v.as_f64().unwrap_or_default());
+    Some(match (name, op1, op2) {
+        ("-", Value::Matrix(a), Value::Matrix(b)) => add_matrices(a, b, -1.0).map(matrix_value),
+        ("-", Value::Vector(a), Value::Vector(b)) => add_vectors(a, b, -1.0).map(vector_value),
+        ("*", Value::Matrix(a), Value::Matrix(b)) => multiply(a, b).map(matrix_value),
+        ("*", Value::Vector(v), Value::Matrix(m)) => pre_multiply(m, v).map(vector_value),
+        ("*", Value::Matrix(m), Value::Vector(v)) => operate(m, v).map(vector_value),
+        ("*", Value::Matrix(m), n) | ("*", n, Value::Matrix(m)) => {
+            let x = number(n)?;
+            Ok(matrix_value(map_matrix(m, |v| v * x)))
+        }
+        ("*", Value::Vector(v), n) | ("*", n, Value::Vector(v)) => {
+            let x = number(n)?;
+            Ok(vector_value(v.iter().map(|e| e * x).collect()))
+        }
+        ("/", Value::Vector(v), n) => {
+            let x = number(n)?;
+            Ok(vector_value(v.iter().map(|e| e / x).collect()))
+        }
+        _ => return None,
+    })
 }
 
 /// Java `long` division: `ArithmeticException` on a zero divisor, wrapping otherwise.

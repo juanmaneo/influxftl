@@ -96,6 +96,27 @@ fn append(out: &mut String, value: &Value, depth: usize, readable: bool) -> Resu
             out.push_str(&java_double_to_string(*d));
             out.push(' ');
         }
+        // `[] [] 1.0 +! 2.0 +! +! … ->MAT` / `[] 1.0 +! 2.0 +! ->VEC`.
+        Value::Matrix(m) => {
+            out.push_str("[] ");
+            for r in 0..m.rows {
+                out.push_str("[] ");
+                for c in 0..m.cols {
+                    out.push_str(&java_double_to_string(m.get(r, c)));
+                    out.push_str(" +! ");
+                }
+                out.push_str("+! ");
+            }
+            out.push_str("->MAT ");
+        }
+        Value::Vector(v) => {
+            out.push_str("[] ");
+            for x in v.iter() {
+                out.push_str(&java_double_to_string(*x));
+                out.push_str(" +! ");
+            }
+            out.push_str("->VEC ");
+        }
         Value::BigDecimal(bd) => {
             out.push('\'');
             out.push_str(&bd.to_plain_string());

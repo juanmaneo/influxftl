@@ -222,6 +222,17 @@ impl Serializer {
             Value::Double(d) => self.write_double(*d),
             // Jackson writes a `BigDecimal` with its `toString()`.
             Value::BigDecimal(bd) => self.out.push_str(&bd.to_string()),
+            // Jackson writes `getData()` / `toArray()`.
+            Value::Matrix(m) => {
+                let rows: Vec<Value> = (0..m.rows)
+                    .map(|r| Value::list((0..m.cols).map(|c| Value::Double(m.get(r, c))).collect()))
+                    .collect();
+                self.write_array(rows.iter(), depth)?;
+            }
+            Value::Vector(v) => {
+                let entries: Vec<Value> = v.iter().map(|&x| Value::Double(x)).collect();
+                self.write_array(entries.iter(), depth)?;
+            }
             Value::String(s) => self.write_string(s.chars()),
             // `BytesSerializer`: the ISO-8859-1 decoding of the bytes.
             Value::Bytes(b) => self.write_string(b.iter().map(|&byte| char::from(byte))),
