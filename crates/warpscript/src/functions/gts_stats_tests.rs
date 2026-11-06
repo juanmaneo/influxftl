@@ -7,8 +7,11 @@
 
 use indexmap::IndexMap;
 
+use crate::encoder::{Decimal, EncodedValue, GtsEncoder};
+use crate::encoding::hex_encode;
 use crate::gts::{GeoTimeSerie, NO_ELEVATION, NO_LOCATION};
 use crate::tests::{assert_fails, assert_stack, assert_top, test_stack};
+use crate::thrift::{GtsWrapper, serialize_wrapper};
 use crate::value::Value;
 
 /// A `LONG` series `g{l=v}` with three datapoints, the second one located and elevated.
@@ -579,4 +582,61 @@ fn functions_fail_on_an_empty_stack() {
             assert_fails(&format!("{prefix} {name}"), "Empty stack.");
         }
     }
+}
+
+#[test]
+fn valuehistogram_of_encoders() {
+    // Warp 10 counts in a `HashMap`: the keys come out in its bucket order.
+    assert_top(
+        "[ [ 1 2 ] [ 2 1.5 ] [ 3 'x' ] [ 4 T ] [ 5 2 ] [ 6 1.5 ] [ 7 'hex:00ff' PARSEVALUE ] \
+         [ 8 F ] [ 9 -3 ] [ 10 1.25 ] [ 11 NaN ] [ 12 0.1 ] [ 13 -2.5 ] ] ->ENCODER \
+         VALUEHISTOGRAM KEYLIST ->JSON",
+        "[2,-3,0.1,1.25,-2.5,false,1.5,\"x\",NaN,true,\"\\u0000\\u00FF\"]",
+    );
+    assert_top(
+        "[ [ [ 1 2 ] [ 2 2 ] ] ->ENCODER NEWGTS 1 NaN NaN NaN 3 ADDVALUE ] VALUEHISTOGRAM ->JSON",
+        "[{\"2\":2},{\"3\":1}]",
+    );
+    assert_fails(
+        "[ '78044c02044c00' HEX-> ] ->ENCODER VALUEHISTOGRAM",
+        "BufferUnderflowException",
+    );
+    assert_fails(
+        "[ [ '78044c02044c00' HEX-> ] ->ENCODER ] VALUEHISTOGRAM",
+        "BufferUnderflowException",
+    );
+}
+
+/// The hexadecimal wrapper of an encoder of optimized doubles (`BigDecimal` values).
+fn decimals_hex() -> String {
+    let mut encoder = GtsEncoder::new(0);
+    for (tick, (unscaled, scale)) in [(15, 1), (-150, 2), (15, 1), (1 << 40, 3), (-7, 0)]
+        .into_iter()
+        .enumerate()
+    {
+        encoder.add_value(
+            tick as i64,
+            NO_LOCATION,
+            NO_ELEVATION,
+            &EncodedValue::Decimal(Decimal { unscaled, scale }),
+        );
+    }
+    let wrapper = GtsWrapper {
+        encoded: Some(encoder.bytes().to_vec()),
+        ..GtsWrapper::default()
+    };
+    hex_encode(&serialize_wrapper(&wrapper))
+}
+
+#[test]
+fn valuehistogram_of_decimals() {
+    // The keys are `BigDecimal`s in Warp 10, `DOUBLE`s here (DIVERGENCES §20).
+    assert_top(
+        &format!(
+            "'{}' HEX-> UNWRAPENCODER VALUEHISTOGRAM ->JSON",
+            decimals_hex()
+        ),
+        // Warp 10: {"1099511627.776":1,"1.5":2,"-7":1,"-1.5":1}, in the same order.
+        "{\"1.099511627776E9\":1,\"1.5\":2,\"-7.0\":1,\"-1.5\":1}",
+    );
 }

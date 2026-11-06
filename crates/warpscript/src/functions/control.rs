@@ -11,6 +11,8 @@ use indexmap::IndexMap;
 use super::Entry;
 use super::args::{fail, pop_bool, pop_long, pop_macro, pop_string};
 use crate::error::{Error, Result, ScriptError};
+use crate::geoxp::from_geoxp_point;
+use crate::gts::{NO_ELEVATION, NO_LOCATION};
 use crate::macros::Macro;
 use crate::stack::{DEADLINE_MESSAGE, Stack};
 use crate::value::Value;
@@ -389,27 +391,90 @@ fn foreach_items(obj: &Value) -> Option<Vec<Vec<Value>>> {
     }
 }
 
+/// The `[ tick lat lon elevation value ]` list `FOREACH` pushes for a datapoint.
+fn datapoint(tick: i64, location: i64, elevation: i64, value: Value) -> Value {
+    let (lat, lon) = if location == NO_LOCATION {
+        (f64::NAN, f64::NAN)
+    } else {
+        from_geoxp_point(location)
+    };
+    let elevation = if elevation == NO_ELEVATION {
+        Value::Double(f64::NAN)
+    } else {
+        Value::Long(elevation)
+    };
+    Value::list(vec![
+        Value::Long(tick),
+        Value::Double(lat),
+        Value::Double(lon),
+        elevation,
+        value,
+    ])
+}
+
 fn foreach(stack: &mut Stack) -> Result<()> {
     let (push_index, run) = pop_flag(stack, false)?;
     let obj = stack.pop()?;
     let Value::Macro(run) = run else {
         return Err(fail("FOREACH", "expects a macro on top of the stack."));
     };
-    let Some(items) = foreach_items(&obj) else {
-        return Err(fail(
-            "FOREACH",
-            "operates on a list, map, Geo Time Series, ENCODER, STRING, iterator or iterable.",
-        ));
-    };
-    for (index, item) in items.into_iter().enumerate() {
+    let mut index = 0_i64;
+    let mut step = |stack: &mut Stack, item: Vec<Value>| {
         for value in item {
             stack.push(value);
         }
         if push_index {
-            stack.push(index as i64);
+            stack.push(Value::Long(index));
+            index += 1;
         }
-        if let Flow::Break = loop_body(stack, &run)? {
-            break;
+        loop_body(stack, &run)
+    };
+    match &obj {
+        // A series is read live, as Warp 10 does: the body sees the datapoints it adds.
+        Value::Gts(gts) => {
+            let mut i = 0;
+            while i < gts.borrow().size() {
+                let point = {
+                    let gts = gts.borrow();
+                    datapoint(
+                        gts.tick_at(i),
+                        gts.location_at(i),
+                        gts.elevation_at(i),
+                        gts.value_at(i),
+                    )
+                };
+                if let Flow::Break = step(stack, vec![point])? {
+                    break;
+                }
+                i += 1;
+            }
+        }
+        Value::Encoder(encoder) => {
+            let mut decoder = encoder.borrow().decoder();
+            while decoder.next()? {
+                let point = datapoint(
+                    decoder.timestamp(),
+                    decoder.location(),
+                    decoder.elevation(),
+                    decoder.binary_value().to_value(),
+                );
+                if let Flow::Break = step(stack, vec![point])? {
+                    break;
+                }
+            }
+        }
+        _ => {
+            let Some(items) = foreach_items(&obj) else {
+                return Err(fail(
+                    "FOREACH",
+                    "operates on a list, map, Geo Time Series, ENCODER, STRING, iterator or iterable.",
+                ));
+            };
+            for item in items {
+                if let Flow::Break = step(stack, item)? {
+                    break;
+                }
+            }
         }
     }
     Ok(())

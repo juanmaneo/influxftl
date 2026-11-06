@@ -470,7 +470,7 @@ fn cut(text: &str, precision: Option<usize>) -> String {
 }
 
 /// Java `hashCode()` of a value, for `%h`.
-fn java_hash(value: &Value) -> i32 {
+pub(super) fn java_hash(value: &Value) -> i32 {
     match value {
         Value::Boolean(true) => 1231,
         Value::Boolean(false) => 1237,

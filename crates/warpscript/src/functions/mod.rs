@@ -295,6 +295,8 @@ mod pack_tests;
 #[cfg(test)]
 mod patterns_tests;
 #[cfg(test)]
+mod pivot_tests;
+#[cfg(test)]
 mod polyfunc_tests;
 #[cfg(test)]
 mod quaternions_tests;

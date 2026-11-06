@@ -5,6 +5,7 @@
 //! usable as a mapper) and `RANDPDF` / `SRANDPDF` (a random value drawn from a value
 //! histogram).
 
+use std::cell::RefCell;
 use std::rc::Rc;
 
 use super::Entry;
@@ -12,6 +13,7 @@ use super::args::fail;
 use super::math::{ATTRIBUTE_SEEDED_PRNG, secure_double};
 use crate::aggregators::{Aggregated, Aggregator, AggregatorArgs, Roles};
 use crate::curvefit::polynomial_value;
+use crate::encoder::EncodedValue;
 use crate::error::{Error, Result};
 use crate::gts::{GeoTimeSerie, NO_ELEVATION, NO_LOCATION, java_binary_search};
 use crate::jrandom::JavaRandom;
@@ -141,6 +143,21 @@ impl StackObject for PolyFunc {
                     }
                 }
                 Value::Gts(out.shared())
+            }
+            Value::Encoder(encoder) => {
+                let encoder = encoder.borrow();
+                let mut decoder = encoder.decoder();
+                let mut out = encoder.clone_empty();
+                while decoder.next()? {
+                    let ts = decoder.timestamp();
+                    out.add_value(
+                        ts,
+                        decoder.location(),
+                        decoder.elevation(),
+                        &EncodedValue::Double(self.value(ts as f64)),
+                    );
+                }
+                Value::Encoder(Rc::new(RefCell::new(out)))
             }
             other => match other.as_f64() {
                 Some(x) => Value::Double(self.value(x)),

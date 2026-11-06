@@ -507,11 +507,13 @@ unstable, order), `GeoTimeSerie.toString` and `dump` (`TOSTRING`), and the JSON 
   fixing the type of an untyped series to `BOOLEAN`: this is what `GTSHelper.setValue` does
   with a Java `AtomicLong`. As elsewhere (§15) they are not numbers for the tick, latitude,
   longitude and elevation arguments.
-- **GTS encoders** are accepted by `ADDVALUE`, `SETVALUE`, `TICKLIST`, `VALUES`, `CLONEEMPTY`,
-  `TICKINDEX`, `SIZE`, `CLONE`, `TOSELECTOR`, `TIMECLIP`, `CLIP`, `CHUNK` and `MERGE`. The
-  other functions that accept "a Geo Time Series or encoder" in Warp 10 (`FOREACH`,
-  `VALUEHISTOGRAM`, `POLYFUNC`) still only accept series, with the messages Warp 10 prints in
-  that case.
+- **GTS encoders** are accepted wherever Warp 10 accepts them (`ADDVALUE`, `SETVALUE`,
+  `TICKLIST`, `VALUES`, `CLONEEMPTY`, `TICKINDEX`, `SIZE`, `CLONE`, `TOSELECTOR`, `TIMECLIP`,
+  `CLIP`, `CHUNK`, `MERGE`, `FOREACH`, `VALUEHISTOGRAM`, `POLYFUNC`, `PIVOT`…). The keys of
+  `VALUEHISTOGRAM` follow the Java `HashMap` order, but its `BigDecimal` keys are `DOUBLE`s
+  (§20).
+- **`PIVOT` / `PIVOTSTRICT`** reproduce the Java `HashMap` orders of the result list and of
+  the labels of each result (colliding hash buckets aside).
 - **`[ value ] ADDVALUE`** (a one-element datapoint list) adds the value at tick `0` as
   `MACROMAPPER.listToObjects` intends; Warp 10 dies with a `ClassCastException` on the
   `Integer` tick that method builds.

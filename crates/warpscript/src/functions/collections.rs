@@ -26,13 +26,16 @@
 //! `docs/DIVERGENCES.md`.
 
 use std::cell::RefCell;
+use std::collections::HashSet;
 use std::rc::Rc;
 
 use indexmap::{IndexMap, IndexSet};
 
 use super::Entry;
 use super::args::{compute_and_check_index, fail, fail_with_cause, pop_list, pop_long, pop_map};
+use super::gts_reduce::{java_hash_order, java_string_hash, table_size_for};
 use crate::error::{Error, Result};
+use crate::gts::{GeoTimeSerie, Gts};
 use crate::stack::Stack;
 use crate::value::{List, Value};
 
@@ -1209,28 +1212,298 @@ fn clone_fn(stack: &mut Stack) -> Result<()> {
 // PIVOT / PIVOTSTRICT
 // -----------------------------------------------------------------------------------------
 
-/// `PIVOT` / `PIVOTSTRICT` operate on Geo Time Series, which are not modelled: the error a
-/// script gets for an unsupported labeling list.
-fn pivot_impl(stack: &mut Stack, name: &str) -> Result<()> {
-    match stack.pop()? {
-        Value::List(list) if !list.borrow().is_empty() => {
-            Err(fail(name, "expects a list of labeling Geo Time Series."))
+/// The series `PIVOT` builds, keyed by class name and sorted labels, with the Java hash of
+/// their key.
+type PivotTargets = IndexMap<(Option<String>, Vec<(String, String)>), (i32, GeoTimeSerie)>;
+
+/// A series of `PIVOT`: encoders are decoded into a new series.
+fn pivot_series(name: &str, value: &Value, wrong_type: &str) -> Result<Gts> {
+    match value {
+        Value::Gts(gts) => Ok(Rc::clone(gts)),
+        Value::Encoder(encoder) => {
+            let gts = encoder.borrow().decoder().decode().map_err(|err| {
+                fail_with_cause(name, "encountered an error while decoding encoder.", err)
+            })?;
+            Ok(gts.shared())
         }
-        _ => Err(fail(
-            name,
-            "expects a non empty list of labeling Geo Time Series.",
-        )),
+        _ => Err(fail(name, wrong_type)),
     }
 }
 
-/// `PIVOT`: not supported (Geo Time Series are not modelled).
-fn pivot(stack: &mut Stack) -> Result<()> {
-    pivot_impl(stack, "PIVOT")
+/// `GTSHelper.tickAtIndex`: `Long.MIN_VALUE` past the last datapoint.
+fn pivot_tick(gts: &GeoTimeSerie, idx: usize) -> i64 {
+    if idx < gts.size() {
+        gts.tick_at(idx)
+    } else {
+        i64::MIN
+    }
 }
 
-/// `PIVOTSTRICT`: not supported (Geo Time Series are not modelled).
+/// The pivoted series of `gts` with the extra `labels` (whose `null` class names are
+/// overwritten by the class name key Warp 10 adds), created on first use. The map is keyed
+/// like the Java `HashMap` (class name and labels) and records the Java hash of its key.
+fn pivot_target<'a>(
+    labeled: &'a mut PivotTargets,
+    gts: &GeoTimeSerie,
+    labels: &[(Option<String>, String)],
+) -> &'a mut GeoTimeSerie {
+    let mut gts_labels = gts.metadata.labels.clone();
+    for (key, value) in labels {
+        if let Some(key) = key {
+            gts_labels.insert(key.clone(), value.clone());
+        }
+    }
+    let mut sorted: Vec<(String, String)> = gts_labels
+        .iter()
+        .map(|(k, v)| (k.clone(), v.clone()))
+        .collect();
+    sorted.sort();
+    let name = gts.metadata.name.clone();
+    &mut labeled
+        .entry((name.clone(), sorted))
+        .or_insert_with(|| {
+            let hash = gts_labels
+                .iter()
+                .fold(name.as_deref().map_or(0, java_string_hash), |h, (k, v)| {
+                    h.wrapping_add(java_string_hash(k) ^ java_string_hash(v))
+                });
+            // The labels of the Java `HashMap` copied from those of the series, which the
+            // class name is put into (under the `null` key) before being removed.
+            let copied = gts.metadata.labels.len();
+            let capacity = if copied == 0 {
+                16
+            } else {
+                table_size_for((copied as f32 / 0.75 + 1.0) as usize)
+            };
+            let mut keys: Vec<Option<(&String, &String)>> = gts_labels.iter().map(Some).collect();
+            keys.push(None);
+            let key_hashes: Vec<i32> = keys
+                .iter()
+                .map(|key| key.map_or(0, |(k, _)| java_string_hash(k)))
+                .collect();
+            // `setLabels` copies that map (null key included) into a `new HashMap(map)`.
+            let order = java_hash_order(&key_hashes, capacity);
+            let copy_hashes: Vec<i32> = order.iter().map(|&i| key_hashes[i]).collect();
+            let copy_capacity = table_size_for((keys.len() as f32 / 0.75 + 1.0) as usize);
+            let labels = java_hash_order(&copy_hashes, copy_capacity)
+                .into_iter()
+                .filter_map(|j| keys[order[j]])
+                .map(|(k, v)| (k.clone(), v.clone()))
+                .collect();
+            let mut target = GeoTimeSerie::new();
+            target.metadata.name = name;
+            target.metadata.labels = labels;
+            target
+                .metadata
+                .attributes
+                .clone_from(&gts.metadata.attributes);
+            (hash, target)
+        })
+        .1
+}
+
+/// `PIVOT` / `PIVOTSTRICT`: label the datapoints of series with the values the labeling
+/// series have at the same ticks (all of them for `PIVOTSTRICT`, which only keeps the ticks
+/// where every labeling series has a datapoint).
+#[allow(clippy::too_many_lines)]
+fn pivot_impl(stack: &mut Stack, name: &str, synchronous: bool) -> Result<()> {
+    let top = stack.pop()?;
+    let labeling_values = match &top {
+        Value::List(list) if !list.borrow().is_empty() => list.borrow().clone(),
+        _ => {
+            return Err(fail(
+                name,
+                "expects a non empty list of labeling Geo Time Series.",
+            ));
+        }
+    };
+    let mut labeling = Vec::with_capacity(labeling_values.len());
+    let mut classes: HashSet<Option<String>> = HashSet::new();
+    for value in &labeling_values {
+        let gts = pivot_series(name, value, "expects a list of labeling Geo Time Series.")?;
+        if gts.borrow().size() == 0 {
+            return Err(fail(
+                name,
+                "expects labeling Geo Time Series to be non empty.",
+            ));
+        }
+        if !classes.insert(gts.borrow().metadata.name.clone()) {
+            return Err(fail(
+                name,
+                "labeling Geo Time Series must all have different class names.",
+            ));
+        }
+        labeling.push(gts);
+    }
+    let top = stack.pop()?;
+    let series_values = match &top {
+        Value::List(list) if !list.borrow().is_empty() => list.borrow().clone(),
+        _ => {
+            return Err(fail(
+                name,
+                "operates on a non empty list of Geo Time Series or GTS Encoders.",
+            ));
+        }
+    };
+    let mut series = Vec::with_capacity(series_values.len());
+    for value in &series_values {
+        let gts = pivot_series(
+            name,
+            value,
+            "operates on a list Geo Time Series or GTS Encoders.",
+        )?;
+        if gts.borrow().size() == 0 {
+            return Err(fail(
+                name,
+                "operates on non empty Geo Time Series or GTS Encoders.",
+            ));
+        }
+        if let Some(key) = gts
+            .borrow()
+            .metadata
+            .labels
+            .keys()
+            .find(|key| classes.contains(&Some((*key).clone())))
+        {
+            return Err(fail(
+                name,
+                &format!(
+                    "labeling class '{key}' is already a label of a Geo Time Series or GTS Encoder to label."
+                ),
+            ));
+        }
+        series.push(gts);
+    }
+    for gts in series.iter().chain(&labeling) {
+        gts.borrow_mut().sort(false);
+    }
+    let lab: Vec<_> = labeling.iter().map(|g| g.borrow()).collect();
+    let ser: Vec<_> = series.iter().map(|g| g.borrow()).collect();
+    let mut li = vec![0usize; lab.len()];
+    let mut gi = vec![0usize; ser.len()];
+    let mut labeled = IndexMap::new();
+    let mut commonts = if synchronous {
+        pivot_tick(&lab[0], 0)
+    } else {
+        lab.iter()
+            .map(|g| pivot_tick(g, 0))
+            .fold(i64::MAX, i64::min)
+    };
+    let mut done = false;
+    while !done {
+        if synchronous {
+            let mut skip = false;
+            for (i, g) in lab.iter().enumerate() {
+                let n = g.size();
+                while li[i] < n && pivot_tick(g, li[i]) < commonts {
+                    li[i] += 1;
+                }
+                if li[i] >= n {
+                    done = true;
+                    skip = true;
+                    break;
+                }
+                if pivot_tick(g, li[i]) > commonts {
+                    commonts = pivot_tick(g, li[i]);
+                    skip = true;
+                    break;
+                }
+            }
+            if skip {
+                continue;
+            }
+        }
+        // `String.valueOf(valueAtIndex)`, which is `null` past the last datapoint.
+        let labels: Vec<(Option<String>, String)> = lab
+            .iter()
+            .zip(&li)
+            .filter(|(g, idx)| commonts == pivot_tick(g, **idx))
+            .map(|(g, &idx)| {
+                let value = if idx < g.size() {
+                    g.value_at(idx)
+                } else {
+                    Value::Null
+                };
+                (g.metadata.name.clone(), value.to_string())
+            })
+            .collect();
+        for (i, g) in ser.iter().enumerate() {
+            let n = g.size();
+            while gi[i] < n && g.tick_at(gi[i]) < commonts {
+                if !synchronous {
+                    // Before the common tick, only the labels of the series apply.
+                    pivot_target(&mut labeled, g, &[]).set_value(
+                        g.tick_at(gi[i]),
+                        g.location_at(gi[i]),
+                        g.elevation_at(gi[i]),
+                        &g.value_at(gi[i]),
+                        false,
+                    );
+                }
+                gi[i] += 1;
+            }
+            if gi[i] >= n || g.tick_at(gi[i]) > commonts {
+                continue;
+            }
+            let target = pivot_target(&mut labeled, g, &labels);
+            while gi[i] < n && commonts == g.tick_at(gi[i]) {
+                target.set_value(
+                    commonts,
+                    g.location_at(gi[i]),
+                    g.elevation_at(gi[i]),
+                    &g.value_at(gi[i]),
+                    false,
+                );
+                gi[i] += 1;
+            }
+        }
+        if synchronous {
+            li[0] += 1;
+            if li[0] >= lab[0].size() {
+                done = true;
+            } else {
+                commonts = pivot_tick(&lab[0], li[0]);
+            }
+        } else {
+            let mut newcommonts = i64::MAX;
+            done = true;
+            for (i, g) in lab.iter().enumerate() {
+                if li[i] < g.size() {
+                    if commonts == pivot_tick(g, li[i]) {
+                        li[i] += 1;
+                    }
+                    newcommonts = newcommonts.min(pivot_tick(g, li[i]));
+                    done = false;
+                }
+            }
+            // Done once the labeling series are consumed, unless series still have ticks.
+            if done {
+                done = gi.iter().zip(&ser).all(|(&idx, g)| idx >= g.size());
+            }
+            commonts = newcommonts;
+        }
+    }
+    let hashes: Vec<i32> = labeled.values().map(|(hash, _)| *hash).collect();
+    let mut results: Vec<Option<GeoTimeSerie>> =
+        labeled.into_values().map(|(_, gts)| Some(gts)).collect();
+    stack.push(Value::list(
+        java_hash_order(&hashes, 16)
+            .into_iter()
+            .filter_map(|i| results[i].take())
+            .map(|gts| Value::Gts(gts.shared()))
+            .collect(),
+    ));
+    Ok(())
+}
+
+/// `PIVOT`: label every datapoint with the values the labeling series have at its tick.
+fn pivot(stack: &mut Stack) -> Result<()> {
+    pivot_impl(stack, "PIVOT", false)
+}
+
+/// `PIVOTSTRICT`: `PIVOT` restricted to the ticks where every labeling series has a value.
 fn pivotstrict(stack: &mut Stack) -> Result<()> {
-    pivot_impl(stack, "PIVOTSTRICT")
+    pivot_impl(stack, "PIVOTSTRICT", true)
 }
 
 // -----------------------------------------------------------------------------------------

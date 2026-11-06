@@ -11,6 +11,9 @@ use super::Entry;
 use super::args::fail;
 use super::functional::java_double_compare;
 use super::gts::{element_or_list, gts_or_list, gts_or_list_try};
+use super::gts_reduce::java_hash_order;
+use super::stringformat::java_hash;
+use crate::encoder::{Decimal, EncodedValue, GtsEncoder};
 use crate::error::{Error, Result};
 use crate::gts::{GeoTimeSerie, NO_LOCATION, Type, Values};
 use crate::jmath;
@@ -453,23 +456,76 @@ fn value_histogram(gts: &GeoTimeSerie) -> Value {
     )
 }
 
-/// `VALUEHISTOGRAM`: the histogram of the values of a Geo Time Series or of each of a list.
+/// `BigDecimal.hashCode` of a compact decimal.
+fn decimal_hash(decimal: Decimal) -> i32 {
+    let magnitude = decimal.unscaled.unsigned_abs();
+    let temp = ((magnitude >> 32) as i32)
+        .wrapping_mul(31)
+        .wrapping_add(magnitude as i32);
+    let signed = if decimal.unscaled < 0 {
+        temp.wrapping_neg()
+    } else {
+        temp
+    };
+    signed.wrapping_mul(31).wrapping_add(decimal.scale)
+}
+
+/// `GTSHelper.valueHistogram(GTSEncoder)`: the occurrences of each value (`getValue`), in the
+/// iteration order of the Java `HashMap`. The keys tell decimals (`BigDecimal`s in Java,
+/// equal only with the same scale) from doubles.
+fn encoder_histogram(encoder: &GtsEncoder) -> Result<Value> {
+    let mut decoder = encoder.decoder();
+    // (value, decimal) -> (hash, count)
+    let mut occurrences = IndexMap::<(Value, Option<(i64, i32)>), (i32, i64)>::new();
+    while decoder.next()? {
+        let value = decoder.value();
+        let decimal = match &value {
+            EncodedValue::Decimal(d) => Some(*d),
+            _ => None,
+        };
+        let value = value.to_value();
+        let hash = decimal.map_or_else(|| java_hash(&value), decimal_hash);
+        occurrences
+            .entry((value, decimal.map(|d| (d.unscaled, d.scale))))
+            .or_insert((hash, 0))
+            .1 += 1;
+    }
+    let hashes: Vec<i32> = occurrences.values().map(|(hash, _)| *hash).collect();
+    let mut entries: Vec<Option<(Value, i64)>> = occurrences
+        .into_iter()
+        .map(|((value, _), (_, count))| Some((value, count)))
+        .collect();
+    Ok(Value::map(
+        java_hash_order(&hashes, 16)
+            .into_iter()
+            .filter_map(|i| entries[i].take())
+            .map(|(value, count)| (value, Value::Long(count)))
+            .collect(),
+    ))
+}
+
+/// `VALUEHISTOGRAM`: the histogram of the values of a Geo Time Series or encoder, or of each
+/// of a list.
 fn valuehistogram(stack: &mut Stack) -> Result<()> {
     const NAME: &str = "VALUEHISTOGRAM";
     let top = stack.pop()?;
     let result = match &top {
         Value::Gts(gts) => value_histogram(&gts.borrow()),
+        Value::Encoder(encoder) => encoder_histogram(&encoder.borrow())?,
         Value::List(list) => {
             let mut histograms = Vec::with_capacity(list.borrow().len());
             for element in list.borrow().iter() {
-                let Value::Gts(gts) = element else {
-                    stack.push(top.clone());
-                    return Err(fail(
-                        NAME,
-                        "can only operate on Geo Time Series or GTS Encoder instances.",
-                    ));
-                };
-                histograms.push(value_histogram(&gts.borrow()));
+                histograms.push(match element {
+                    Value::Gts(gts) => value_histogram(&gts.borrow()),
+                    Value::Encoder(encoder) => encoder_histogram(&encoder.borrow())?,
+                    _ => {
+                        stack.push(top.clone());
+                        return Err(fail(
+                            NAME,
+                            "can only operate on Geo Time Series or GTS Encoder instances.",
+                        ));
+                    }
+                });
             }
             Value::list(histograms)
         }

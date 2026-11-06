@@ -36,7 +36,7 @@ pub const FUNCTIONS: &[(&str, Entry)] = &[
 pub(super) type Labels = IndexMap<String, String>;
 
 /// `String.hashCode()`.
-fn java_string_hash(s: &str) -> i32 {
+pub(super) fn java_string_hash(s: &str) -> i32 {
     s.encode_utf16()
         .fold(0i32, |h, c| h.wrapping_mul(31).wrapping_add(i32::from(c)))
 }
@@ -53,7 +53,7 @@ fn java_labels_hash(labels: &Labels) -> i32 {
 /// spread hash modulo the final table size, which doubles whenever the size exceeds three
 /// quarters of it), then by insertion. Buckets of eight colliding keys or more, which Java
 /// turns into trees, are not modelled.
-fn java_hash_order(hashes: &[i32], mut capacity: usize) -> Vec<usize> {
+pub(super) fn java_hash_order(hashes: &[i32], mut capacity: usize) -> Vec<usize> {
     while hashes.len() > capacity * 3 / 4 {
         capacity *= 2;
     }
@@ -66,7 +66,7 @@ fn java_hash_order(hashes: &[i32], mut capacity: usize) -> Vec<usize> {
 }
 
 /// `HashMap.tableSizeFor`: the table size of `new HashMap(n)`.
-fn table_size_for(n: usize) -> usize {
+pub(super) fn table_size_for(n: usize) -> usize {
     n.max(1).next_power_of_two()
 }
 

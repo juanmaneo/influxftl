@@ -6,7 +6,7 @@
 //! The expectations are the answers of Warp 10 3.5.0 to the same scripts:
 //! the JSON stack (top first) or the error message (in its JDK 11+ form).
 
-use crate::tests::test_stack;
+use crate::tests::{assert_fails, assert_top, test_stack};
 use crate::value::Value;
 
 const F: &str = r"[ 1 2 3 ] POLYFUNC 'f' STORE";
@@ -362,5 +362,23 @@ fn randpdf_entropy() {
     assert_eq!(
         super::polyfunc::pick(&[0.5, 0.5, 1.0], 0.75).unwrap(),
         Value::Long(2)
+    );
+}
+
+#[test]
+fn polyfunc_on_encoders() {
+    let encoder =
+        "[ [ 1 2 ] [ 2 48.0 2.0 3 'x' ] [ 4 1.5 ] ] ->ENCODER 'e' RENAME { 'a' 'b' } RELABEL";
+    assert_top(
+        &format!("{encoder} [ 1 2 ] POLYFUNC EVAL WRAPRAW ->HEX"),
+        "1c1801651b018801610162160016001b0000682854024008000000000000944c02e02134702134702106401400000000000014044022000000000000160600",
+    );
+    assert_fails(
+        &format!("{encoder} [ 1 2 ] POLYFUNC T SWAP EVAL"),
+        "POLYFUNC can only be applied to bucketized numerical Geo Time Series.",
+    );
+    assert_fails(
+        "[ '78044c02044c00' HEX-> ] ->ENCODER [ 1 ] POLYFUNC EVAL",
+        "BufferUnderflowException",
     );
 }

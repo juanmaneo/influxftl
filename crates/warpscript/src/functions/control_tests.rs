@@ -501,3 +501,41 @@ fn timebox() {
     );
     assert_top("<% <% 4 %> 1000 TIMEBOX %> 1000000 TIMEBOX", 4);
 }
+
+#[test]
+fn foreach_datapoints() {
+    let stack = |script: &str| top(&format!("{script} DEPTH ->LIST ->JSON")).to_string();
+    assert_eq!(
+        stack("NEWGTS 1 NaN NaN NaN 2 ADDVALUE 2 48.0 2.0 3 4.5 ADDVALUE <% %> FOREACH"),
+        "[[1,NaN,NaN,NaN,2],[2,47.99999998882413,1.9999999646097422,3,4]]",
+    );
+    assert_eq!(
+        stack("[ [ 1 2 ] [ 2 48.0 2.0 3 'x' ] [ 4 1.5 ] ] ->ENCODER <% %> T FOREACH"),
+        "[[1,NaN,NaN,NaN,2],0,[2,47.99999998882413,1.9999999646097422,3,\"x\"],1,[4,NaN,NaN,NaN,1.5],2]",
+    );
+    assert_top(
+        "[ [ 3 'hex:00ff' PARSEVALUE ] ] ->ENCODER <% 4 GET TYPEOF %> FOREACH",
+        "BYTES",
+    );
+    // The series is read live: the body sees the datapoints it adds.
+    assert_top(
+        "NEWGTS 'g' STORE $g 1 NaN NaN NaN 1 ADDVALUE \
+         <% DROP $g SIZE 3 < <% $g $g SIZE 5 * NaN NaN NaN 1 ADDVALUE DROP %> IFT %> FOREACH \
+         $g TICKLIST ->JSON",
+        "[1,5,10]",
+    );
+    assert_eq!(
+        stack("[ [ 1 2 ] [ 2 3 ] [ 3 4 ] ] ->ENCODER <% 4 GET DUP 3 == <% BREAK %> IFT %> FOREACH"),
+        "[2,3]",
+    );
+    assert_eq!(
+        stack("NEWGTS 1 NaN NaN NaN 2 ADDVALUE 2 NaN NaN NaN 3 ADDVALUE <% 1 GET BREAK %> FOREACH"),
+        "[NaN]",
+    );
+    assert_fails("NEWGTS 1 NaN NaN NaN 2 ADDVALUE <% FAIL %> FOREACH", "FAIL");
+    assert_fails("[ [ 1 2 ] ] ->ENCODER <% FAIL %> FOREACH", "FAIL");
+    assert_fails(
+        "[ '78044c02044c00' HEX-> ] ->ENCODER <% 'seen' %> FOREACH",
+        "BufferUnderflowException",
+    );
+}
