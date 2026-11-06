@@ -1081,6 +1081,71 @@ impl GtsDecoder {
     }
 }
 
+/// `GTSHelper.fullsort(GTSEncoder, reversed, baseTimestamp)`: the datapoints split by type
+/// (`LONG`, `DOUBLE`, `BOOLEAN`, `STRING`, binary) into series that are fully sorted, then
+/// merged by ascending tick (whatever `reversed`) with that type precedence, the doubles
+/// optimized.
+pub fn fullsort_encoder(encoder: &GtsEncoder, reversed: bool, base: i64) -> Result<GtsEncoder> {
+    let mut parts: [GeoTimeSerie; 5] = std::array::from_fn(|_| GeoTimeSerie::new());
+    let mut decoder = encoder.decoder();
+    while decoder.next()? {
+        let (tick, location, elevation) =
+            (decoder.timestamp(), decoder.location(), decoder.elevation());
+        match decoder.binary_value() {
+            EncodedValue::Long(l) => {
+                parts[0].set_value(tick, location, elevation, &Value::Long(l), false);
+            }
+            EncodedValue::Double(d) => {
+                parts[1].set_value(tick, location, elevation, &Value::Double(d), false);
+            }
+            EncodedValue::Decimal(d) => parts[1].set_decimal(tick, location, elevation, d),
+            EncodedValue::Boolean(b) => {
+                parts[2].set_value(tick, location, elevation, &Value::Boolean(b), false);
+            }
+            EncodedValue::String(s) => {
+                parts[3].set_value(tick, location, elevation, &Value::String(s), false);
+            }
+            // A decoded datapoint is never `null`.
+            other => parts[4].set_value(tick, location, elevation, &other.to_value(), false),
+        }
+    }
+    for part in &mut parts {
+        part.fullsort(reversed);
+    }
+    let mut sorted = GtsEncoder::new(base);
+    sorted.metadata = encoder.metadata.clone();
+    let mut idx = [0usize; 5];
+    loop {
+        let mut next: Option<(usize, i64)> = None;
+        for (i, part) in parts.iter().enumerate() {
+            if idx[i] < part.size() {
+                let tick = part.tick_at(idx[i]);
+                if next.is_none_or(|(_, ts)| tick < ts) {
+                    next = Some((i, tick));
+                }
+            }
+        }
+        let Some((i, ts)) = next else {
+            break;
+        };
+        let part = &parts[i];
+        loop {
+            let k = idx[i];
+            let value = match part.value_at(k) {
+                Value::String(s) if i == 4 => EncodedValue::Bytes(Rc::from(latin1_bytes(&s))),
+                Value::Double(d) if d.is_finite() => EncodedValue::Decimal(Decimal::from_double(d)),
+                other => EncodedValue::from_value(&other).unwrap_or(EncodedValue::Null),
+            };
+            sorted.add_value(ts, part.location_at(k), part.elevation_at(k), &value);
+            idx[i] += 1;
+            if idx[i] >= part.size() || part.tick_at(idx[i]) != ts {
+                break;
+            }
+        }
+    }
+    Ok(sorted)
+}
+
 // -----------------------------------------------------------------------------------------
 // GTSWrapperHelper
 // -----------------------------------------------------------------------------------------

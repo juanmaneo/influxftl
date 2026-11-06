@@ -255,6 +255,8 @@ mod encoders_tests;
 #[cfg(test)]
 mod functional_tests;
 #[cfg(test)]
+mod gold_tests;
+#[cfg(test)]
 mod gts_apply_tests;
 #[cfg(test)]
 mod gts_calendar_tests;

@@ -17,12 +17,12 @@ use indexmap::IndexMap;
 
 use crate::encoder::{
     DEFAULT_COMP_RATIO_THRESHOLD, EncodedValue, GtsDecoder, GtsEncoder, encoder_to_wrapper,
-    gts_to_wrapper, wrapper_to_decoder, wrapper_to_encoder, wrapper_to_gts,
+    fullsort_encoder, gts_to_wrapper, wrapper_to_decoder, wrapper_to_encoder, wrapper_to_gts,
 };
 use crate::encoding::{opb64_decode, opb64_encode};
 use crate::error::{Error, Result};
 use crate::geoxp;
-use crate::gts::{GeoTimeSerie, NO_ELEVATION, NO_LOCATION, Values};
+use crate::gts::{GeoTimeSerie, Metadata, NO_ELEVATION, NO_LOCATION, Values};
 use crate::selector::MetadataSelectorMatcher;
 use crate::stack::Stack;
 use crate::thrift::{GtsWrapper, deserialize_wrapper, serialize_wrapper};
@@ -50,7 +50,92 @@ pub const FUNCTIONS: &[(&str, Entry)] = &[
     ("->GTS", Entry::Builder(togts)),
     ("OPTIMIZE", Entry::Builder(optimize)),
     ("PARSEVALUE", Entry::Stack(parsevalue)),
+    ("GOLDWRAP", Entry::Stack(goldwrap)),
 ];
+
+/// The fully sorted encoder of the wrapper `bytes` of `GOLDWRAP`.
+fn gold_encoder(bytes: &[u8], reversed: bool) -> Result<GtsEncoder> {
+    let wrapper = deserialize_wrapper(bytes).map_err(|err| {
+        wrap_error(
+            "GOLDWRAP",
+            "encountered an error while manipulating GTS Wrapper.",
+            err,
+        )
+    })?;
+    fullsort_encoder(&wrapper_to_encoder(&wrapper)?, reversed, 0)
+}
+
+/// `GOLDWRAP` of one element (lists are handled recursively): the fully sorted datapoints,
+/// with the class name and the sorted labels and attributes only, as a compressed wrapper.
+/// A series is fully sorted in place, as in Warp 10.
+fn goldwrap_element(element: &Value, reversed: bool) -> Result<Value> {
+    const NAME: &str = "GOLDWRAP";
+    let sorted = match element {
+        Value::Gts(gts) => {
+            let mut gts = gts.borrow_mut();
+            gts.fullsort(reversed);
+            let mut encoder = GtsEncoder::new(0);
+            encoder.metadata = gts.metadata.clone();
+            encoder.encode_optimized(&gts);
+            encoder
+        }
+        Value::Encoder(encoder) => fullsort_encoder(&encoder.borrow(), reversed, 0)?,
+        Value::String(s) => {
+            let ascii: String = s
+                .chars()
+                .map(|c| if c.is_ascii() { c } else { '?' })
+                .collect();
+            gold_encoder(&opb64_decode(&ascii)?, reversed)?
+        }
+        Value::Bytes(bytes) => gold_encoder(bytes, reversed)?,
+        Value::List(list) => {
+            let results = list
+                .borrow()
+                .iter()
+                .map(|e| goldwrap_element(e, reversed))
+                .collect::<Result<Vec<_>>>()?;
+            return Ok(Value::list(results));
+        }
+        _ => {
+            return Err(fail(
+                NAME,
+                "can only handle GTS, ENCODERs and list thereof.",
+            ));
+        }
+    };
+    let sorted_map = |map: &IndexMap<String, String>| {
+        let mut entries: Vec<(String, String)> =
+            map.iter().map(|(k, v)| (k.clone(), v.clone())).collect();
+        entries.sort_by(|a, b| a.0.encode_utf16().cmp(b.0.encode_utf16()));
+        entries.into_iter().collect()
+    };
+    let metadata = Metadata {
+        name: sorted.metadata.name.clone(),
+        labels: sorted_map(&sorted.metadata.labels),
+        attributes: sorted_map(&sorted.metadata.attributes),
+        ..Metadata::default()
+    };
+    let mut gold = sorted;
+    gold.metadata = metadata;
+    let wrapper = encoder_to_wrapper(&gold, true, 1.0, true);
+    Ok(Value::bytes(serialize_wrapper(&wrapper)))
+}
+
+/// `GOLDWRAP`: a canonical (`[ reversed ]`) wrapper of series, encoders or wrappers.
+fn goldwrap(stack: &mut Stack) -> Result<()> {
+    let reversed = match stack.peek()? {
+        Value::Boolean(b) => {
+            let b = *b;
+            stack.pop().ok();
+            b
+        }
+        _ => false,
+    };
+    let top = stack.pop()?;
+    let result = goldwrap_element(&top, reversed)?;
+    stack.push(result);
+    Ok(())
+}
 
 /// `NEWENCODER`: an empty encoder named `""`.
 fn newencoder(stack: &mut Stack) -> Result<()> {

@@ -364,3 +364,12 @@ fn binary_search_is_javas() {
     assert_eq!(java_binary_search(&[2, 2, 2, 2, 2], 2), Some(2));
     assert_eq!(java_binary_search(&[1, 2, 2, 2], 2), Some(1));
 }
+
+#[test]
+fn fullsort_without_values() {
+    // Ticks without values (not reachable from WarpScript) still sort by tick.
+    let mut gts = GeoTimeSerie::new();
+    gts.ticks = vec![3, 1, 2, 1];
+    gts.fullsort(false);
+    assert_eq!(gts.ticks, vec![1, 1, 2, 3]);
+}

@@ -691,6 +691,136 @@ impl GeoTimeSerie {
         self.reversed = reversed;
     }
 
+    /// `GTSHelper.fullsort`: sort by tick, then value, location and elevation (descending
+    /// when `reversed`). A sorted series is only sorted within its runs of equal ticks, after
+    /// being flipped if needed.
+    pub fn fullsort(&mut self, reversed: bool) {
+        let n = self.ticks.len();
+        if self.sorted {
+            if self.reversed != reversed {
+                self.sort(reversed);
+            }
+            let mut ranges = Vec::new();
+            let mut start = 0usize;
+            for i in 1..n {
+                if self.ticks[i] != self.ticks[start] {
+                    if i - 1 > start {
+                        ranges.push((start as i64, i as i64 - 1));
+                    }
+                    start = i;
+                }
+            }
+            if start + 1 < n {
+                ranges.push((start as i64, n as i64 - 1));
+            }
+            self.full_quicksort(ranges, reversed);
+        } else {
+            self.full_quicksort(vec![(0, n as i64 - 1)], reversed);
+        }
+        self.sorted = true;
+        self.reversed = reversed;
+    }
+
+    /// `GTSHelper.compareAllAtTick`: tick, then value (`<` / `>`, so `NaN`s compare equal),
+    /// then location and elevation (absent ones first).
+    fn compare_all_at(&self, a: usize, b: usize) -> std::cmp::Ordering {
+        use std::cmp::Ordering;
+        fn absent_first(x: i64, y: i64, absent: i64) -> Ordering {
+            match x.cmp(&y) {
+                Ordering::Less if y == absent => Ordering::Greater,
+                Ordering::Greater if x == absent => Ordering::Less,
+                other => other,
+            }
+        }
+        fn partial<T: PartialOrd>(x: &T, y: &T) -> Ordering {
+            x.partial_cmp(y).unwrap_or(Ordering::Equal)
+        }
+        let by_value = match &self.values {
+            Values::Long(v) => partial(&v[a], &v[b]),
+            Values::Double(v) => partial(&v[a], &v[b]),
+            Values::Boolean(v) => v[a].cmp(&v[b]),
+            // `String.compareTo` decides, whatever the locations and elevations.
+            Values::String(v) => {
+                return self.ticks[a]
+                    .cmp(&self.ticks[b])
+                    .then_with(|| v[a].encode_utf16().cmp(v[b].encode_utf16()));
+            }
+            Values::Undefined => Ordering::Equal,
+        };
+        self.ticks[a]
+            .cmp(&self.ticks[b])
+            .then(by_value)
+            .then_with(|| {
+                self.locations
+                    .as_ref()
+                    .map_or(Ordering::Equal, |l| absent_first(l[a], l[b], NO_LOCATION))
+            })
+            .then_with(|| {
+                self.elevations
+                    .as_ref()
+                    .map_or(Ordering::Equal, |e| absent_first(e[a], e[b], NO_ELEVATION))
+            })
+    }
+
+    /// `GTSHelper.fullquicksort`: the iterative quicksort of `quicksort` on the given index
+    /// ranges, comparing every element of the datapoints with the (tracked) pivot datapoint.
+    fn full_quicksort(&mut self, mut ranges: Vec<(i64, i64)>, reversed: bool) {
+        if self.ticks.is_empty() {
+            return;
+        }
+        let compare = |gts: &GeoTimeSerie, a: i64, b: i64| {
+            let ordering = gts.compare_all_at(a as usize, b as usize);
+            if reversed {
+                ordering.reverse()
+            } else {
+                ordering
+            }
+        };
+        let mut next = 0;
+        while next < ranges.len() {
+            let (low, high) = ranges[next];
+            next += 1;
+            let (mut i, mut j) = (low, high);
+            let mut pivot = low + (high - low) / 2;
+            while i <= j {
+                while compare(self, i, pivot).is_lt() {
+                    i += 1;
+                }
+                while compare(self, j, pivot).is_gt() {
+                    j -= 1;
+                }
+                if i <= j {
+                    if i != j {
+                        let (a, b) = (i as usize, j as usize);
+                        self.ticks.swap(a, b);
+                        if let Some(locations) = &mut self.locations {
+                            locations.swap(a, b);
+                        }
+                        if let Some(elevations) = &mut self.elevations {
+                            elevations.swap(a, b);
+                        }
+                        if let Some(mut values) = self.values.column() {
+                            values.swap(a, b);
+                        }
+                        if pivot == i {
+                            pivot = j;
+                        } else if pivot == j {
+                            pivot = i;
+                        }
+                    }
+                    i += 1;
+                    j -= 1;
+                }
+            }
+            if low < j {
+                ranges.push((low, j));
+            }
+            if i < high {
+                ranges.push((i, high));
+            }
+        }
+    }
+
     /// `GTSHelper.quicksort`: iterative Hoare partitioning around the middle tick. An untyped
     /// series (no datapoint) and a typed one left empty by ignored values have nothing to
     /// sort.
