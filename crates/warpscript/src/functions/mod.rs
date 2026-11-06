@@ -26,6 +26,7 @@ pub mod gts_frameworks;
 pub mod gts_lowess;
 pub mod gts_misc;
 pub mod gts_operators;
+pub mod gts_parse;
 pub mod gts_points;
 pub mod gts_prob;
 pub mod gts_reduce;
@@ -132,6 +133,7 @@ const TABLES: &[&[(&str, Entry)]] = &[
     numbers::FUNCTIONS,
     matrix::FUNCTIONS,
     platform::FUNCTIONS,
+    gts_parse::FUNCTIONS,
     selectors::FUNCTIONS,
     crate::aggregators::basic::FUNCTIONS,
     crate::aggregators::stats::FUNCTIONS,
@@ -292,6 +294,8 @@ mod gts_lowess_tests;
 mod gts_misc_tests;
 #[cfg(test)]
 mod gts_operators_tests;
+#[cfg(test)]
+mod gts_parse_tests;
 #[cfg(test)]
 mod gts_points_tests;
 #[cfg(test)]

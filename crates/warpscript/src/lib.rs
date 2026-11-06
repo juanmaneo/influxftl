@@ -43,6 +43,7 @@ pub mod format;
 pub mod functions;
 pub mod geoxp;
 pub mod gts;
+pub mod gtsparse;
 pub mod interpolation;
 #[cfg(test)]
 mod interpolation_tests;
