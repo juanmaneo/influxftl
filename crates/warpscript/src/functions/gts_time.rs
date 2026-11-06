@@ -163,7 +163,7 @@ fn timemodulo(stack: &mut Stack) -> Result<()> {
 
 /// `GTSHelper.timeclip`: the datapoints whose tick lies in `[start, end]`: a sub-series of a
 /// sorted series (which loses the bucketization), a scan into an empty clone otherwise.
-fn timeclip_gts(gts: &mut GeoTimeSerie, start: i64, end: i64) -> GeoTimeSerie {
+pub(super) fn timeclip_gts(gts: &mut GeoTimeSerie, start: i64, end: i64) -> GeoTimeSerie {
     if gts.sorted {
         return gts.subserie(start, end);
     }

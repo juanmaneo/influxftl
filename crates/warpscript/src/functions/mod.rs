@@ -23,6 +23,7 @@ pub mod gts_calendar;
 pub mod gts_fill;
 pub mod gts_frameworks;
 pub mod gts_lowess;
+pub mod gts_misc;
 pub mod gts_operators;
 pub mod gts_points;
 pub mod gts_prob;
@@ -118,6 +119,7 @@ const TABLES: &[&[(&str, Entry)]] = &[
     mv::FUNCTIONS,
     geo::FUNCTIONS,
     shape::FUNCTIONS,
+    gts_misc::FUNCTIONS,
     selectors::FUNCTIONS,
     crate::aggregators::basic::FUNCTIONS,
     crate::aggregators::stats::FUNCTIONS,
@@ -272,6 +274,8 @@ mod gts_fill_tests;
 mod gts_frameworks_tests;
 #[cfg(test)]
 mod gts_lowess_tests;
+#[cfg(test)]
+mod gts_misc_tests;
 #[cfg(test)]
 mod gts_operators_tests;
 #[cfg(test)]

@@ -86,7 +86,7 @@ fn musigma(values: &[f64], bessel: bool) -> (f64, f64) {
 
 /// `GTSHelper.standardize`: `(x - mean) / sd` (Bessel-corrected `sd`, no division when it is
 /// `0`); a clone of a non numeric or empty series.
-fn standardize_gts(gts: &GeoTimeSerie) -> GeoTimeSerie {
+pub(super) fn standardize_gts(gts: &GeoTimeSerie) -> GeoTimeSerie {
     let Some(values) = doubles(gts) else {
         return gts.clone();
     };

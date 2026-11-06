@@ -149,3 +149,23 @@ pub fn to_geocell(hhcode: i64, resolution: i32) -> i64 {
     geocell |= (hhcode >> 4) & 0x0fff_ffff_ffff_ffff;
     geocell & !((1i64 << (4 * (15 - (resolution >> 1)))) - 1)
 }
+
+/// `HHCodeHelper.orthodromicDistance`: the great circle distance in meters between two
+/// HHCodes, a nautical mile being a minute of arc.
+pub fn orthodromic_distance(from: i64, to: i64) -> f64 {
+    use std::f64::consts::PI;
+    const RADIANS_PER_LAT_UNIT: f64 = PI / 4_294_967_296.0;
+    const RADIANS_PER_LON_UNIT: f64 = (PI + PI) / 4_294_967_296.0;
+    let (from_lat, from_lon) = split_hhcode(from);
+    let (to_lat, to_lon) = split_hhcode(to);
+    let flat = from_lat as f64 * RADIANS_PER_LAT_UNIT - PI / 2.0;
+    let flon = from_lon as f64 * RADIANS_PER_LON_UNIT - PI;
+    let tlat = to_lat as f64 * RADIANS_PER_LAT_UNIT - PI / 2.0;
+    let tlon = to_lon as f64 * RADIANS_PER_LON_UNIT - PI;
+    let d = 2.0
+        * (((flat - tlat) / 2.0).sin().powi(2)
+            + flat.cos() * tlat.cos() * ((flon - tlon) / 2.0).sin().powi(2))
+        .sqrt()
+        .asin();
+    d * (180.0 / PI) * (1852.0 * 60.0)
+}

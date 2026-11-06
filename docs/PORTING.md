@@ -210,7 +210,7 @@ The project is Apache-2.0 and must stay redistributable under it (see `README.md
 
 ## 9. Status and next steps
 
-1880 / 2193 functions are ported (`docs/FUNCTIONS.md`; the inventory includes the names
+1885 / 2193 functions are ported (`docs/FUNCTIONS.md`; the inventory includes the names
 Warp 10 registers through `Builder`s and constants). The Geo Time Series model, the
 `GTSHelper` transforms (time, datapoints, statistics), `BUCKETIZE` and `MAP` with the
 shared aggregators (`sum`, `mean`, `min`, `max`, `first`, `last`, `count`, `and`, `or`,
@@ -298,6 +298,8 @@ the order that unlocks the most:
    `->GTSHHCODELONG`, `HHCODE->`, `GTSHHCODE->`, `->GEOCELL`, `GEOCELL->`, `HHCODE.*`,
    `HAVERSINE` and `COPYGEO`.
    Tensors (`functions/shape.rs`): `SHAPE`, `CHECKSHAPE`, `HULLSHAPE`, `RESHAPE`, `PERMUTE`.
+   `functions/gts_misc.rs`: `CORRELATE`, `LOWERHULL`, `UPPERHULL`, `LOCATIONOFFSET`,
+   `MOTIONSPLIT`.
 5. **BigDecimal** (`BD*`, `MUSIGMA`, `NSUMSUMSQ`, `LR`): either a spec-derived decimal
    implementation or a vetted crate (`cargo deny` compatible).
 6. **Geo** (`GeoXPLib` shapes, `HAVERSINE`, `LOCATIONOFFSET`, `GEO.*`), **datastore**
