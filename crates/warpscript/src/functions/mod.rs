@@ -31,6 +31,7 @@ pub mod gts_reduce;
 pub mod gts_smoothing;
 pub mod gts_stats;
 pub mod gts_time;
+pub mod interpolators;
 pub mod json;
 pub mod limits;
 pub mod math;
@@ -122,6 +123,7 @@ const TABLES: &[&[(&str, Entry)]] = &[
     shape::FUNCTIONS,
     gts_misc::FUNCTIONS,
     outliers::FUNCTIONS,
+    interpolators::FUNCTIONS,
     selectors::FUNCTIONS,
     crate::aggregators::basic::FUNCTIONS,
     crate::aggregators::stats::FUNCTIONS,
@@ -294,6 +296,8 @@ mod gts_stats_tests;
 mod gts_tests;
 #[cfg(test)]
 mod gts_time_tests;
+#[cfg(test)]
+mod interpolators_tests;
 #[cfg(test)]
 mod json_tests;
 #[cfg(test)]
