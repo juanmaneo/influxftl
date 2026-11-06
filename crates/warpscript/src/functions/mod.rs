@@ -311,6 +311,8 @@ mod gts_tests;
 #[cfg(test)]
 mod gts_time_tests;
 #[cfg(test)]
+mod immutable_tests;
+#[cfg(test)]
 mod interpolators_tests;
 #[cfg(test)]
 mod json_tests;

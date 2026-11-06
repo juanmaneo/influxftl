@@ -273,6 +273,46 @@ impl Value {
     }
 }
 
+thread_local! {
+    /// The collections made read-only by `IMMUTABLE` (Java's `Collections.unmodifiable*`
+    /// views). Weak handles so that a dropped collection never pins memory and a recycled
+    /// address is never mistaken for a frozen collection.
+    static FROZEN: RefCell<Vec<std::rc::Weak<dyn Any>>> = const { RefCell::new(Vec::new()) };
+}
+
+/// Mark the collection `rc` as read-only (see [`ensure_mutable`]).
+pub fn freeze<T: 'static>(rc: &Rc<T>) {
+    let handle: Rc<dyn Any> = rc.clone();
+    FROZEN.with(|frozen| {
+        let mut frozen = frozen.borrow_mut();
+        frozen.retain(|weak| weak.strong_count() > 0);
+        frozen.push(Rc::downgrade(&handle));
+    });
+}
+
+/// `true` when the collection `rc` was made read-only by [`freeze`].
+pub fn is_frozen<T: 'static>(rc: &Rc<T>) -> bool {
+    let address = Rc::as_ptr(rc).cast::<()>();
+    FROZEN.with(|frozen| {
+        frozen
+            .borrow()
+            .iter()
+            .any(|weak| weak.strong_count() > 0 && weak.as_ptr().cast::<()>() == address)
+    })
+}
+
+/// The `UnsupportedOperationException` a Java unmodifiable collection throws when modified.
+pub fn ensure_mutable<T: 'static>(rc: &Rc<T>) -> crate::error::Result<()> {
+    if is_frozen(rc) {
+        Err(crate::error::Error::runtime(
+            "java.lang.UnsupportedOperationException",
+            "UnsupportedOperationException",
+        ))
+    } else {
+        Ok(())
+    }
+}
+
 /// Java's `(long) d` conversion: `NaN` → 0, saturating at the `long` bounds.
 pub fn double_to_long(d: f64) -> i64 {
     // Rust's `as` has exactly the JVM `d2l` semantics (NaN → 0, saturation).

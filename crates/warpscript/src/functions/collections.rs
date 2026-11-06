@@ -37,7 +37,7 @@ use super::gts_reduce::{java_hash_order, java_string_hash, table_size_for};
 use crate::error::{Error, Result};
 use crate::gts::{GeoTimeSerie, Gts};
 use crate::stack::Stack;
-use crate::value::{List, Value};
+use crate::value::{List, Value, ensure_mutable, freeze, is_frozen};
 
 /// The functions of this module.
 pub const FUNCTIONS: &[(&str, Entry)] = &[
@@ -69,6 +69,7 @@ pub const FUNCTIONS: &[(&str, Entry)] = &[
     ("REVERSE", Entry::Stack(reverse)),
     ("CLONEREVERSE", Entry::Stack(clonereverse)),
     ("APPEND", Entry::Stack(append)),
+    ("IMMUTABLE", Entry::Stack(immutable)),
     ("FLATTEN", Entry::Stack(flatten)),
     ("ZIP", Entry::Stack(zip)),
     ("CLONE", Entry::Stack(clone_fn)),
@@ -480,11 +481,12 @@ fn set_nested(container: &Value, path: &List, value: Value) -> Result<()> {
         return Err(fail(NAME, NESTED_PATH));
     };
     let last = i64::from(last as i32);
-    let mut items = target.borrow_mut();
-    if last < 0 || last >= items.len() as i64 {
-        return Err(index_out_of_bounds(last, items.len()));
+    ensure_mutable(&target)?;
+    let len = target.borrow().len();
+    if last < 0 || last >= len as i64 {
+        return Err(index_out_of_bounds(last, len));
     }
-    set_at(&mut items, last as usize, value);
+    set_at(&mut target.borrow_mut(), last as usize, value);
     Ok(())
 }
 
@@ -498,9 +500,9 @@ fn set_into(container: &Value, key: &Value, value: Value) -> Result<Option<Value
             Ok(None)
         }
         (Value::List(list), Value::Long(k)) => {
-            let mut items = list.borrow_mut();
-            let idx = compute_and_check_index(*k as i32, items.len() as i32)?;
-            set_at(&mut items, idx as usize, value);
+            let idx = compute_and_check_index(*k as i32, list.borrow().len() as i32)?;
+            ensure_mutable(list)?;
+            set_at(&mut list.borrow_mut(), idx as usize, value);
             Ok(None)
         }
         (Value::Bytes(bytes), Value::Long(k)) => {
@@ -551,6 +553,7 @@ fn put(stack: &mut Stack) -> Result<()> {
     let value = stack.pop()?;
     match stack.peek()? {
         Value::Map(map) => {
+            ensure_mutable(map)?;
             map.borrow_mut().insert(key, value);
             Ok(())
         }
@@ -561,6 +564,7 @@ fn put(stack: &mut Stack) -> Result<()> {
                     "expects a key which is an integer when operating on a list.",
                 ));
             };
+            ensure_mutable(list)?;
             let mut items = list.borrow_mut();
             let idx = i64::from(k as i32);
             if idx < 0 || idx >= items.len() as i64 {
@@ -840,18 +844,23 @@ fn remove(stack: &mut Stack) -> Result<()> {
     let collection = stack.pop()?;
     let (result, removed) = match &collection {
         Value::Map(map) => {
+            ensure_mutable(map)?;
             let removed = map.borrow_mut().shift_remove(&key);
             (collection.clone(), removed.unwrap_or(Value::Null))
         }
         Value::List(list) => {
             let size = list.borrow().len();
             let removed = match remove_index(&key, size)? {
-                Some(idx) => list.borrow_mut().remove(idx),
+                Some(idx) => {
+                    ensure_mutable(list)?;
+                    list.borrow_mut().remove(idx)
+                }
                 None => Value::Null,
             };
             (collection.clone(), removed)
         }
         Value::Set(set) => {
+            ensure_mutable(set)?;
             let found = set.borrow_mut().shift_remove(&key);
             (collection.clone(), if found { key } else { Value::Null })
         }
@@ -1048,6 +1057,9 @@ fn containsvalue(stack: &mut Stack) -> Result<()> {
 fn reverse_impl(stack: &mut Stack, name: &str, stable: bool) -> Result<()> {
     let reversed = match stack.pop()? {
         Value::List(list) if stable => {
+            if list.borrow().len() > 1 {
+                ensure_mutable(&list)?;
+            }
             list.borrow_mut().reverse();
             Value::List(list)
         }
@@ -1084,7 +1096,14 @@ fn append(stack: &mut Stack) -> Result<()> {
     const MESSAGE: &str =
         "can only operate on 2 collections (LIST, SET, VECTOR), 2 MAPs or 2 GTSs.";
     let top = stack.pop()?;
-    let below = stack.pop()?;
+    // Java copies a read-only list or set (`IMMUTABLE`) rather than failing.
+    let below = match stack.pop()? {
+        Value::List(list) if is_frozen(&list) => Value::list(list.borrow().clone()),
+        Value::Set(set) if is_frozen(&set) => {
+            Value::Set(Rc::new(RefCell::new(set.borrow().clone())))
+        }
+        other => other,
+    };
     match (&below, collection_items(&top)) {
         (Value::List(list), Some(items)) => list.borrow_mut().extend(items),
         (Value::Set(set), Some(items)) => set.borrow_mut().extend(items),
@@ -1097,11 +1116,37 @@ fn append(stack: &mut Stack) -> Result<()> {
                 .iter()
                 .map(|(k, v)| (k.clone(), v.clone()))
                 .collect();
+            ensure_mutable(map)?;
             map.borrow_mut().extend(entries);
         }
         _ => return Err(fail("APPEND", MESSAGE)),
     }
     stack.push(below);
+    Ok(())
+}
+
+/// `IMMUTABLE`: a read-only copy of a list, set or map; the functions modifying a collection
+/// fail on it with an `UnsupportedOperationException`.
+fn immutable(stack: &mut Stack) -> Result<()> {
+    let frozen = match stack.pop()? {
+        Value::List(list) => {
+            let copy = Rc::new(RefCell::new(list.borrow().clone()));
+            freeze(&copy);
+            Value::List(copy)
+        }
+        Value::Set(set) => {
+            let copy = Rc::new(RefCell::new(set.borrow().clone()));
+            freeze(&copy);
+            Value::Set(copy)
+        }
+        Value::Map(map) => {
+            let copy = Rc::new(RefCell::new(map.borrow().clone()));
+            freeze(&copy);
+            Value::Map(copy)
+        }
+        _ => return Err(fail("IMMUTABLE", "operates on a LIST, SET or MAP.")),
+    };
+    stack.push(frozen);
     Ok(())
 }
 

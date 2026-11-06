@@ -944,3 +944,12 @@ the stack (attributes and configuration) rather than on a JVM-wide state; `ACCEL
 reports no accelerator; `LOGMSG`, `NOLOG` and `LOGINIT` log nothing; `WSAUDITMODE` does not
 change how scripts are parsed, so `WSAUDIT` returns an empty list. `[[]]` pushes a `LIST`
 where Warp 10 pushes a `java.util.Vector` (`VLIST`).
+
+## 25. Immutable collections
+
+`IMMUTABLE` pushes a frozen **copy** of the list, set or map, where Warp 10 pushes an
+unmodifiable *view*: later changes to the original collection are not seen through the
+immutable one. Every mutating function (`SET`, `PUT`, `REMOVE`, `REVERSE`, `+!`, `LSORT`,
+`SHUFFLE`, `SORTBY`, `SORTWITH`, `MSORT`) fails on a frozen collection with the same
+`UnsupportedOperationException` as Warp 10, in the same check order; `APPEND` copies a
+frozen list or set like Warp 10 does.

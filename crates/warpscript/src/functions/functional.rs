@@ -29,7 +29,7 @@ use crate::error::{Error, Result};
 use crate::jrandom::JavaRandom;
 use crate::macros::Macro;
 use crate::stack::Stack;
-use crate::value::{List, Value};
+use crate::value::{List, Value, ensure_mutable, is_frozen};
 
 /// The functions of this module.
 pub const FUNCTIONS: &[(&str, Entry)] = &[
@@ -359,6 +359,7 @@ fn lsort(stack: &mut Stack) -> Result<()> {
     let Value::List(list) = stack.peek()?.clone() else {
         return Err(fail(NAME, "operates on a list."));
     };
+    ensure_mutable(&list)?;
     let mut items = list.borrow().clone();
     natural_sort(NAME, &mut items)?;
     *list.borrow_mut() = items;
@@ -369,8 +370,9 @@ fn lsort(stack: &mut Stack) -> Result<()> {
 /// map stays on the stack.
 fn msort(stack: &mut Stack) -> Result<()> {
     const NAME: &str = "MSORT";
-    let Value::Map(map) = stack.peek()?.clone() else {
-        return Err(fail(NAME, "operates on a map created by {} or ->MAP."));
+    let map = match stack.peek()? {
+        Value::Map(map) if !is_frozen(map) => map.clone(),
+        _ => return Err(fail(NAME, "operates on a map created by {} or ->MAP.")),
     };
     let mut keys: Vec<Value> = map.borrow().keys().cloned().collect();
     natural_sort(NAME, &mut keys)?;
@@ -429,9 +431,10 @@ fn sortby(stack: &mut Stack) -> Result<()> {
             let items = list.borrow().clone();
             let args: Vec<Vec<Value>> = items.iter().map(|v| vec![v.clone()]).collect();
             let keys = sort_keys(stack, &m, &args)?;
+            ensure_mutable(list)?;
             *list.borrow_mut() = sort_by_keys(items, keys);
         }
-        Value::Map(map) => {
+        Value::Map(map) if !is_frozen(map) => {
             let entries = map_entries(&collection).unwrap_or_default();
             let args: Vec<Vec<Value>> = entries
                 .iter()
@@ -566,6 +569,7 @@ fn sortwith(stack: &mut Stack) -> Result<()> {
     let collection = stack.pop()?;
     match &collection {
         Value::List(list) => {
+            ensure_mutable(list)?;
             let mut items = list.borrow().clone();
             let outcome = sort_with(&mut items, |a, b| {
                 compare_with(stack, &m, &[a.clone(), b.clone()])
@@ -577,7 +581,7 @@ fn sortwith(stack: &mut Stack) -> Result<()> {
             }
             *list.borrow_mut() = items;
         }
-        Value::Map(map) => {
+        Value::Map(map) if !is_frozen(map) => {
             let mut entries = map_entries(&collection).unwrap_or_default();
             sort_with(&mut entries, |a, b| {
                 compare_with(
@@ -619,6 +623,9 @@ pub(crate) fn shuffle_impl(
         return Err(fail("SHUFFLE", "operates on a list."));
     };
     let seed = entropy.map_err(entropy_error)? as i64;
+    if list.borrow().len() > 1 {
+        ensure_mutable(&list)?;
+    }
     let mut rnd = JavaRandom::new(seed);
     shuffle_with(&mut list.borrow_mut(), &mut rnd);
     Ok(())

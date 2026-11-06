@@ -24,7 +24,7 @@ use crate::error::{Error, Result};
 use crate::jmath;
 use crate::macros::Macro;
 use crate::stack::Stack;
-use crate::value::{Value, double_to_long};
+use crate::value::{Value, double_to_long, ensure_mutable};
 
 /// Platform time units per millisecond (microseconds).
 pub const TIME_UNITS_PER_MS: f64 = 1000.0;
@@ -306,11 +306,13 @@ fn inplace_add(stack: &mut Stack) -> Result<()> {
     let op1 = stack.pop()?;
     match &op1 {
         Value::List(list) => {
+            ensure_mutable(list)?;
             list.borrow_mut().push(op2);
             stack.push(op1);
             Ok(())
         }
         Value::Set(set) => {
+            ensure_mutable(set)?;
             set.borrow_mut().insert(op2);
             stack.push(op1);
             Ok(())
