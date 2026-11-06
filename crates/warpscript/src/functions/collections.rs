@@ -435,7 +435,7 @@ fn get(stack: &mut Stack) -> Result<()> {
 }
 
 /// `GET.nestedGet`: follow `indices` down nested lists.
-fn nested_get(root: &List, indices: &[i64]) -> Result<Value> {
+pub(super) fn nested_get(root: &List, indices: &[i64]) -> Result<Value> {
     let mut current = Value::List(Rc::clone(root));
     for &index in indices {
         let next = {
@@ -1106,7 +1106,7 @@ fn append(stack: &mut Stack) -> Result<()> {
 }
 
 /// The recursive step of `FLATTEN`; `nesting` counts the levels entered so far.
-fn flatten_value(value: &Value, nesting: &mut u32) -> Result<Vec<Value>> {
+pub(super) fn flatten_value(value: &Value, nesting: &mut u32) -> Result<Vec<Value>> {
     *nesting += 1;
     if *nesting > 16 {
         return Err(fail(
