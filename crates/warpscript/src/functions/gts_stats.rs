@@ -16,6 +16,7 @@ use super::stringformat::java_hash;
 use crate::encoder::{Decimal, EncodedValue, GtsEncoder};
 use crate::error::{Error, Result};
 use crate::gts::{GeoTimeSerie, NO_LOCATION, Type, Values};
+use crate::interpolation::java_binary_search_doubles;
 use crate::jmath;
 use crate::stack::Stack;
 use crate::value::Value;
@@ -541,30 +542,6 @@ fn valuehistogram(stack: &mut Stack) -> Result<()> {
 // -----------------------------------------------------------------------------------------
 // QUANTIZE, LOCSTRINGS
 // -----------------------------------------------------------------------------------------
-
-/// `Arrays.binarySearch(double[], double)`: `Double.compare` order, `-(insertion) - 1` when
-/// absent.
-fn java_binary_search_doubles(bounds: &[f64], key: f64) -> i64 {
-    let mut low = 0i64;
-    let mut high = bounds.len() as i64 - 1;
-    while low <= high {
-        let mid = (low + high) >> 1;
-        let mid_val = bounds[mid as usize];
-        if mid_val < key {
-            low = mid + 1;
-        } else if mid_val > key {
-            high = mid - 1;
-        } else {
-            let (mid_bits, key_bits) = (mid_val.to_bits() as i64, key.to_bits() as i64);
-            match mid_bits.cmp(&key_bits) {
-                std::cmp::Ordering::Equal => return mid,
-                std::cmp::Ordering::Less => low = mid + 1,
-                std::cmp::Ordering::Greater => high = mid - 1,
-            }
-        }
-    }
-    -(low + 1)
-}
 
 /// `GTSHelper.quantize`: replace each value of a numeric series by the rank of the interval
 /// (between consecutive bounds) it falls in, or by the value given for that rank.

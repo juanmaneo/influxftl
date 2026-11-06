@@ -2,7 +2,7 @@
 
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
-//! Oracle-checked tests of `INTERPOLATOR.1D.LINEAR`, `INTERPOLATOR.1D.SPLINE` and `INTERPOLATOR.1D.AKIMA`.
+//! Oracle-checked tests of the `INTERPOLATOR.*D.*` functions.
 //! The expectations are the answers of Warp 10 3.5.0 to the same scripts:
 //! the JSON stack (top first) or the error message (in its JDK 11+ form).
 
@@ -140,7 +140,7 @@ fn interpolators_1d() {
             ),
         ),
         (
-            r"[ NEWGTS 1 NaN NaN NaN 'x' ADDVALUE [ 1 2 ] [ 3 4 ] INTERPOLATOR.1D.LINEAR 0 0 0 ] MAP",
+            r"[ [ NEWGTS 1 NaN NaN NaN 'x' ADDVALUE [ 1 2 ] [ 3 4 ] INTERPOLATOR.1D.LINEAR 0 0 0 ] MAP",
             Err(
                 r"MAP was given invalid parameters. (INTERPOLATOR.1D.LINEAR expects a numeric GTS as argument when used as a mapper, but instead got a non numeric element)",
             ),
@@ -258,7 +258,7 @@ fn interpolators_1d() {
             ),
         ),
         (
-            r"[ NEWGTS 1 NaN NaN NaN 'x' ADDVALUE [ 1 2 ] [ 3 4 ] INTERPOLATOR.1D.SPLINE 0 0 0 ] MAP",
+            r"[ [ NEWGTS 1 NaN NaN NaN 'x' ADDVALUE [ 1 2 ] [ 3 4 ] INTERPOLATOR.1D.SPLINE 0 0 0 ] MAP",
             Err(
                 r"MAP was given invalid parameters. (INTERPOLATOR.1D.SPLINE expects a numeric GTS as argument when used as a mapper, but instead got a non numeric element)",
             ),
@@ -376,7 +376,7 @@ fn interpolators_1d() {
             ),
         ),
         (
-            r"[ NEWGTS 1 NaN NaN NaN 'x' ADDVALUE [ 1 2 ] [ 3 4 ] INTERPOLATOR.1D.AKIMA 0 0 0 ] MAP",
+            r"[ [ NEWGTS 1 NaN NaN NaN 'x' ADDVALUE [ 1 2 ] [ 3 4 ] INTERPOLATOR.1D.AKIMA 0 0 0 ] MAP",
             Err(
                 r"MAP was given invalid parameters. (INTERPOLATOR.1D.AKIMA expects a numeric GTS as argument when used as a mapper, but instead got a non numeric element)",
             ),
@@ -406,6 +406,351 @@ fn interpolators_1d() {
         (
             r"[ 1 2 ] [ 3 4 ] INTERPOLATOR.1D.AKIMA 'f' STORE 'x' [ $f ] ->MACRO EVAL",
             Err(r"INTERPOLATOR.1D.AKIMA expects a DOUBLE or a LONG"),
+        ),
+    ]);
+}
+
+#[test]
+fn interpolator_2d() {
+    check(&[
+        (
+            r"[ 1 2 4 5 ] [ 0 1.5 3 ] [ [ 1 2 3 ] [ 2 4 1 ] [ 0.5 -1 2 ] [ 3 3 3 ] ] INTERPOLATOR.2D.BICUBIC 'b' STORE [ [ 1 0 ] [ 1.5 0.75 ] [ 2 1.5 ] [ 3 2 ] [ 4.5 2.9 ] [ 5 3 ] [ 0 0 ] [ 5.5 1 ] [ 2 -1 ] [ 2 4 ] ] <% $b EVAL %> F LMAP",
+            Ok(
+                r"[[1.0,2.3424479166666665,4.0,1.3858024691358022,2.482,2.999999999999999,NaN,NaN,NaN,NaN]]",
+            ),
+        ),
+        (
+            r"[ 1 2 4 5 ] [ 0 1.5 3 ] [ [ 1 2 3 ] [ 2 4 1 ] [ 0.5 -1 2 ] [ 3 3 3 ] ] INTERPOLATOR.2D.BICUBIC [ NaN 1 ] SWAP EVAL",
+            Err(r"NaN out of [1, 5] range"),
+        ),
+        (
+            r"[ 1 2 4 5 ] [ 0 1.5 3 ] [ [ 1 2 3 ] [ 2 4 1 ] [ 0.5 -1 2 ] [ 3 3 3 ] ] INTERPOLATOR.2D.BICUBIC [ 2.2 NaN ] SWAP EVAL",
+            Err(r"NaN out of [0, 3] range"),
+        ),
+        (
+            r"[ 1 2 4 5 ] [ 0 1.5 3 ] [ [ 1 2 3 ] [ 2 4 1 ] [ 0.5 -1 2 ] [ 3 3 3 ] ] INTERPOLATOR.2D.BICUBIC EVAL",
+            Err(r"Empty stack."),
+        ),
+        (
+            r"[ [ NEWGTS 1 NaN NaN NaN NaN ADDVALUE NEWGTS 1 NaN NaN NaN 0.5 ADDVALUE ] [] [ 1 2 4 5 ] [ 0 1.5 3 ] [ [ 1 2 3 ] [ 2 4 1 ] [ 0.5 -1 2 ] [ 3 3 3 ] ] INTERPOLATOR.2D.BICUBIC ] REDUCE",
+            Err(r"NaN out of [1, 5] range"),
+        ),
+        (
+            r"[ 1 2 4 5 ] [ 0 1.5 3 ] [ [ 1 2 3 ] [ 2 4 1 ] [ 0.5 -1 2 ] [ 3 3 3 ] ] INTERPOLATOR.2D.BICUBIC SNAPSHOT",
+            Ok(
+                r#"["[ 1.0 2.0 4.0 5.0 ] [ 0.0 1.5 3.0 ] [ [ 1.0 2.0 3.0 ] [ 2.0 4.0 1.0 ] [ 0.5 -1.0 2.0 ] [ 3.0 2.9999999999999982 2.999999999999999 ] ] INTERPOLATOR.2D.BICUBIC "]"#,
+            ),
+        ),
+        (
+            r"[ 1 2 4 5 ] [ 0 1.5 3 ] [ [ 1 2 3 ] [ 2 4 1 ] [ 0.5 -1 2 ] [ 3 3 3 ] ] INTERPOLATOR.2D.BICUBIC TYPEOF",
+            Ok(r#"["AGGREGATOR"]"#),
+        ),
+        (
+            r"[ 1 2 ] [ 1 2 ] [ [ 1 2 ] [ 3 4 ] ] INTERPOLATOR.2D.BICUBIC [ 1.5 1.5 ] SWAP EVAL",
+            Ok(r"[2.5]"),
+        ),
+        (r"[ ] [ 1 ] [ ] INTERPOLATOR.2D.BICUBIC", Err(r"no data")),
+        (
+            r"[ 1 ] [ ] [ [ ] ] INTERPOLATOR.2D.BICUBIC",
+            Err(r"no data"),
+        ),
+        (
+            r"[ 2 1 ] [ 1 2 ] [ [ 1 2 ] [ 3 4 ] ] INTERPOLATOR.2D.BICUBIC",
+            Err(r"points 0 and 1 are not strictly increasing (2 >= 1)"),
+        ),
+        (
+            r"[ 1 2 ] [ 2 1 ] [ [ 1 2 ] [ 3 4 ] ] INTERPOLATOR.2D.BICUBIC",
+            Err(r"points 0 and 1 are not strictly increasing (2 >= 1)"),
+        ),
+        (
+            r"[ 1 2 ] [ 1 2 ] [ [ 1 2 ] ] INTERPOLATOR.2D.BICUBIC",
+            Err(
+                r"INTERPOLATOR.2D.BICUBIC: incoherent argument sizes. Up to vector sizes, values should be a LIST (size 2) of LIST (size 2).",
+            ),
+        ),
+        (
+            r"[ 1 2 ] [ 1 2 ] [ [ 1 2 ] [ 3 ] ] INTERPOLATOR.2D.BICUBIC",
+            Err(
+                r"INTERPOLATOR.2D.BICUBIC: incoherent argument sizes. Up to vector sizes, values should be a LIST (size 2) of LIST (size 2).",
+            ),
+        ),
+        (
+            r"[ 1 2 ] [ 1 2 ] [ [ 1 2 ] 3 ] INTERPOLATOR.2D.BICUBIC",
+            Err(
+                r"INTERPOLATOR.2D.BICUBIC expects the last argument to be a LIST of LIST of numbers",
+            ),
+        ),
+        (
+            r"[ 1 2 ] [ 1 2 ] [ [ 1 2 ] [ 3 'x' ] ] INTERPOLATOR.2D.BICUBIC",
+            Err(
+                r"INTERPOLATOR.2D.BICUBIC expects the last argument to be a LIST of LIST of numbers",
+            ),
+        ),
+        (
+            r"[ 1 'x' ] [ 1 2 ] [ [ 1 2 ] [ 3 4 ] ] INTERPOLATOR.2D.BICUBIC",
+            Err(
+                r"INTERPOLATOR.2D.BICUBIC expects a numeric LIST as 1st argument, but it contains at least one non-numeric element.",
+            ),
+        ),
+        (
+            r"[ 1 2 ] [ 1 'x' ] [ [ 1 2 ] [ 3 4 ] ] INTERPOLATOR.2D.BICUBIC",
+            Err(
+                r"INTERPOLATOR.2D.BICUBIC expects a numeric LIST as 2nd argument, but it contains at least one non-numeric element.",
+            ),
+        ),
+        (
+            r"[ 1 2 ] [ 1 2 ] 'x' INTERPOLATOR.2D.BICUBIC",
+            Err(r"INTERPOLATOR.2D.BICUBIC expects a LIST as 3rd argument"),
+        ),
+        (
+            r"[ 1 2 ] 'x' [ ] INTERPOLATOR.2D.BICUBIC",
+            Err(r"INTERPOLATOR.2D.BICUBIC expects a sorted LIST as 2nd argument"),
+        ),
+        (
+            r"'x' [ 1 ] [ ] INTERPOLATOR.2D.BICUBIC",
+            Err(r"INTERPOLATOR.2D.BICUBIC expects a sorted LIST as 1st argument"),
+        ),
+        (r"INTERPOLATOR.2D.BICUBIC", Err(r"Empty stack.")),
+        (
+            r"[ 1 2 4 5 ] [ 0 1.5 3 ] [ [ 1 2 3 ] [ 2 4 1 ] [ 0.5 -1 2 ] [ 3 3 3 ] ] INTERPOLATOR.2D.BICUBIC [ 1 ] SWAP EVAL",
+            Err(r"BICUBE expects a LIST with 2 components 1"),
+        ),
+        (
+            r"[ 1 2 4 5 ] [ 0 1.5 3 ] [ [ 1 2 3 ] [ 2 4 1 ] [ 0.5 -1 2 ] [ 3 3 3 ] ] INTERPOLATOR.2D.BICUBIC [ 1 'x' ] SWAP EVAL",
+            Err(
+                r"BICUBE expects a numeric LIST as argument, but it contains at least one non-numeric element.",
+            ),
+        ),
+        (
+            r"[ 1 2 4 5 ] [ 0 1.5 3 ] [ [ 1 2 3 ] [ 2 4 1 ] [ 0.5 -1 2 ] [ 3 3 3 ] ] INTERPOLATOR.2D.BICUBIC 1 SWAP EVAL",
+            Err(r"BICUBE expects a LIST"),
+        ),
+        (
+            r"[ 1 ] [ 1 ] [ [ 5 ] ] INTERPOLATOR.2D.BICUBIC [ 1 1 ] SWAP EVAL",
+            Err(r"-1"),
+        ),
+        (
+            r"[ 1 ] [ 1 2 ] [ [ 5 6 ] ] INTERPOLATOR.2D.BICUBIC [ 1 1.5 ] SWAP EVAL",
+            Err(r"-1"),
+        ),
+        (
+            r"[ 1 2 ] [ 1 ] [ [ 5 ] [ 6 ] ] INTERPOLATOR.2D.BICUBIC [ 1.5 1 ] SWAP EVAL",
+            Err(r"-1"),
+        ),
+        (
+            r"[ [ NEWGTS 1 NaN NaN NaN 1.5 ADDVALUE 2 48.0 2.0 5 4.5 ADDVALUE NEWGTS 1 NaN NaN NaN 0.5 ADDVALUE 2 NaN NaN NaN 2.5 ADDVALUE ] [] [ 1 2 4 5 ] [ 0 1.5 3 ] [ [ 1 2 3 ] [ 2 4 1 ] [ 0.5 -1 2 ] [ 3 3 3 ] ] INTERPOLATOR.2D.BICUBIC ] REDUCE",
+            Ok(
+                r#"[[{"c":"","l":{},"a":{},"la":0,"v":[[1,1.9390432098765433],[2,47.99999998882413,1.9999999646097422,5,2.1296296296296298]]}]]"#,
+            ),
+        ),
+        (
+            r"[ [ NEWGTS 1 NaN NaN NaN 1.5 ADDVALUE ] [] [ 1 2 4 5 ] [ 0 1.5 3 ] [ [ 1 2 3 ] [ 2 4 1 ] [ 0.5 -1 2 ] [ 3 3 3 ] ] INTERPOLATOR.2D.BICUBIC ] REDUCE",
+            Err(r"BICUBE expects 2 components but got 1"),
+        ),
+        (
+            r"[ [ NEWGTS 1 NaN NaN NaN 1.5 ADDVALUE NEWGTS 1 NaN NaN NaN 'x' ADDVALUE ] [] [ 1 2 4 5 ] [ 0 1.5 3 ] [ [ 1 2 3 ] [ 2 4 1 ] [ 0.5 -1 2 ] [ 3 3 3 ] ] INTERPOLATOR.2D.BICUBIC ] REDUCE",
+            Err(
+                r"BICUBE expects two numeric GTS when used as a reducer, but at least one value was not numeric.",
+            ),
+        ),
+        (
+            r"[ 1 2 4 5 ] [ 0 1.5 3 ] [ [ 1 2 3 ] [ 2 4 1 ] [ 0.5 -1 2 ] [ 3 3 3 ] ] INTERPOLATOR.2D.BICUBIC 'f' STORE 'x' [ $f ] ->MACRO EVAL",
+            Err(r"BICUBE expects a LIST"),
+        ),
+        (
+            r"[ -1 -0.0 1 ] [ 0 1 2 ] [ [ 1 2 3 ] [ 4 5 6 ] [ 7 8 9 ] ] INTERPOLATOR.2D.BICUBIC 'b' STORE [ [ 0.0 1 ] [ -0.0 1 ] [ -0.5 0.5 ] ] <% $b EVAL %> F LMAP",
+            Ok(r"[[5.0,5.0,2.75]]"),
+        ),
+        (
+            r"[ -1 0.0 1 ] [ 0 1 2 ] [ [ 1 2 3 ] [ 4 5 6 ] [ 7 8 9 ] ] INTERPOLATOR.2D.BICUBIC 'b' STORE [ [ 0.0 1 ] [ -0.0 1 ] ] <% $b EVAL %> F LMAP",
+            Ok(r"[[5.0,5.0]]"),
+        ),
+        (
+            r"[ 1 2 3 ] [ 0 1 2 ] [ [ 1 2 3 ] [ 4 NaN 6 ] [ 7 8 9 ] ] INTERPOLATOR.2D.BICUBIC 'b' STORE [ [ 1.5 0.5 ] [ 3 2 ] ] <% $b EVAL %> F LMAP",
+            Ok(r"[[NaN,NaN]]"),
+        ),
+        (
+            r"[ 1 2 3 ] [ 0 1 2 ] [ [ 1 2 3 ] [ 4 Infinity 6 ] [ 7 8 9 ] ] INTERPOLATOR.2D.BICUBIC 'b' STORE [ [ 1.5 0.5 ] ] <% $b EVAL %> F LMAP",
+            Ok(r"[[NaN]]"),
+        ),
+    ]);
+}
+
+#[test]
+fn interpolator_3d() {
+    check(&[
+        (
+            r"[ 1 2 3 ] [ 0 1 2.5 ] [ 0 2 3 5 ] [ [ [ 1 2 3 4 ] [ 2 3 1 0 ] [ 0 0 1 1 ] ] [ [ 0 1 5 2 ] [ 1 1 1 1 ] [ 2 -1 3 2 ] ] [ [ 3 2 1 0 ] [ 4 4 2 3 ] [ 1 2 3 4 ] ] ] INTERPOLATOR.3D.TRICUBIC 't' STORE [ [ 1 0 0 ] [ 1.5 0.5 1 ] [ 2 1 3 ] [ 2.5 0.25 4 ] [ 3 1 5 ] [ 0 0 0 ] [ 2 2 2 ] [ 2 0.5 6 ] [ NaN 0 0 ] [ 2 0.5 2.5 ] ] <% $t EVAL %> F LMAP",
+            Ok(
+                r"[[1.0,1.3752604166666669,0.9999999999999831,1.9724283854166682,2.9999999999999973,NaN,-0.57037037037037,NaN,NaN,2.1124999999999994]]",
+            ),
+        ),
+        (
+            r"[ 1 2 3 ] [ 0 1 2.5 ] [ 0 2 3 5 ] [ [ [ 1 2 3 4 ] [ 2 3 1 0 ] [ 0 0 1 1 ] ] [ [ 0 1 5 2 ] [ 1 1 1 1 ] [ 2 -1 3 2 ] ] [ [ 3 2 1 0 ] [ 4 4 2 3 ] [ 1 2 3 4 ] ] ] INTERPOLATOR.3D.TRICUBIC SNAPSHOT",
+            Ok(
+                r#"["[ 1.0 2.0 3.0 ] [ 0.0 1.0 2.5 ] [ 0.0 2.0 3.0 5.0 ] [ [ [ 1.0 2.0 3.0 4.0 ] [ 2.0 3.0 1.0 0.0 ] [ 0.0 0.0 1.0 1.0 ] ] [ [ 0.0 1.0 5.0 2.0 ] [ 1.0 1.000000000000007 0.9999999999999831 0.9999999999999716 ] [ 2.0 -1.0000000000000036 2.9999999999999982 2.0000000000000178 ] ] [ [ 3.0 2.0 1.0 0.0 ] [ 4.0 3.9999999999999893 1.9999999999999893 2.9999999999999973 ] [ 1.0 2.0000000000000284 2.9999999999999956 4.000000000000002 ] ] ] INTERPOLATOR.3D.TRICUBIC "]"#,
+            ),
+        ),
+        (
+            r"[ 1 2 3 ] [ 0 1 2.5 ] [ 0 2 3 5 ] [ [ [ 1 2 3 4 ] [ 2 3 1 0 ] [ 0 0 1 1 ] ] [ [ 0 1 5 2 ] [ 1 1 1 1 ] [ 2 -1 3 2 ] ] [ [ 3 2 1 0 ] [ 4 4 2 3 ] [ 1 2 3 4 ] ] ] INTERPOLATOR.3D.TRICUBIC TYPEOF",
+            Ok(r#"["AGGREGATOR"]"#),
+        ),
+        (
+            r"[ ] [ 1 ] [ 1 ] [ ] INTERPOLATOR.3D.TRICUBIC",
+            Err(r"no data"),
+        ),
+        (
+            r"[ 1 ] [ ] [ 1 ] [ [ ] ] INTERPOLATOR.3D.TRICUBIC",
+            Err(r"no data"),
+        ),
+        (
+            r"[ 1 ] [ 1 ] [ ] [ [ [ ] ] ] INTERPOLATOR.3D.TRICUBIC",
+            Err(r"no data"),
+        ),
+        (
+            r"[ 2 1 ] [ 1 ] [ 1 ] [ [ [ 1 ] ] [ [ 2 ] ] ] INTERPOLATOR.3D.TRICUBIC",
+            Err(r"points 0 and 1 are not strictly increasing (2 >= 1)"),
+        ),
+        (
+            r"[ 1 2 ] [ 2 1 ] [ 1 ] [ [ [ 1 ] [ 1 ] ] [ [ 2 ] [ 2 ] ] ] INTERPOLATOR.3D.TRICUBIC",
+            Err(r"points 0 and 1 are not strictly increasing (2 >= 1)"),
+        ),
+        (
+            r"[ 1 2 ] [ 1 ] [ 2 1 ] [ [ [ 1 1 ] ] [ [ 2 2 ] ] ] INTERPOLATOR.3D.TRICUBIC",
+            Err(r"points 0 and 1 are not strictly increasing (2 >= 1)"),
+        ),
+        (
+            r"[ 1 ] [ 1 ] [ 1 ] [ ] INTERPOLATOR.3D.TRICUBIC",
+            Err(
+                r"INTERPOLATOR.3D.TRICUBIC: incoherent argument sizes. Up to vector sizes, values should be a LIST (size 1) of LIST (size 1) of LIST (size 1).",
+            ),
+        ),
+        (
+            r"[ 1 ] [ 1 ] [ 1 ] [ 1 ] INTERPOLATOR.3D.TRICUBIC",
+            Err(
+                r"INTERPOLATOR.3D.TRICUBIC expects the last argument to be a LIST of LIST of LIST of numbers.",
+            ),
+        ),
+        (
+            r"[ 1 ] [ 1 ] [ 1 ] [ [ ] ] INTERPOLATOR.3D.TRICUBIC",
+            Err(
+                r"INTERPOLATOR.3D.TRICUBIC: incoherent argument sizes. Up to vector sizes, values should be a LIST (size 1) of LIST (size 1) of LIST (size 1).",
+            ),
+        ),
+        (
+            r"[ 1 ] [ 1 ] [ 1 ] [ [ 1 ] ] INTERPOLATOR.3D.TRICUBIC",
+            Err(
+                r"INTERPOLATOR.3D.TRICUBIC expects the last argument to be a LIST of LIST of LIST of numbers",
+            ),
+        ),
+        (
+            r"[ 1 ] [ 1 ] [ 1 ] [ [ [ ] ] ] INTERPOLATOR.3D.TRICUBIC",
+            Err(
+                r"INTERPOLATOR.3D.TRICUBIC: incoherent argument sizes. Up to vector sizes, values should be a LIST (size 1) of LIST (size 1) of LIST (size 1).",
+            ),
+        ),
+        (
+            r"[ 1 ] [ 1 ] [ 1 ] [ [ [ 'x' ] ] ] INTERPOLATOR.3D.TRICUBIC",
+            Err(
+                r"INTERPOLATOR.3D.TRICUBIC expects the last argument to be a LIST of LIST of LIST of numbers",
+            ),
+        ),
+        (
+            r"[ 'x' ] [ 1 ] [ 1 ] [ ] INTERPOLATOR.3D.TRICUBIC",
+            Err(
+                r"INTERPOLATOR.3D.TRICUBIC expects a numeric LIST as 1st argument, instead got at least one non numeric element",
+            ),
+        ),
+        (
+            r"[ 1 ] [ 'x' ] [ 1 ] [ ] INTERPOLATOR.3D.TRICUBIC",
+            Err(
+                r"INTERPOLATOR.3D.TRICUBIC expects a numeric LIST as 2nd argument, instead got at least one non numeric element",
+            ),
+        ),
+        (
+            r"[ 1 ] [ 1 ] [ 'x' ] [ ] INTERPOLATOR.3D.TRICUBIC",
+            Err(
+                r"INTERPOLATOR.3D.TRICUBIC expects a numeric LIST as 3rd argument, instead got at least one non numeric element",
+            ),
+        ),
+        (
+            r"[ 1 ] [ 1 ] [ 1 ] 'x' INTERPOLATOR.3D.TRICUBIC",
+            Err(r"INTERPOLATOR.3D.TRICUBIC expects a LIST as 4th argument"),
+        ),
+        (
+            r"[ 1 ] [ 1 ] 'x' [ ] INTERPOLATOR.3D.TRICUBIC",
+            Err(r"INTERPOLATOR.3D.TRICUBIC expects a sorted LIST as 3rd argument"),
+        ),
+        (
+            r"[ 1 ] 'x' [ 1 ] [ ] INTERPOLATOR.3D.TRICUBIC",
+            Err(r"INTERPOLATOR.3D.TRICUBIC expects a sorted LIST as 2nd argument"),
+        ),
+        (
+            r"'x' [ 1 ] [ 1 ] [ ] INTERPOLATOR.3D.TRICUBIC",
+            Err(r"INTERPOLATOR.3D.TRICUBIC expects a sorted LIST as 1st argument"),
+        ),
+        (r"INTERPOLATOR.3D.TRICUBIC", Err(r"Empty stack.")),
+        (
+            r"[ 1 2 3 ] [ 0 1 2.5 ] [ 0 2 3 5 ] [ [ [ 1 2 3 4 ] [ 2 3 1 0 ] [ 0 0 1 1 ] ] [ [ 0 1 5 2 ] [ 1 1 1 1 ] [ 2 -1 3 2 ] ] [ [ 3 2 1 0 ] [ 4 4 2 3 ] [ 1 2 3 4 ] ] ] INTERPOLATOR.3D.TRICUBIC [ 1 2 ] SWAP EVAL",
+            Err(r"TRICUBE expects a LIST with 3 components 2"),
+        ),
+        (
+            r"[ 1 2 3 ] [ 0 1 2.5 ] [ 0 2 3 5 ] [ [ [ 1 2 3 4 ] [ 2 3 1 0 ] [ 0 0 1 1 ] ] [ [ 0 1 5 2 ] [ 1 1 1 1 ] [ 2 -1 3 2 ] ] [ [ 3 2 1 0 ] [ 4 4 2 3 ] [ 1 2 3 4 ] ] ] INTERPOLATOR.3D.TRICUBIC [ 1 2 'x' ] SWAP EVAL",
+            Err(
+                r"TRICUBE expects a numeric LIST as argument, instead got at least one non numeric element",
+            ),
+        ),
+        (
+            r"[ 1 2 3 ] [ 0 1 2.5 ] [ 0 2 3 5 ] [ [ [ 1 2 3 4 ] [ 2 3 1 0 ] [ 0 0 1 1 ] ] [ [ 0 1 5 2 ] [ 1 1 1 1 ] [ 2 -1 3 2 ] ] [ [ 3 2 1 0 ] [ 4 4 2 3 ] [ 1 2 3 4 ] ] ] INTERPOLATOR.3D.TRICUBIC 1 SWAP EVAL",
+            Err(r"TRICUBE expects a LIST"),
+        ),
+        (
+            r"[ 1 ] [ 1 ] [ 1 ] [ [ [ 7 ] ] ] INTERPOLATOR.3D.TRICUBIC [ 1 1 1 ] SWAP EVAL",
+            Ok(r"[NaN]"),
+        ),
+        (
+            r"[ [ NEWGTS 1 NaN NaN NaN 1.5 ADDVALUE 2 48.0 2.0 5 2.5 ADDVALUE NEWGTS 1 NaN NaN NaN 0.5 ADDVALUE 2 NaN NaN NaN 0.25 ADDVALUE NEWGTS 1 NaN NaN NaN 1 ADDVALUE 2 NaN NaN NaN 4 ADDVALUE ] [] [ 1 2 3 ] [ 0 1 2.5 ] [ 0 2 3 5 ] [ [ [ 1 2 3 4 ] [ 2 3 1 0 ] [ 0 0 1 1 ] ] [ [ 0 1 5 2 ] [ 1 1 1 1 ] [ 2 -1 3 2 ] ] [ [ 3 2 1 0 ] [ 4 4 2 3 ] [ 1 2 3 4 ] ] ] INTERPOLATOR.3D.TRICUBIC ] REDUCE",
+            Ok(
+                r#"[[{"c":"","l":{},"a":{},"la":0,"v":[[1,1.3752604166666669],[2,47.99999998882413,1.9999999646097422,5,1.9724283854166682]]}]]"#,
+            ),
+        ),
+        (
+            r"[ [ NEWGTS 1 NaN NaN NaN 1.5 ADDVALUE NEWGTS 1 NaN NaN NaN 0.5 ADDVALUE ] [] [ 1 2 3 ] [ 0 1 2.5 ] [ 0 2 3 5 ] [ [ [ 1 2 3 4 ] [ 2 3 1 0 ] [ 0 0 1 1 ] ] [ [ 0 1 5 2 ] [ 1 1 1 1 ] [ 2 -1 3 2 ] ] [ [ 3 2 1 0 ] [ 4 4 2 3 ] [ 1 2 3 4 ] ] ] INTERPOLATOR.3D.TRICUBIC ] REDUCE",
+            Err(r"TRICUBE expects 3 components but got 2"),
+        ),
+        (
+            r"[ [ NEWGTS 1 NaN NaN NaN 1.5 ADDVALUE NEWGTS 1 NaN NaN NaN 0.5 ADDVALUE NEWGTS 1 NaN NaN NaN 'x' ADDVALUE ] [] [ 1 2 3 ] [ 0 1 2.5 ] [ 0 2 3 5 ] [ [ [ 1 2 3 4 ] [ 2 3 1 0 ] [ 0 0 1 1 ] ] [ [ 0 1 5 2 ] [ 1 1 1 1 ] [ 2 -1 3 2 ] ] [ [ 3 2 1 0 ] [ 4 4 2 3 ] [ 1 2 3 4 ] ] ] INTERPOLATOR.3D.TRICUBIC ] REDUCE",
+            Err(
+                r"TRICUBE expects a numeric GTS as argument when used as a reducer, instead got at least one non numeric element",
+            ),
+        ),
+        (
+            r"[ [ NEWGTS 1 NaN NaN NaN 1.5 ADDVALUE NEWGTS 1 NaN NaN NaN 0.5 ADDVALUE 2 NaN NaN NaN 0.5 ADDVALUE NEWGTS 2 NaN NaN NaN 1 ADDVALUE ] [] [ 1 2 3 ] [ 0 1 2.5 ] [ 0 2 3 5 ] [ [ [ 1 2 3 4 ] [ 2 3 1 0 ] [ 0 0 1 1 ] ] [ [ 0 1 5 2 ] [ 1 1 1 1 ] [ 2 -1 3 2 ] ] [ [ 3 2 1 0 ] [ 4 4 2 3 ] [ 1 2 3 4 ] ] ] INTERPOLATOR.3D.TRICUBIC ] REDUCE",
+            Ok(r#"[[{"c":"","l":{},"a":{},"la":0,"v":[]}]]"#),
+        ),
+        (
+            r"[ 1 2 3 ] [ 0 1 2.5 ] [ 0 2 3 5 ] [ [ [ 1 2 3 4 ] [ 2 3 1 0 ] [ 0 0 1 1 ] ] [ [ 0 1 5 2 ] [ 1 1 1 1 ] [ 2 -1 3 2 ] ] [ [ 3 2 1 0 ] [ 4 4 2 3 ] [ 1 2 3 4 ] ] ] INTERPOLATOR.3D.TRICUBIC 'f' STORE 'x' [ $f ] ->MACRO EVAL",
+            Err(r"TRICUBE expects a LIST"),
+        ),
+        (
+            r"[ 1 2 3 ] [ 0 1 2.5 ] [ 0 2 3 5 ] [ [ [ 1 2 3 4 ] [ 2 3 1 0 ] [ 0 0 1 1 ] ] [ [ 0 1 5 2 ] [ 1 1 1 1 ] [ 2 -1 3 2 ] ] [ [ 3 2 1 0 ] [ 4 4 2 3 ] [ 1 2 3 4 ] ] ] INTERPOLATOR.3D.TRICUBIC EVAL",
+            Err(r"Empty stack."),
+        ),
+        (
+            r"[ 1 2 3 ] [ 0 1 2.5 ] [ 0 2 3 5 ] [ [ [ 1 2 3 4 ] [ 2 3 1 0 ] [ 0 0 1 1 ] ] [ [ 0 1 5 2 ] [ 1 1 1 1 ] [ 2 -1 3 2 ] ] [ [ 3 2 1 0 ] [ 4 4 2 3 ] [ 1 2 3 4 ] ] ] INTERPOLATOR.3D.TRICUBIC [ 3 2.5 5 ] SWAP EVAL",
+            Ok(r"[4.000000000000002]"),
+        ),
+        (
+            r"[ 1 2 3 ] [ 0 1 2.5 ] [ 0 2 3 5 ] [ [ [ 1 2 3 4 ] [ 2 3 1 0 ] [ 0 0 1 1 ] ] [ [ 0 1 5 2 ] [ 1 1 1 1 ] [ 2 -1 3 2 ] ] [ [ 3 2 1 0 ] [ 4 4 2 3 ] [ 1 2 3 4 ] ] ] INTERPOLATOR.3D.TRICUBIC [ 1 0 0 ] SWAP EVAL",
+            Ok(r"[1.0]"),
+        ),
+        (
+            r"[ 1 2 3 ] [ 0 1 2.5 ] [ 0 2 3 5 ] [ [ [ 1 2 3 4 ] [ 2 3 1 0 ] [ 0 0 1 1 ] ] [ [ 0 1 5 2 ] [ 1 1 1 1 ] [ 2 -1 3 2 ] ] [ [ 3 2 1 0 ] [ 4 4 2 3 ] [ 1 2 3 4 ] ] ] INTERPOLATOR.3D.TRICUBIC [ 2 0 NaN ] SWAP EVAL",
+            Ok(r"[NaN]"),
+        ),
+        (
+            r"[ 1 2 3 ] [ 0 1 2.5 ] [ 0 2 3 5 ] [ [ [ 1 2 3 4 ] [ 2 3 1 0 ] [ 0 0 1 1 ] ] [ [ 0 1 5 2 ] [ 1 1 1 1 ] [ 2 -1 3 2 ] ] [ [ 3 2 1 0 ] [ 4 4 2 3 ] [ 1 2 3 4 ] ] ] INTERPOLATOR.3D.TRICUBIC [ 2 NaN 1 ] SWAP EVAL",
+            Ok(r"[NaN]"),
         ),
     ]);
 }

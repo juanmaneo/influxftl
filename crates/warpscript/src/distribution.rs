@@ -14,7 +14,7 @@
 #![allow(clippy::many_single_char_names)] // the names of Commons Math
 
 use crate::error::{Error, Result};
-use crate::interpolation::message_number;
+use crate::interpolation::message_decimal;
 
 /// `Gamma.invGamma1pm1`: `1 / Γ(1 + x) - 1` for `-0.5 <= x <= 1.5`.
 #[allow(clippy::excessive_precision, clippy::unreadable_literal)]
@@ -290,24 +290,6 @@ impl TDistribution {
         };
         brent_solve(|x| self.cumulative_probability(x) - p, lower, upper, 1e-9)
     }
-}
-
-/// The `MessageFormat` (en_US) rendering of a double argument: at most three fraction digits
-/// (half even), digits grouped by three.
-fn message_decimal(d: f64) -> String {
-    let rounded = format!("{:.3}", d.abs());
-    let rounded = rounded.trim_end_matches('0').trim_end_matches('.');
-    let (int, frac) = rounded.split_once('.').unwrap_or((rounded, ""));
-    let int: f64 = int.parse().unwrap_or_default();
-    let mut out = message_number(int);
-    if !frac.is_empty() {
-        out.push('.');
-        out.push_str(frac);
-    }
-    if d.is_sign_negative() && !d.is_nan() {
-        out.insert(0, '-');
-    }
-    out
 }
 
 /// `UnivariateSolverUtils.solve(f, min, max, absoluteAccuracy)`: `BrentSolver.doSolve` from
