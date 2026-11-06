@@ -484,7 +484,14 @@ fn encoder_histogram(encoder: &GtsEncoder) -> Result<Value> {
             EncodedValue::Decimal(d) => Some(*d),
             _ => None,
         };
-        let value = value.to_value();
+        // The keys are the `BigDecimal`s of the decimals.
+        let value = match decimal {
+            Some(d) => Value::BigDecimal(std::rc::Rc::new(crate::bigdecimal::BigDecimal::new(
+                d.unscaled.into(),
+                d.scale,
+            ))),
+            None => value.to_value(),
+        };
         let hash = decimal.map_or_else(|| java_hash(&value), decimal_hash);
         occurrences
             .entry((value, decimal.map(|d| (d.unscaled, d.scale))))

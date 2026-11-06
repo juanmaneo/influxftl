@@ -28,6 +28,9 @@ keccak = { workspace = true }
 md-5 = { workspace = true }
 md2 = { workspace = true }
 md4 = { workspace = true }
+num-bigint = { workspace = true }
+num-integer = { workspace = true }
+num-traits = { workspace = true }
 ripemd = { workspace = true }
 serde_json = { workspace = true }
 sha1 = { workspace = true }

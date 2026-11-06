@@ -510,8 +510,7 @@ unstable, order), `GeoTimeSerie.toString` and `dump` (`TOSTRING`), and the JSON 
 - **GTS encoders** are accepted wherever Warp 10 accepts them (`ADDVALUE`, `SETVALUE`,
   `TICKLIST`, `VALUES`, `CLONEEMPTY`, `TICKINDEX`, `SIZE`, `CLONE`, `TOSELECTOR`, `TIMECLIP`,
   `CLIP`, `CHUNK`, `MERGE`, `FOREACH`, `VALUEHISTOGRAM`, `POLYFUNC`, `PIVOT`…). The keys of
-  `VALUEHISTOGRAM` follow the Java `HashMap` order, but its `BigDecimal` keys are `DOUBLE`s
-  (§20).
+  `VALUEHISTOGRAM` follow the Java `HashMap` order.
 - **`PIVOT` / `PIVOTSTRICT`** reproduce the Java `HashMap` orders of the result list and of
   the labels of each result (colliding hash buckets aside).
 - **`[ value ] ADDVALUE`** (a one-element datapoint list) adds the value at tick `0` as
@@ -537,8 +536,8 @@ unstable, order), `GeoTimeSerie.toString` and `dump` (`TOSTRING`), and the JSON 
   the message Warp 10 prints without a space after the operator name, an empty result of a
   bitwise operator or of a `LONG` series compared to `NaN` keeps its type. The only
   difference: the bit conversions of a series build the result directly where Warp 10
-  round-trips through a `GTSEncoder` (same datapoints, metadata and order). `BIGDECIMAL`,
-  matrix and vector operands are not modelled (§3).
+  round-trips through a `GTSEncoder` (same datapoints, metadata and order). Matrix and
+  vector operands are not modelled (§3).
 - **Selectors** (`PARSESELECTOR`, `TOSELECTOR`, `filter.byselector`) behave as with
   `warp10.absent.label.support` enabled (the oracle configuration): `label=` selects the
   series without that label. `filter.bymetadata` compares the name, labels, attributes and
@@ -897,13 +896,8 @@ their JDK 11+ messages). The differences:
   Java arrays of series and encoder buffers are, so there is no spare capacity to release.
 - **`ENCODER->` pushes copies** of the labels and attributes maps; Java pushes the maps of
   the decoder metadata themselves, which a later `PUT` on them would modify.
-- **`PARSEVALUE` pushes decimals as `DOUBLE`s.** `GTSHelper.parseValue` returns a
-  `BigDecimal` for inputs of at most 15 characters made of digits, signs and dots
-  (`'1.50' PARSEVALUE` is the `BIGDECIMAL` `1.50` in Warp 10); `BIGDECIMAL` values are not
-  modelled (§3), so the port pushes their double value, as for every decimal read from an
-  encoder. Inside a nested `[ … ]` encoder they are stored as `BigDecimal`s, so the bytes
-  match Warp 10's. Error causes carry the JDK 27 texts (`Index 0 out of bounds for length 0`,
-  `No digits found.`…) where the oracle prints JDK 8's.
+- **Error causes of `PARSEVALUE`** carry the JDK 27 texts (`Index 0 out of bounds for length
+  0`, `No digits found.`…) where the oracle prints JDK 8's.
 
 ## 21. Outlier tests and the t distribution
 
@@ -913,3 +907,21 @@ evaluates with `FastMath` where the port uses the standard library: the quantile
 in their last bits (they match Commons Math exactly on the tested values), which can only flip
 a test whose statistic equals its critical value to the last bit. Messages of Commons Math
 render `NaN` as `NaN` (JDK 11+) where the oracle's JDK 8 prints `\uFFFD`.
+
+## 22. `BIGDECIMAL`
+
+`bigdecimal.rs` ports the `BigDecimal` / `BigInteger` operations WarpScript uses (on
+`num-bigint`): scales of the results, rounding, `toString` / `toPlainString`, the exceptions
+and their JDK 27 messages (the oracle's JDK 8 throws message-less `NumberFormatException`s
+for malformed strings). `->BD`, `BD->`, every `BD*` function, the operators (`+ - * / %`,
+the comparisons, `& | ^ << >> >>>`), `STRINGFORMAT` (`%e %f %g` on the exact digits),
+`->HEX` / `->BIN`, `PARSEVALUE`, encoders and series accept or produce `BIGDECIMAL`s like
+Warp 10. The differences:
+
+- **Probable primes.** `BDISPROBABLEPRIME` and `BDNEXTPROBABLEPRIME` use deterministic
+  Miller-Rabin rounds (exact below 3.3 × 10^24) where Java draws random bases; the answers
+  only differ for composites Java would wrongly accept with negligible probability.
+  `BDPROBABLEPRIME` / `SBDPROBABLEPRIME` draw odd candidates of the requested length until one
+  passes, where Java sieves: the primes drawn from a given seed differ from Warp 10's.
+- **`BDRAND`** draws from a SHA-256 counter mode generator keyed by the operating system
+  (Java: `SecureRandom`); `SBDRAND` reproduces Warp 10's draws from the seeded PRNG.

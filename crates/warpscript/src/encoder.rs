@@ -224,6 +224,7 @@ impl EncodedValue {
             Value::Boolean(b) => EncodedValue::Boolean(*b),
             Value::Long(l) => EncodedValue::Long(*l),
             Value::Double(d) => EncodedValue::Double(*d),
+            Value::BigDecimal(bd) => EncodedValue::from_big_decimal(bd),
             Value::String(s) => EncodedValue::String(Rc::clone(s)),
             Value::Bytes(b) => EncodedValue::Bytes(Rc::clone(b)),
             other => {
@@ -233,6 +234,22 @@ impl EncodedValue {
                 ));
             }
         })
+    }
+
+    /// `addValue(BigDecimal)`: the value stripped of its trailing zeros, kept as a decimal when
+    /// its scale fits a byte and its unscaled value 46 bits, an IEEE 754 double otherwise.
+    pub fn from_big_decimal(bd: &crate::bigdecimal::BigDecimal) -> EncodedValue {
+        use num_traits::ToPrimitive;
+        let stripped = bd.strip_trailing_zeros();
+        let fits = (-128..=127).contains(&stripped.scale)
+            && crate::bigdecimal::bit_length(&stripped.unscaled) <= 46;
+        match stripped.unscaled.to_i64() {
+            Some(unscaled) if fits => EncodedValue::Decimal(Decimal {
+                unscaled,
+                scale: stripped.scale,
+            }),
+            _ => EncodedValue::Double(bd.double_value()),
+        }
     }
 
     /// The stack object of the value: a `BigDecimal` is pushed as a double, as WarpScript

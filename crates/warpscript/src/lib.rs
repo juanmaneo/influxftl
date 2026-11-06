@@ -17,6 +17,7 @@
 
 pub mod aggregators;
 pub mod argon2;
+pub mod bigdecimal;
 pub mod bitset;
 pub mod cmath;
 pub mod curvefit;

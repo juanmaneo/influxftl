@@ -138,7 +138,7 @@ impl Flags {
 }
 
 /// One `%…` specifier of a format string.
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 struct Spec {
     /// Explicit argument index (`2$`), 1-based.
     index: Option<usize>,
@@ -521,6 +521,7 @@ fn format_arg(locale: Locale, spec: &Spec, arg: &Value) -> Result<String> {
     let text = match (spec.conversion, arg) {
         ('d' | 'o' | 'x', Value::Long(value)) => format_integer(locale, spec, *value)?,
         ('e' | 'f' | 'g' | 'a', Value::Double(value)) => format_double(locale, spec, *value),
+        ('e' | 'f' | 'g', Value::BigDecimal(value)) => format_big_decimal(locale, spec, value),
         ('b', Value::Null | Value::Boolean(false)) => cut("false", spec.precision),
         ('b', _) => cut("true", spec.precision),
         (_, Value::Null) => cut("null", spec.precision),
@@ -676,6 +677,16 @@ impl Decimal {
         }
     }
 
+    /// The decimal of the digits of an unscaled value (`d₁` at `10^exponent`).
+    fn from_digits(text: &str, exponent: i32) -> Decimal {
+        let mut digits: Vec<u8> = text.bytes().map(|b| b - b'0').collect();
+        while digits.len() > 1 && digits.last() == Some(&0) {
+            digits.pop();
+        }
+        // A zero keeps the exponent of its scale (`0.00` is `0e-02`).
+        Decimal { digits, exponent }
+    }
+
     /// Round half-up to `keep` significant digits; with `keep < 0` the value becomes zero.
     fn round(&mut self, keep: i32) {
         if keep >= self.digits.len() as i32 {
@@ -763,7 +774,52 @@ fn format_double(locale: Locale, spec: &Spec, value: f64) -> String {
         out.push_str(&body);
         return out;
     }
-    let mut decimal = Decimal::shortest(magnitude);
+    format_decimal(locale, spec, negative, Decimal::shortest(magnitude))
+}
+
+/// `%e`, `%f`, `%g` of a `BIGDECIMAL`: its exact digits. `%g` chooses with the unrounded
+/// magnitude (`[10^-4, 10^precision)`, or a zero of scale 0) and the exponent of its scale.
+fn format_big_decimal(
+    locale: Locale,
+    spec: &Spec,
+    value: &crate::bigdecimal::BigDecimal,
+) -> String {
+    use crate::bigdecimal::BigDecimal;
+    let digits = num_traits::Signed::abs(&value.unscaled).to_string();
+    let exponent = (digits.len() as i64 - 1 - i64::from(value.scale)) as i32;
+    let decimal = Decimal::from_digits(&digits, exponent);
+    let negative = value.signum() < 0;
+    if spec.conversion != 'g' {
+        return format_decimal(locale, spec, negative, decimal);
+    }
+    let precision = match spec.precision {
+        None => 6,
+        Some(0) => 1,
+        Some(p) => p as i32,
+    };
+    let magnitude = value.abs();
+    let zero = value.signum() == 0 && value.scale == 0;
+    let lower = BigDecimal::new(1.into(), 4);
+    let upper = BigDecimal::new(1.into(), precision.wrapping_neg());
+    let plain = zero
+        || (magnitude.compare(&lower) != std::cmp::Ordering::Less
+            && magnitude.compare(&upper) == std::cmp::Ordering::Less);
+    let mut adjusted = spec.clone();
+    if plain {
+        adjusted.conversion = 'f';
+        adjusted.precision = Some((precision - exponent - 1).max(0) as usize);
+    } else {
+        adjusted.conversion = 'e';
+        adjusted.precision = Some((precision - 1) as usize);
+    }
+    format_decimal(locale, &adjusted, negative, decimal)
+}
+
+/// `%e`, `%f`, `%g` of the decimal digits of a finite magnitude (a `DOUBLE`'s shortest
+/// digits, a `BIGDECIMAL`'s exact ones), rounded half-up.
+fn format_decimal(locale: Locale, spec: &Spec, negative: bool, mut decimal: Decimal) -> String {
+    let flags = spec.flags;
+    let closing = closing_paren(flags, negative);
     let precision = spec.precision.map_or(6, |p| p as i32);
     let (mut mantissa, places, exponent) = match spec.conversion {
         'e' => {

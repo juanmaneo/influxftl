@@ -44,6 +44,11 @@ flate2 = { version = "1", default-features = false, features = ["rust_backend"] 
 # `ISO8601`, `TSELEMENTS`, `ADDDAYS`…
 chrono = { version = "0.4", default-features = false, features = ["std"] }
 chrono-tz = "0.10"
+# Arbitrary precision integers under the Java `BigDecimal` / `BigInteger` port (`->BD`, the
+# `BD*` functions, `BIGDECIMAL` arithmetic).
+num-bigint = { version = "0.4", default-features = false, features = ["std"] }
+num-integer = { version = "0.1", default-features = false, features = ["std"] }
+num-traits = { version = "0.2", default-features = false, features = ["std"] }
 
 [workspace.lints.rust]
 unsafe_code = "forbid"

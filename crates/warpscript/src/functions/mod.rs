@@ -8,6 +8,7 @@
 
 pub mod args;
 pub mod asregs;
+pub mod bd;
 pub mod capabilities;
 pub mod collections;
 pub mod compression;
@@ -124,6 +125,7 @@ const TABLES: &[&[(&str, Entry)]] = &[
     gts_misc::FUNCTIONS,
     outliers::FUNCTIONS,
     interpolators::FUNCTIONS,
+    bd::FUNCTIONS,
     selectors::FUNCTIONS,
     crate::aggregators::basic::FUNCTIONS,
     crate::aggregators::stats::FUNCTIONS,
@@ -246,6 +248,8 @@ pub fn call(stack: &mut Stack, name: &str) -> Result<()> {
 mod args_tests;
 #[cfg(test)]
 mod asregs_tests;
+#[cfg(test)]
+mod bd_tests;
 #[cfg(test)]
 mod capabilities_tests;
 #[cfg(test)]

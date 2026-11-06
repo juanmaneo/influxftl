@@ -630,13 +630,12 @@ fn decimals_hex() -> String {
 
 #[test]
 fn valuehistogram_of_decimals() {
-    // The keys are `BigDecimal`s in Warp 10, `DOUBLE`s here (DIVERGENCES §20).
     assert_top(
         &format!(
             "'{}' HEX-> UNWRAPENCODER VALUEHISTOGRAM ->JSON",
             decimals_hex()
         ),
-        // Warp 10: {"1099511627.776":1,"1.5":2,"-7":1,"-1.5":1}, in the same order.
-        "{\"1.099511627776E9\":1,\"1.5\":2,\"-7.0\":1,\"-1.5\":1}",
+        // The keys are `BigDecimal`s, in the order of the Java `HashMap`.
+        "{\"1099511627.776\":1,\"1.5\":2,\"-7\":1,\"-1.5\":1}",
     );
 }

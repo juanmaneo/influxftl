@@ -299,6 +299,7 @@ fn add_value(stack: &mut Stack, name: &str, overwrite: bool) -> Result<()> {
         Value::List(list) => datapoint_from_list(&list.borrow())?,
         Value::Long(_)
         | Value::Double(_)
+        | Value::BigDecimal(_)
         | Value::Counter(_)
         | Value::String(_)
         | Value::Boolean(_)

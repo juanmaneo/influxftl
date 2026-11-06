@@ -308,6 +308,7 @@ pub(crate) fn natural_compare(a: &Value, b: &Value) -> Option<Ordering> {
         (Value::Double(x), Value::Double(y)) => Some(java_double_compare(*x, *y)),
         (Value::String(x), Value::String(y)) => Some(x.encode_utf16().cmp(y.encode_utf16())),
         (Value::Boolean(x), Value::Boolean(y)) => Some(x.cmp(y)),
+        (Value::BigDecimal(x), Value::BigDecimal(y)) => Some(x.compare(y)),
         _ => None,
     }
 }
@@ -336,7 +337,11 @@ pub(crate) fn natural_sort(name: &str, items: &mut [Value]) -> Result<()> {
     }
     if !matches!(
         first,
-        Value::Long(_) | Value::Double(_) | Value::String(_) | Value::Boolean(_)
+        Value::Long(_)
+            | Value::Double(_)
+            | Value::BigDecimal(_)
+            | Value::String(_)
+            | Value::Boolean(_)
     ) {
         return Err(fail(
             name,

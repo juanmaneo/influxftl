@@ -50,6 +50,7 @@ impl Unary {
                 Value::Double(f(n.as_f64().unwrap_or(f64::NAN)))
             }
             (Unary::DoubleToLong(f), Value::Double(d)) => Value::Long(f(*d)),
+            (Unary::DoubleToLong(f), Value::BigDecimal(bd)) => Value::Long(f(bd.double_value())),
             (Unary::DoubleToLong(_), n) => n.clone(),
         })
     }

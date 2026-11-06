@@ -87,6 +87,8 @@ pub enum Value {
     Long(i64),
     /// `DOUBLE` (Java `double`).
     Double(f64),
+    /// `BIGDECIMAL` (Java `java.math.BigDecimal`).
+    BigDecimal(Rc<crate::bigdecimal::BigDecimal>),
     /// `STRING` (immutable, shared).
     String(Rc<str>),
     /// `BYTES` (Java `byte[]`).
@@ -151,6 +153,7 @@ impl Value {
             Value::Boolean(_) => "BOOLEAN",
             Value::Long(_) => "LONG",
             Value::Double(_) => "DOUBLE",
+            Value::BigDecimal(_) => "BIGDECIMAL",
             Value::String(_) => "STRING",
             Value::Bytes(_) => "BYTES",
             Value::BitSet(_) => "BITSET",
@@ -175,6 +178,7 @@ impl Value {
             Value::Boolean(_) => "java.lang.Boolean",
             Value::Long(_) => "java.lang.Long",
             Value::Double(_) => "java.lang.Double",
+            Value::BigDecimal(_) => "java.math.BigDecimal",
             Value::String(_) => "java.lang.String",
             Value::Bytes(_) => "[B",
             Value::BitSet(_) => "java.util.BitSet",
@@ -191,9 +195,12 @@ impl Value {
         }
     }
 
-    /// `true` for `LONG` and `DOUBLE` (Java `Number`).
+    /// `true` for `LONG`, `DOUBLE` and `BIGDECIMAL` (Java `Number`).
     pub fn is_number(&self) -> bool {
-        matches!(self, Value::Long(_) | Value::Double(_))
+        matches!(
+            self,
+            Value::Long(_) | Value::Double(_) | Value::BigDecimal(_)
+        )
     }
 
     /// `true` for `null`.
@@ -206,6 +213,7 @@ impl Value {
         match self {
             Value::Long(l) => Some(*l as f64),
             Value::Double(d) => Some(*d),
+            Value::BigDecimal(bd) => Some(bd.double_value()),
             _ => None,
         }
     }
@@ -216,6 +224,7 @@ impl Value {
         match self {
             Value::Long(l) => Some(*l),
             Value::Double(d) => Some(double_to_long(*d)),
+            Value::BigDecimal(bd) => Some(bd.long_value()),
             _ => None,
         }
     }
@@ -280,6 +289,7 @@ impl PartialEq for Value {
             (Value::Boolean(a), Value::Boolean(b)) => a == b,
             (Value::Long(a), Value::Long(b)) => a == b,
             (Value::Double(a), Value::Double(b)) => double_bits(*a) == double_bits(*b),
+            (Value::BigDecimal(a), Value::BigDecimal(b)) => a == b,
             (Value::String(a), Value::String(b)) => a == b,
             (Value::Bytes(a), Value::Bytes(b)) => a == b,
             (Value::BitSet(a), Value::BitSet(b)) => a == b,
@@ -307,6 +317,7 @@ impl Hash for Value {
             Value::Boolean(b) => b.hash(state),
             Value::Long(l) => l.hash(state),
             Value::Double(d) => double_bits(*d).hash(state),
+            Value::BigDecimal(bd) => bd.hash(state),
             Value::String(s) => s.hash(state),
             Value::Bytes(b) => b.hash(state),
             Value::BitSet(b) => b.hash(state),
@@ -350,6 +361,7 @@ impl fmt::Display for Value {
             Value::Boolean(b) => write!(f, "{b}"),
             Value::Long(l) => write!(f, "{l}"),
             Value::Double(d) => f.write_str(&java_double_to_string(*d)),
+            Value::BigDecimal(bd) => write!(f, "{bd}"),
             Value::String(s) => f.write_str(s),
             Value::Bytes(b) => write!(f, "[B@{:x}", b.len()),
             Value::BitSet(b) => write!(f, "{b}"),

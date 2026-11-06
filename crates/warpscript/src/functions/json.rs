@@ -220,6 +220,8 @@ impl Serializer {
             // Jackson writes an `AtomicLong` as its number.
             Value::Counter(c) => self.out.push_str(&c.get().to_string()),
             Value::Double(d) => self.write_double(*d),
+            // Jackson writes a `BigDecimal` with its `toString()`.
+            Value::BigDecimal(bd) => self.out.push_str(&bd.to_string()),
             Value::String(s) => self.write_string(s.chars()),
             // `BytesSerializer`: the ISO-8859-1 decoding of the bytes.
             Value::Bytes(b) => self.write_string(b.iter().map(|&byte| char::from(byte))),

@@ -210,7 +210,7 @@ The project is Apache-2.0 and must stay redistributable under it (see `README.md
 
 ## 9. Status and next steps
 
-1896 / 2193 functions are ported (`docs/FUNCTIONS.md`; the inventory includes the names
+1943 / 2193 functions are ported (`docs/FUNCTIONS.md`; the inventory includes the names
 Warp 10 registers through `Builder`s and constants). The Geo Time Series model, the
 `GTSHelper` transforms (time, datapoints, statistics), `BUCKETIZE` and `MAP` with the
 shared aggregators (`sum`, `mean`, `min`, `max`, `first`, `last`, `count`, `and`, `or`,
@@ -307,8 +307,10 @@ the order that unlocks the most:
    `INTERPOLATOR.1D.SPLINE`, `INTERPOLATOR.1D.AKIMA`, `INTERPOLATOR.2D.BICUBIC`,
    `INTERPOLATOR.3D.TRICUBIC` (Commons Math's bicubic and tricubic splines, with
    `MathArrays.linearCombination`). Not yet: `INTERPOLATOR.ND.*` (randomized microsphere).
-5. **BigDecimal** (`BD*`, `MUSIGMA`, `NSUMSUMSQ`, `LR`): either a spec-derived decimal
-   implementation or a vetted crate (`cargo deny` compatible).
+5. **BigDecimal** (`bigdecimal.rs` on `num-bigint`, `functions/bd.rs`): the `BIGDECIMAL`
+   type, `->BD`, `BD->`, every `BD*` function, the operators, `STRINGFORMAT`, `->HEX` /
+   `->BIN`, `PARSEVALUE` and the decimals of encoders (DIVERGENCES §22). Next: `MUSIGMA`,
+   `NSUMSUMSQ`, `LR`.
 6. **Geo** (`GeoXPLib` shapes, `HAVERSINE`, `LOCATIONOFFSET`, `GEO.*`), **datastore**
    (`FETCH` / `FIND` / `UPDATE` / `META` / `DELETE` on InfluxDB 3), PKI crypto, Processing,
    matrices.

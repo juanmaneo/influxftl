@@ -722,6 +722,13 @@ fn parsevalue(stack: &mut Stack) -> Result<()> {
         );
         Error::with_cause(message, error.into_error())
     })?;
-    stack.push(value.to_value());
+    // `GTSHelper.parseValue` returns a `BigDecimal` for a decimal.
+    stack.push(match value {
+        EncodedValue::Decimal(d) => Value::BigDecimal(Rc::new(crate::bigdecimal::BigDecimal::new(
+            d.unscaled.into(),
+            d.scale,
+        ))),
+        other => other.to_value(),
+    });
     Ok(())
 }

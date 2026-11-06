@@ -114,7 +114,9 @@ impl Values {
                 *self = match value {
                     Scalar::Boolean(_) => Values::Boolean(Vec::new()),
                     Scalar::Long(_) => Values::Long(Vec::new()),
-                    Scalar::Double(_) | Scalar::Decimal(_) => Values::Double(Vec::new()),
+                    Scalar::Double(_) | Scalar::Decimal(_) | Scalar::Big(_) => {
+                        Values::Double(Vec::new())
+                    }
                     Scalar::String(_) => Values::String(Vec::new()),
                 };
                 self.store(idx, value);
@@ -176,6 +178,8 @@ enum Scalar {
     String(Rc<str>),
     /// A `BigDecimal` decoded from an optimized encoding.
     Decimal(Decimal),
+    /// A `BIGDECIMAL` value.
+    Big(Rc<crate::bigdecimal::BigDecimal>),
 }
 
 impl Scalar {
@@ -187,6 +191,7 @@ impl Scalar {
             Scalar::Double(d) => crate::value::double_to_long(*d),
             Scalar::String(s) => string_to_long(s),
             Scalar::Decimal(d) => d.long_value(),
+            Scalar::Big(bd) => bd.long_value(),
         }
     }
 
@@ -198,6 +203,7 @@ impl Scalar {
             Scalar::Double(d) => *d,
             Scalar::String(s) => string_to_double(s),
             Scalar::Decimal(d) => d.double_value(),
+            Scalar::Big(bd) => bd.double_value(),
         }
     }
 
@@ -209,6 +215,7 @@ impl Scalar {
             Scalar::Double(d) => *d != 0.0,
             Scalar::String(s) => !s.is_empty(),
             Scalar::Decimal(d) => d.double_value() != 0.0,
+            Scalar::Big(bd) => bd.double_value() != 0.0,
         }
     }
 
@@ -220,6 +227,7 @@ impl Scalar {
             Scalar::Double(d) => Rc::from(java_double_to_string(*d)),
             Scalar::String(s) => Rc::clone(s),
             Scalar::Decimal(d) => Rc::from(d.to_string()),
+            Scalar::Big(bd) => Rc::from(bd.to_string()),
         }
     }
 }
@@ -569,6 +577,7 @@ impl GeoTimeSerie {
             Value::Boolean(b) => Scalar::Boolean(*b),
             Value::Long(l) => Scalar::Long(*l),
             Value::Double(d) => Scalar::Double(*d),
+            Value::BigDecimal(bd) => Scalar::Big(Rc::clone(bd)),
             Value::String(s) => Scalar::String(Rc::clone(s)),
             // `new String(bytes, ISO_8859_1)`
             Value::Bytes(bytes) => Scalar::String(Rc::from(

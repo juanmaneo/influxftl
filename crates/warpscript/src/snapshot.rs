@@ -96,6 +96,11 @@ fn append(out: &mut String, value: &Value, depth: usize, readable: bool) -> Resu
             out.push_str(&java_double_to_string(*d));
             out.push(' ');
         }
+        Value::BigDecimal(bd) => {
+            out.push('\'');
+            out.push_str(&bd.to_plain_string());
+            out.push_str("' ->BD ");
+        }
         Value::String(s) => {
             out.push('\'');
             if readable {

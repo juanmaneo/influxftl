@@ -12,8 +12,10 @@ use std::rc::Rc;
 
 use super::Entry;
 use super::args::fail;
+use super::bd::{bd_value, to_big_decimal, to_big_integer};
 use super::gts_operators::{self, Arithmetic, Comparison};
 use super::numerical::{self, Binary};
+use crate::bigdecimal::BigDecimal;
 use crate::error::{Error, Result};
 use crate::jmath;
 use crate::macros::Macro;
@@ -103,6 +105,9 @@ fn add(stack: &mut Stack) -> Result<()> {
     let op2 = stack.pop()?;
     let op1 = stack.pop()?;
     let result = match (&op1, &op2) {
+        (a, b) if a.is_number() && b.is_number() && has_bd(a, b) => {
+            bd_value(to_big_decimal("+", a)?.add(&to_big_decimal("+", b)?))
+        }
         (a, b) if a.is_number() && b.is_number() => numeric(a, b, i64::wrapping_add, |x, y| x + y),
         (Value::String(a), Value::String(b)) => Value::from(format!("{a}{b}")),
         (Value::List(a), _) => {
@@ -151,7 +156,17 @@ const DIV_MSG: &str = "can only operate on numeric values, vectors and numeric G
 fn arithmetic(stack: &mut Stack, op: Arithmetic) -> Result<()> {
     let op2 = stack.pop()?;
     let op1 = stack.pop()?;
-    let result = if op1.is_number() && op2.is_number() {
+    let result = if op1.is_number() && op2.is_number() && has_bd(&op1, &op2) {
+        let (a, b) = (
+            to_big_decimal(op.name, &op1)?,
+            to_big_decimal(op.name, &op2)?,
+        );
+        bd_value(match op.name {
+            "-" => a.subtract(&b),
+            "*" => a.multiply(&b)?,
+            _ => a.divide(&b)?,
+        })
+    } else if op1.is_number() && op2.is_number() {
         match (&op1, &op2) {
             (Value::Long(a), Value::Long(b)) => Value::Long((op.long)(*a, *b)?),
             _ => Value::Double((op.double)(
@@ -217,6 +232,11 @@ fn modulo(stack: &mut Stack) -> Result<()> {
     match (&op1, &op2) {
         _ if !op1.is_number() || !op2.is_number() => {
             Err(fail("%", "operates on numeric arguments."))
+        }
+        (a, b) if has_bd(a, b) => {
+            let remainder = to_big_decimal("%", a)?.remainder(&to_big_decimal("%", b)?)?;
+            stack.push(bd_value(remainder));
+            Ok(())
         }
         (Value::Long(_), Value::Long(0)) => Err(Error::new("/ by zero")),
         (a, b) => {
@@ -303,6 +323,25 @@ fn compare_values(a: &Value, b: &Value) -> Option<Ordering> {
     })
 }
 
+/// Whether either operand is a `BIGDECIMAL` (the operators then compute with `BigDecimal`).
+fn has_bd(a: &Value, b: &Value) -> bool {
+    matches!(a, Value::BigDecimal(_)) || matches!(b, Value::BigDecimal(_))
+}
+
+/// `EQ.compare` when a `BIGDECIMAL` is involved: `equals`, then the comparison of the exact
+/// `BigDecimal`s (`new BigDecimal(double)` for doubles, which fails on infinities).
+fn eq_compare_bd(a: &Value, b: &Value) -> Result<Ordering> {
+    if a == b {
+        return Ok(Ordering::Equal);
+    }
+    let exact = |v: &Value| match v {
+        Value::Double(d) => BigDecimal::from_f64_exact(*d),
+        Value::BigDecimal(bd) => Ok((**bd).clone()),
+        other => Ok(BigDecimal::from_i64(other.as_i64().unwrap_or_default())),
+    };
+    Ok(exact(a)?.compare(&exact(b)?))
+}
+
 /// `EQ.compare` of two numbers (`Equal` for operands that are not two numbers).
 pub(super) fn compare_numbers(a: &Value, b: &Value) -> Ordering {
     compare_values(a, b).unwrap_or(Ordering::Equal)
@@ -334,6 +373,8 @@ fn comparison(
         two_nan
     } else if nan1 || nan2 {
         one_nan
+    } else if op1.is_number() && op2.is_number() && has_bd(op1, op2) {
+        operator(eq_compare_bd(op1, op2)?)
     } else if let Some(ordering) = compare_values(op1, op2) {
         operator(ordering)
     } else {
@@ -542,6 +583,22 @@ fn bitwise(stack: &mut Stack, name: &str, op: fn(i64, i64) -> i64) -> Result<()>
     let op1 = stack.pop()?;
     let result = match (&op1, &op2) {
         (Value::Long(a), Value::Long(b)) => Some(Value::Long(op(*a, *b))),
+        (a, b) if a.is_number() && b.is_number() && has_bd(a, b) => {
+            let (x, y) = (to_big_integer(name, a)?, to_big_integer(name, b)?);
+            let shift = || {
+                use num_traits::ToPrimitive;
+                y.to_i32()
+                    .ok_or_else(|| crate::bigdecimal::arithmetic("BigInteger out of int range"))
+            };
+            let value = match name {
+                "&" => &x & &y,
+                "|" => &x | &y,
+                "^" => &x ^ &y,
+                "<<" => crate::bigdecimal::shift_left(&x, shift()?),
+                _ => crate::bigdecimal::shift_left(&x, shift()?.wrapping_neg()),
+            };
+            Some(bd_value(BigDecimal::from_bigint(value)))
+        }
         _ => gts_operators::bitwise(&op1, &op2, op),
     };
     match result {
@@ -779,6 +836,7 @@ fn tostring(stack: &mut Stack) -> Result<()> {
         // A counter is a `Number` (`AtomicLong`) in Java.
         value @ (Value::Long(_)
         | Value::Double(_)
+        | Value::BigDecimal(_)
         | Value::Boolean(_)
         | Value::String(_)
         | Value::Counter(_)) => {
@@ -813,15 +871,34 @@ fn tobin_arrow(stack: &mut Stack) -> Result<()> {
     to_bin(stack, "->BIN")
 }
 
+/// `-0x…` / `0x…` (`-0b…` / `0b…`): the digits of an integral `BIGDECIMAL` in `radix`.
+fn integral_radix(name: &str, bd: &BigDecimal, radix: u32, prefix: &str) -> Result<String> {
+    let Some(integer) = bd.to_bigint_exact() else {
+        return Err(fail(
+            name,
+            "can only operate on a BIGDECIMAL with no fractional part.",
+        ));
+    };
+    let sign = if integer.sign() == num_bigint::Sign::Minus {
+        "-"
+    } else {
+        ""
+    };
+    Ok(format!(
+        "{sign}{prefix}{}",
+        num_traits::Signed::abs(&integer).to_str_radix(radix)
+    ))
+}
+
 /// `TOHEX` / `->HEX`: the hexadecimal form of a `STRING` (its UTF-8 bytes), of `BYTES`, or of
 /// a `LONG` (two's complement, padded to 16 digits).
-///
-/// `BIGDECIMAL` is not modelled by this runtime (see `DIVERGENCES.md`).
+/// An integral `BIGDECIMAL` is written with its sign and a `0x` prefix.
 fn to_hex(stack: &mut Stack, name: &str) -> Result<()> {
     let text = match stack.pop()? {
         Value::String(s) => crate::encoding::hex_encode(s.as_bytes()),
         Value::Bytes(b) => crate::encoding::hex_encode(&b),
         Value::Long(v) => format!("{:016x}", v as u64),
+        Value::BigDecimal(bd) => integral_radix(name, &bd, 16, "0x")?,
         _ => {
             return Err(fail(
                 name,
@@ -841,6 +918,7 @@ fn to_bin(stack: &mut Stack, name: &str) -> Result<()> {
         Value::String(s) => bytes_to_bin(s.as_bytes()),
         Value::Bytes(b) => bytes_to_bin(&b),
         Value::Long(v) => format!("{:064b}", v as u64),
+        Value::BigDecimal(bd) => integral_radix(name, &bd, 2, "0b")?,
         Value::BitSet(bits) => {
             let length = usize::try_from(bits.length()).unwrap_or_default();
             let set: std::collections::BTreeSet<usize> = bits.set_bits().collect();

@@ -668,10 +668,18 @@ fn parsevalue() {
         |script: &str, expected: &str| assert_top(&format!("{script} PARSEVALUE ->HEX"), expected);
     assert_top("' 42 ' PARSEVALUE", 42);
     assert_top("'+3' PARSEVALUE", 3);
-    assert_top("'1.5' PARSEVALUE", 1.5);
-    assert_top("'-1.50' PARSEVALUE", -1.5);
-    assert_top("'1.' PARSEVALUE", 1.0);
-    assert_top("'.5' PARSEVALUE", 0.5);
+    // Decimals are `BigDecimal`s, with their scale.
+    for (text, expected) in [
+        ("1.5", "1.5"),
+        ("-1.50", "-1.50"),
+        ("1.", "1"),
+        (".5", "0.5"),
+        ("1234567890123.5", "1234567890123.5"),
+    ] {
+        assert_top(&format!("'{text}' PARSEVALUE TOSTRING"), expected);
+        assert_top(&format!("'{text}' PARSEVALUE TYPEOF"), "BIGDECIMAL");
+    }
+    // More than 15 characters: a double.
     assert_top("'12345678901234.5' PARSEVALUE", 1.234_567_890_123_45E13);
     assert_top("'1e3' PARSEVALUE", 1000.0);
     assert_top("'1f' PARSEVALUE", 1.0);
