@@ -825,11 +825,12 @@ fn merge_concatenates_series() {
         "1 true MERGE",
         "MERGE operates on a LIST containing GTS or ENCODERs.",
     );
-    // The sorted merge produces a GTS Encoder, which is not supported.
-    assert_fails(
-        &format!("[ {SERIES} ] false MERGE"),
-        "MERGE encountered an error while merging. (GTS Encoders are not supported.)",
+    // The sorted merge produces a GTS Encoder.
+    assert_top(
+        &format!("[ {SERIES} ] false MERGE ->JSON"),
+        "{\"c\":\"g\",\"l\":{\"l\":\"v\"},\"a\":{},\"la\":0,\"v\":[[10,1],[20,47.99999998882413,1.9999999646097422,35,2],[30,5,3]]}",
     );
+    assert_top(&format!("[ {SERIES} ] false MERGE TYPEOF"), "GTSENCODER");
 }
 
 #[test]

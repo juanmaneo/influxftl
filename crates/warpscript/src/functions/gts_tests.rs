@@ -257,8 +257,8 @@ fn addvalue_checks_its_arguments() {
         "ADDVALUE expects a LONG, DOUBLE, STRING, byte array or BOOLEAN value or a Geo Time Series or ENCODER.",
     );
     assert_fails(
-        "NEWGTS 1 NaN NaN NaN NEWGTS SETVALUE",
-        "SETVALUE encountered an error while serializing the Geo Time Series.",
+        "1 1 NaN NaN NaN 2 ADDVALUE",
+        "ADDVALUE operates on a single Geo Time Series or GTS Encoder.",
     );
     assert_fails(
         "NEWGTS 1 NaN NaN 'e' 1 ADDVALUE",

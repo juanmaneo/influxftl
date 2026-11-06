@@ -4,15 +4,21 @@
 //! Geo Time Series construction and inspection: `NEWGTS`, `MAKEGTS`, `ADDVALUE`, `RENAME`, `RELABEL`,
 //! `TICKS`, `VALUES`, `SORT`, `ATINDEX`…
 
+use std::cell::RefCell;
 use std::collections::BTreeSet;
+use std::rc::Rc;
 
 use super::Entry;
 use super::args::{compute_and_check_index, fail, fail_with_cause};
 use super::misc::TIME_UNITS_PER_MS;
+use crate::encoder::{
+    DEFAULT_COMP_RATIO_THRESHOLD, EncodedValue, GtsEncoder, encoder_to_wrapper, gts_to_wrapper,
+};
 use crate::error::{Error, Result};
 use crate::geoxp;
 use crate::gts::{GeoTimeSerie, Gts, Metadata, NO_ELEVATION, NO_LOCATION};
 use crate::stack::Stack;
+use crate::thrift::serialize_wrapper;
 use crate::value::Value;
 
 /// The functions of this module.
@@ -296,7 +302,9 @@ fn add_value(stack: &mut Stack, name: &str, overwrite: bool) -> Result<()> {
         | Value::Counter(_)
         | Value::String(_)
         | Value::Boolean(_)
-        | Value::Bytes(_) => {
+        | Value::Bytes(_)
+        | Value::Gts(_)
+        | Value::Encoder(_) => {
             let elevation = stack.pop()?;
             if !elevation.is_number() {
                 return Err(fail(name, "expects the elevation to be numeric or NaN."));
@@ -326,13 +334,6 @@ fn add_value(stack: &mut Stack, name: &str, overwrite: bool) -> Result<()> {
                 value: top.clone(),
             }
         }
-        // Warp 10 stores a wrapped (serialized) copy of a GTS or encoder value.
-        Value::Gts(_) => {
-            return Err(fail(
-                name,
-                "encountered an error while serializing the Geo Time Series.",
-            ));
-        }
         _ => {
             return Err(fail(
                 name,
@@ -340,20 +341,52 @@ fn add_value(stack: &mut Stack, name: &str, overwrite: bool) -> Result<()> {
             ));
         }
     };
-    let Value::Gts(gts) = stack.pop()? else {
-        return Err(fail(
-            name,
-            "operates on a single Geo Time Series or GTS Encoder.",
-        ));
+    let target = stack.pop()?;
+    // Series and encoders are stored as the bytes of their (compressed, uncounted) wrapper.
+    let value = match &datapoint.value {
+        Value::Gts(value) => Value::Bytes(
+            serialize_wrapper(&gts_to_wrapper(
+                &value.borrow(),
+                true,
+                DEFAULT_COMP_RATIO_THRESHOLD,
+                false,
+                false,
+            ))
+            .into(),
+        ),
+        Value::Encoder(value) => Value::Bytes(
+            serialize_wrapper(&encoder_to_wrapper(
+                &value.borrow(),
+                true,
+                DEFAULT_COMP_RATIO_THRESHOLD,
+                false,
+            ))
+            .into(),
+        ),
+        other => other.clone(),
     };
-    gts.borrow_mut().set_value(
-        datapoint.tick,
-        datapoint.location,
-        datapoint.elevation,
-        &datapoint.value,
-        overwrite,
-    );
-    stack.push(Value::Gts(gts));
+    match &target {
+        Value::Gts(gts) => gts.borrow_mut().set_value(
+            datapoint.tick,
+            datapoint.location,
+            datapoint.elevation,
+            &value,
+            overwrite,
+        ),
+        Value::Encoder(encoder) => encoder.borrow_mut().add_value(
+            datapoint.tick,
+            datapoint.location,
+            datapoint.elevation,
+            &EncodedValue::from_value(&value)?,
+        ),
+        _ => {
+            return Err(fail(
+                name,
+                "operates on a single Geo Time Series or GTS Encoder.",
+            ));
+        }
+    }
+    stack.push(target);
     Ok(())
 }
 
@@ -594,11 +627,32 @@ fn ticklist(stack: &mut Stack) -> Result<()> {
                 .map(Value::Long)
                 .collect(),
         )),
+        Value::Encoder(encoder) => Ok(Value::list(
+            decoded(&encoder.borrow())?
+                .into_iter()
+                .map(|point| Value::Long(point.0))
+                .collect(),
+        )),
         _ => Err(fail(
             "TICKLIST",
             "expects a GeoTimeSeries, a GTSEncoder or a list thereof on top of the stack.",
         )),
     })
+}
+
+/// The datapoints of an encoder, `(tick, location, elevation, binary value)`.
+pub(crate) fn decoded(encoder: &GtsEncoder) -> Result<Vec<(i64, i64, i64, EncodedValue)>> {
+    let mut decoder = encoder.decoder();
+    let mut points = Vec::new();
+    while decoder.next()? {
+        points.push((
+            decoder.timestamp(),
+            decoder.location(),
+            decoder.elevation(),
+            decoder.binary_value(),
+        ));
+    }
+    Ok(points)
 }
 
 /// `VALUES`: the values of a Geo Time Series (or of each of a list), in storage order.
@@ -610,6 +664,12 @@ fn values(stack: &mut Stack) -> Result<()> {
                 (0..gts.size()).map(|i| gts.value_at(i)).collect(),
             ))
         }
+        Value::Encoder(encoder) => Ok(Value::list(
+            decoded(&encoder.borrow())?
+                .into_iter()
+                .map(|point| point.3.to_value())
+                .collect(),
+        )),
         _ => Err(fail(
             "VALUES",
             "expects a GeoTimeSeries, a GTSEncoder or a list thereof on top of the stack.",
@@ -716,6 +776,9 @@ fn lasttick(stack: &mut Stack) -> Result<()> {
 fn cloneempty(stack: &mut Stack) -> Result<()> {
     element_or_list(stack, |element| match element {
         Value::Gts(gts) => Ok(Value::Gts(gts.borrow().clone_empty().shared())),
+        Value::Encoder(encoder) => Ok(Value::Encoder(Rc::new(RefCell::new(
+            encoder.borrow().clone_empty(),
+        )))),
         _ => Err(fail(
             "CLONEEMPTY",
             "expects a GeoTimeSeries, a GTSEncoder or a list thereof on top of the stack.",
@@ -777,6 +840,17 @@ fn tickindex(stack: &mut Stack) -> Result<()> {
             indexed.bucketspan = 0;
             indexed.lastbucket = 0;
             Ok(Value::Gts(indexed.shared()))
+        }
+        // A new encoder, without the metadata of the original.
+        Value::Encoder(encoder) => {
+            let mut indexed = GtsEncoder::new(0);
+            let points = decoded(&encoder.borrow()).map_err(|err| {
+                fail_with_cause(NAME, "caught an exception while converting encoder.", err)
+            })?;
+            for (i, (_, location, elevation, value)) in points.into_iter().enumerate() {
+                indexed.add_value(i as i64, location, elevation, &value);
+            }
+            Ok(Value::Encoder(Rc::new(RefCell::new(indexed))))
         }
         // Warp 10 wraps every failure in the message of its encoder conversion.
         _ => Err(fail_with_cause(

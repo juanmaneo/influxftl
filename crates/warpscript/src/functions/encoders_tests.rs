@@ -13,7 +13,7 @@ use super::compression::gzip_bytes;
 use crate::encoder::{EncodedValue, GtsEncoder};
 use crate::encoding::hex_encode;
 use crate::gts::{NO_ELEVATION, NO_LOCATION};
-use crate::tests::{assert_fails, assert_top, fail, fail_msg};
+use crate::tests::{assert_fails, assert_stack, assert_top, fail, fail_msg, top};
 use crate::thrift::{GtsWrapper, serialize_wrapper};
 use crate::value::Value;
 
@@ -889,5 +889,307 @@ fn parsevalue_errors() {
         ),
     ] {
         error(text, index, cause);
+    }
+}
+
+#[test]
+fn addvalue_encoders() {
+    assert_top(
+        "NEWENCODER 1 NaN NaN NaN 42 ADDVALUE 2 48.0 2.0 5 'x' ADDVALUE 3 NaN NaN NaN T SETVALUE \
+         4 NaN NaN NaN 1.5 ADDVALUE ->JSON",
+        "{\"c\":\"\",\"l\":{},\"a\":{},\"la\":0,\"v\":[[1,42],[2,47.99999998882413,1.9999999646097422,5,\"x\"],[3,true],[4,1.5]]}",
+    );
+    assert_top(
+        "NEWENCODER [ 1 2 ] ADDVALUE WRAPRAW ->HEX",
+        "78034c0204160200",
+    );
+    // Series and encoders as values are stored as their serialized wrapper.
+    assert_top(
+        "NEWGTS 1 NaN NaN NaN NEWGTS 'g' RENAME 1 NaN NaN NaN 3 ADDVALUE ADDVALUE VALUES 0 GET ->HEX",
+        "1c1801671b00160016001b000068034c020600",
+    );
+    assert_top(
+        "NEWGTS 1 NaN NaN NaN NEWENCODER 1 NaN NaN NaN 3 ADDVALUE ADDVALUE VALUES 0 GET ->HEX",
+        "78034c020600",
+    );
+    assert_top(
+        "NEWENCODER 1 NaN NaN NaN NEWGTS ADDVALUE WRAPRAW ->HEX",
+        "78065a0203780000160200",
+    );
+    assert_top("NEWGTS [ 1 NEWGTS ] ADDVALUE VALUES 0 GET ->HEX", "780000");
+    assert_fails(
+        "NEWENCODER 1 NaN NaN NaN COUNTER ADDVALUE",
+        "Unsuported value type 'class java.util.concurrent.atomic.AtomicLong'",
+    );
+    assert_fails(
+        "NEWENCODER 1 NaN NaN NaN NULL ADDVALUE",
+        "ADDVALUE expects a LONG, DOUBLE, STRING, byte array or BOOLEAN value or a Geo Time Series or ENCODER.",
+    );
+}
+
+const ENCODER: &str = "NEWENCODER 'e' RENAME { 'k' 'v' } RELABEL 5 NaN NaN NaN 42 ADDVALUE \
+    7 48.0 2.0 3 'x' ADDVALUE 9 NaN NaN NaN 1.5 ADDVALUE \
+    11 NaN NaN NaN 'hex:00ff' PARSEVALUE ADDVALUE";
+
+#[test]
+fn gts_functions_on_encoders() {
+    assert_top(&format!("{ENCODER} SIZE"), 4);
+    assert_top("NEWENCODER SIZE", 0);
+    assert_stack(
+        &format!("{ENCODER} CLONE 1 NaN NaN NaN 2 ADDVALUE SIZE SWAP SIZE"),
+        &[Value::Long(5), Value::Long(4)],
+    );
+    assert_top(
+        &format!("{ENCODER} CLONEEMPTY ->JSON"),
+        "{\"c\":\"e\",\"l\":{\"k\":\"v\"},\"a\":{},\"la\":0,\"v\":[]}",
+    );
+    assert_top(&format!("[ {ENCODER} ] CLONEEMPTY 0 GET SIZE"), 0);
+    assert_top(
+        &format!("{ENCODER} TICKLIST"),
+        Value::list(vec![
+            Value::Long(5),
+            Value::Long(7),
+            Value::Long(9),
+            Value::Long(11),
+        ]),
+    );
+    assert_top(
+        &format!("{ENCODER} VALUES"),
+        Value::list(vec![
+            Value::Long(42),
+            Value::from("x"),
+            Value::Double(1.5),
+            Value::Bytes(vec![0, 255].into()),
+        ]),
+    );
+    assert_top(&format!("{ENCODER} TOSELECTOR"), "e{k=v}");
+    assert_top(
+        &format!("[ {ENCODER} ] TOSELECTOR"),
+        Value::list(vec![Value::from("e{k=v}")]),
+    );
+    assert_top(
+        &format!("{ENCODER} TICKINDEX ->JSON"),
+        "{\"c\":\"\",\"l\":{},\"a\":{},\"la\":0,\"v\":[[0,42],[1,47.99999998882413,1.9999999646097422,3,\"x\"],[2,1.5],[3,\"\\u0000\\u00FF\"]]}",
+    );
+    assert_top(&format!("{ENCODER} TICKINDEX NAME"), Value::Null);
+}
+
+const CHUNKED: &str = "NEWENCODER 'e' RENAME { 'k' 'v' } RELABEL 5 NaN NaN NaN 42 ADDVALUE \
+    7 48.0 2.0 3 'x' ADDVALUE 9 NaN NaN NaN 1.5 ADDVALUE \
+    11 NaN NaN NaN 'hex:00ff' PARSEVALUE ADDVALUE 3 NaN NaN NaN T ADDVALUE";
+
+/// An encoder whose second datapoint is truncated.
+const CORRUPT: &str = "[ '78044c02044c00' HEX-> ] ->ENCODER";
+
+#[test]
+fn time_functions_on_encoders() {
+    assert_top(
+        &format!("{CHUNKED} 10 4 TIMECLIP ->JSON"),
+        "{\"c\":\"e\",\"l\":{\"k\":\"v\"},\"a\":{},\"la\":0,\"v\":[[7,47.99999998882413,1.9999999646097422,3,\"x\"],[9,1.5]]}",
+    );
+    assert_top(
+        &format!(
+            "{CHUNKED} '1970-01-01T00:00:00.000009Z' '1970-01-01T00:00:00.000005Z' TIMECLIP \
+             TICKLIST ->JSON"
+        ),
+        "[5,7,9]",
+    );
+    assert_top(
+        &format!("{CHUNKED} [ [ 3 5 ] [ 11 9 ] ] CLIP TICKLIST ->JSON"),
+        "[[5,3],[9,11]]",
+    );
+    assert_fails(
+        &format!("{CORRUPT} 10 4 TIMECLIP"),
+        "BufferUnderflowException",
+    );
+    assert_fails(
+        &format!("{CORRUPT} [ [ 3 5 ] ] CLIP"),
+        "BufferUnderflowException",
+    );
+    let chunks = |args: &str| {
+        top(&format!(
+            "{CHUNKED} {args} CHUNK <% DUP LABELS 'c' GET SWAP TICKLIST 2 ->LIST %> F LMAP ->JSON"
+        ))
+        .to_string()
+    };
+    for (args, expected) in [
+        (
+            "0 4 0 0 'c' false",
+            r#"[["4",[3]],["8",[5,7]],["12",[9,11]]]"#,
+        ),
+        (
+            "12 4 0 0 'c' true",
+            r#"[["4",[3]],["8",[5,7]],["12",[9,11]]]"#,
+        ),
+        (
+            "20 4 0 3 'c' true",
+            r#"[["12",[9,11]],["16",[]],["20",[]]]"#,
+        ),
+        ("20 4 0 3 'c' false", r#"[["12",[9,11]]]"#),
+        (
+            "0 4 1 0 'c' false",
+            r#"[["4",[5,3]],["8",[5,7,9]],["12",[9,11]]]"#,
+        ),
+        ("8 4 2 2 'c' true", r#"[["4",[5,3]],["8",[5,7,9,3]]]"#),
+        ("-3 4 0 0 'c' false", "[]"),
+    ] {
+        assert_eq!(chunks(args), expected, "{args}");
+    }
+    assert_top(
+        &format!("{CHUNKED} 0 4 0 0 'c' false CHUNK 0 GET ->JSON"),
+        "{\"c\":\"e\",\"l\":{\"k\":\"v\",\"c\":\"4\"},\"a\":{},\"la\":0,\"v\":[[3,true]]}",
+    );
+    assert_top("NEWENCODER 0 4 0 0 'c' false CHUNK SIZE", 0);
+    assert_top("NEWENCODER 8 4 0 0 'c' true CHUNK SIZE", 0);
+    assert_fails(
+        &format!("{CHUNKED} 0 4 5 0 'c' false CHUNK"),
+        "Overlap cannot exceed chunk width.",
+    );
+    assert_fails(
+        &format!("{CHUNKED} 0 4 0 0 'k' false CHUNK"),
+        "Cannot operate on encoders which already have a label named 'k'",
+    );
+    assert_fails(&format!("{CHUNKED} 8 0 0 0 'c' false CHUNK"), "/ by zero");
+    assert_fails(
+        &format!("{CORRUPT} 8 4 0 0 'c' false CHUNK"),
+        "BufferUnderflowException",
+    );
+    assert_eq!(
+        chunks("0 2 0 0 'c' false"),
+        r#"[["4",[3]],["6",[5]],["8",[7]],["10",[9]],["12",[11]]]"#
+    );
+    assert_top(
+        "NEWENCODER 1 NaN NaN NaN 1 ADDVALUE 9 NaN NaN NaN 1 ADDVALUE 0 2 0 0 'c' false CHUNK \
+         <% LABELS 'c' GET %> F LMAP ->JSON",
+        r#"["2","10"]"#,
+    );
+    assert_eq!(
+        chunks("20 4 0 0 'c' false"),
+        r#"[["4",[3]],["8",[5,7]],["12",[9,11]]]"#
+    );
+    for function in ["TICKLIST", "VALUES", "TICKINDEX"] {
+        assert_fails(&format!("{CORRUPT} {function}"), "BufferUnderflowException");
+    }
+    assert_fails(
+        &format!("{CORRUPT} TICKINDEX"),
+        "TICKINDEX caught an exception while converting encoder. (BufferUnderflowException)",
+    );
+    // Warp 10 loops forever on a chunk at Long.MIN_VALUE (DIVERGENCES §18).
+    assert_top(
+        "NEWENCODER MINLONG NaN NaN NaN 1 ADDVALUE 0 1 0 0 'c' false CHUNK SIZE",
+        1,
+    );
+    // A chunk id walk stopping at the bottom of the tick range.
+    assert_top(
+        &format!("{CHUNKED} MINLONG 2 / 4 0 0 'c' true CHUNK SIZE"),
+        0,
+    );
+}
+
+const MA: &str = "NEWENCODER 'a' RENAME { 'x' '1' 'y' '2' } RELABEL 1 NaN NaN NaN 10 ADDVALUE \
+    3 NaN NaN NaN 30 ADDVALUE 5 NaN NaN NaN 50 ADDVALUE";
+const MB: &str = "NEWENCODER 'b' RENAME 2 NaN NaN NaN 20 ADDVALUE 3 NaN NaN NaN 31 ADDVALUE \
+    6 NaN NaN NaN 60 ADDVALUE";
+const MG: &str = "NEWGTS 'g' RENAME 3 NaN NaN NaN 32 ADDVALUE 4 NaN NaN NaN 40 ADDVALUE SORT";
+
+#[test]
+fn merge_encoders() {
+    assert_top(
+        &format!("[ {MA} {MB} ] MERGE ->JSON"),
+        "{\"c\":\"a\",\"l\":{\"x\":\"1\",\"y\":\"2\"},\"a\":{},\"la\":0,\"v\":[[1,10],[3,30],[5,50],[2,20],[3,31],[6,60]]}",
+    );
+    assert_top(
+        &format!("[ [ {MA} ] {MB} ] MERGE TICKLIST ->JSON"),
+        "[1,3,5,2,3,6]",
+    );
+    assert_fails(
+        &format!("[ {MA} {MG} ] MERGE"),
+        "MERGE can only operate on homogeneous lists of Geo Time Series or encoders.",
+    );
+    assert_fails(
+        &format!("[ [ {MA} 1 ] ] MERGE"),
+        "MERGE expects a list of Geo Time Series or encoders as first parameter.",
+    );
+    let message = fail_msg(&format!("[ {CORRUPT} ] false MERGE"));
+    assert!(message.contains("BufferUnderflowException"), "{message}");
+    assert!(!message.contains("merging"), "{message}");
+    let mut based = GtsEncoder::new(5);
+    based.add_value(7, NO_LOCATION, NO_ELEVATION, &EncodedValue::Long(1));
+    let mut encoded = based.bytes().to_vec();
+    encoded.push(0x4c);
+    let wrapper = GtsWrapper {
+        encoded: Some(encoded),
+        base: Some(5),
+        ..GtsWrapper::default()
+    };
+    let hex = hex_encode(&serialize_wrapper(&wrapper));
+    assert_fails(
+        &format!("[ NEWENCODER '{hex}' HEX-> UNWRAPENCODER ] MERGE"),
+        "BufferUnderflowException",
+    );
+    // Sorted merges, through a priority queue.
+    assert_top(
+        "[ 4 3 2 1 ] <% 'i' STORE NEWENCODER $i NaN NaN NaN $i ADDVALUE 5 NaN NaN NaN $i ADDVALUE \
+         9 $i - NaN NaN NaN $i ADDVALUE %> FOREACH 4 ->LIST false MERGE VALUES ->JSON",
+        "[1,2,3,4,4,4,2,1,3,3,2,1]",
+    );
+    assert_top(
+        &format!("[ {MA} {MB} {MG} ] false MERGE ->JSON"),
+        "{\"c\":\"a\",\"l\":{\"x\":\"1\",\"y\":\"2\"},\"a\":{},\"la\":0,\"v\":[[1,10],[2,20],[3,31],[3,30],[3,32],[4,40],[5,50],[6,60]]}",
+    );
+    assert_top(
+        &format!("[ {MG} {MA} [ {MB} ] ] false MERGE VALUES ->JSON"),
+        "[10,20,31,30,32,40,50,60]",
+    );
+    assert_top(
+        &format!("[ {MA} {MB} 'x' ] false MERGE TICKLIST ->JSON"),
+        "[1,2,3,3,5,6]",
+    );
+    assert_top(
+        "[ ] false MERGE ->JSON",
+        r#"{"c":"","l":{},"a":{},"la":0,"v":[]}"#,
+    );
+    assert_top(
+        "[ NEWGTS 'n' RENAME NEWENCODER ] false MERGE ->JSON",
+        r#"{"c":"","l":{},"a":{},"la":0,"v":[]}"#,
+    );
+    assert_top(
+        &format!("[ {MG} ] false MERGE ->JSON"),
+        r#"{"c":"g","l":{},"a":{},"la":0,"v":[[3,32],[4,40]]}"#,
+    );
+    assert_top(
+        "[ NEWGTS 1 NaN NaN NaN 1 ADDVALUE ] true MERGE TICKLIST ->JSON",
+        "[1]",
+    );
+    for (script, cause) in [
+        (
+            format!("[ {MA} {MB} ] true MERGE"),
+            "ENCODER b{} is not sorted in expected order.",
+        ),
+        (
+            format!("[ {MA} 7 NaN NaN NaN 1 ADDVALUE 6 NaN NaN NaN 1 ADDVALUE ] false MERGE"),
+            "ENCODER a{x=1,y=2} is not sorted in expected order.",
+        ),
+        (
+            format!("[ [ {MA} 'x' ] ] false MERGE"),
+            "expects a list of Geo Time Series or encoders or of lists thereof.",
+        ),
+        (
+            "[ NEWGTS 'u' RENAME { 'b' '1' 'a' '2' } RELABEL 2 NaN NaN NaN 1 ADDVALUE \
+             1 NaN NaN NaN 1 ADDVALUE ] false MERGE"
+                .to_owned(),
+            "GTS u{b=1,a=2} is not sorted in the expected order.",
+        ),
+        (
+            format!("[ {MG} ] true MERGE"),
+            "GTS g{} is not sorted in the expected order.",
+        ),
+        (
+            format!("[ {MG} 1 NaN NaN NaN 1 ADDVALUE ] false MERGE"),
+            "GTS g{} is not sorted.",
+        ),
+    ] {
+        assert_fails(&script, "MERGE encountered an error while merging.");
+        assert_fails(&script, cause);
     }
 }

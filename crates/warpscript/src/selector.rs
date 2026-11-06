@@ -102,6 +102,12 @@ pub fn parse_selector(selector: &str) -> Option<Result<(String, IndexMap<String,
 /// `GTSHelper.buildSelector(metadata, true)`: the selector of a series, labels sorted by name.
 /// A class name starting with `=` or `~` is prefixed with `=`.
 pub fn build_selector(metadata: &Metadata) -> String {
+    build_selector_ordered(metadata, true)
+}
+
+/// `GTSHelper.buildSelector(metadata, sort)`: the labels sorted by name when `sort` is set,
+/// in their map order otherwise.
+pub fn build_selector_ordered(metadata: &Metadata, sort: bool) -> String {
     let mut out = String::new();
     if let Some(name) = &metadata.name {
         if name.starts_with(['=', '~']) {
@@ -111,7 +117,9 @@ pub fn build_selector(metadata: &Metadata) -> String {
     }
     out.push('{');
     let mut labels: Vec<(&String, &String)> = metadata.labels.iter().collect();
-    labels.sort_by(|a, b| a.0.encode_utf16().cmp(b.0.encode_utf16()));
+    if sort {
+        labels.sort_by(|a, b| a.0.encode_utf16().cmp(b.0.encode_utf16()));
+    }
     let labels: Vec<String> = labels
         .into_iter()
         .map(|(name, value)| format!("{}={}", url_encode(name), url_encode(value)))

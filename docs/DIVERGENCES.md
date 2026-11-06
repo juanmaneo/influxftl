@@ -503,27 +503,27 @@ unstable, order), `GeoTimeSerie.toString` and `dump` (`TOSTRING`), and the JSON 
   so `LABELS`, `->JSON`, `TOSTRING` and `SNAPSHOT` list them in Java's hash bucket order;
   here they come out in the order they were set. Scripts that depend on the Java order of
   more than one label see a different (but deterministic) order.
-- **A Geo Time Series or encoder used as a value** (`gts 1 NaN NaN NaN gts2 ADDVALUE`) fails
-  with `ADDVALUE encountered an error while serializing the Geo Time Series.`; Warp 10 would
-  store the Thrift-serialized wrapper as a byte array (`STRING` series), which needs `WRAP`.
 - **Counters** (`COUNTER`) are accepted as values by `ADDVALUE` / `SETVALUE` and ignored,
   fixing the type of an untyped series to `BOOLEAN`: this is what `GTSHelper.setValue` does
   with a Java `AtomicLong`. As elsewhere (§15) they are not numbers for the tick, latitude,
   longitude and elevation arguments.
-- **GTS encoders are not modelled yet**: the functions that accept "a Geo Time Series or
-  encoder" only accept series, with the messages Warp 10 prints in that case.
+- **GTS encoders** are accepted by `ADDVALUE`, `SETVALUE`, `TICKLIST`, `VALUES`, `CLONEEMPTY`,
+  `TICKINDEX`, `SIZE`, `CLONE`, `TOSELECTOR`, `TIMECLIP`, `CLIP`, `CHUNK` and `MERGE`. The
+  other functions that accept "a Geo Time Series or encoder" in Warp 10 (`FOREACH`,
+  `VALUEHISTOGRAM`, `POLYFUNC`) still only accept series, with the messages Warp 10 prints in
+  that case.
 - **`[ value ] ADDVALUE`** (a one-element datapoint list) adds the value at tick `0` as
   `MACROMAPPER.listToObjects` intends; Warp 10 dies with a `ClassCastException` on the
   `Integer` tick that method builds.
-- **`MERGE` with a boolean** (the sorted merge) produces a GTS Encoder in Warp 10; it fails
-  with `MERGE encountered an error while merging. (GTS Encoders are not supported.)` until
-  encoders are modelled. The plain `MERGE` is a port of `mergeViaEncoders` (every datapoint
-  appended to a new series carrying the metadata of the first one).
+- **`MERGE`** is a port of `mergeViaEncoders` (every datapoint appended to a new series
+  carrying the metadata of the first one); with a boolean (the sorted merge) it emulates the
+  Java `PriorityQueue` so that datapoints sharing a tick come out in the Warp 10 order.
 - **`CHUNK` with a chunk width of `0`** fails with `/ by zero` on every path; Warp 10 only
   divides by the width when it has to align the last chunk or skip empty chunks, and loops
   over up to 2³¹ empty chunks otherwise. A non bucketized series **without datapoint**, with
   `keepempty` false and an explicit last chunk, yields an empty list; Warp 10 overflows on
-  `Long.MIN_VALUE` and loops almost forever.
+  `Long.MIN_VALUE` and loops almost forever. A chunk of an encoder starting at
+  `Long.MIN_VALUE` ends the chunk walk, where Warp 10 wraps around and loops forever.
 - **`CROP` of a bucketized series without datapoint on a bucket boundary** fails with the
   JDK message of the `NullPointerException` Warp 10 dies with (`Cannot load from long array
   because "cropped.ticks" is null`).

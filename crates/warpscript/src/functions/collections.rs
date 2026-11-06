@@ -25,6 +25,7 @@
 //! unsupported type. Strings are indexed by UTF-16 code unit like in Java. See
 //! `docs/DIVERGENCES.md`.
 
+use std::cell::RefCell;
 use std::rc::Rc;
 
 use indexmap::{IndexMap, IndexSet};
@@ -795,6 +796,10 @@ fn size(stack: &mut Stack) -> Result<()> {
         Value::Bytes(bytes) => bytes.len(),
         // The number of values, not the number of buckets.
         Value::Gts(gts) => gts.borrow().size(),
+        Value::Encoder(encoder) => {
+            stack.push(encoder.borrow().count());
+            return Ok(());
+        }
         Value::Macro(m) => m.len(),
         _ => {
             return Err(fail(
@@ -1187,6 +1192,7 @@ fn clone_fn(stack: &mut Stack) -> Result<()> {
         Value::Map(map) => Value::map(map.borrow().clone()),
         Value::Set(set) => Value::set(set.borrow().clone()),
         Value::Gts(gts) => Value::Gts(gts.borrow().clone().shared()),
+        Value::Encoder(encoder) => Value::Encoder(Rc::new(RefCell::new(encoder.borrow().clone()))),
         _ => {
             return Err(fail(
                 "CLONE",

@@ -46,6 +46,7 @@ fn parseselector(stack: &mut Stack) -> Result<()> {
 fn toselector(stack: &mut Stack) -> Result<()> {
     let selector = |value: &Value| match value {
         Value::Gts(gts) => Ok(Value::from(build_selector(&gts.borrow().metadata))),
+        Value::Encoder(encoder) => Ok(Value::from(build_selector(&encoder.borrow().metadata))),
         _ => Err(Error::new(
             "TOSELECTOR expects a GeoTimeSeries, a GTSEncoder or a list thereof on top of the stack.",
         )),

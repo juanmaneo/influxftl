@@ -284,10 +284,11 @@ the order that unlocks the most:
    and `NAME`, `RENAME`, `LABELS`, `RELABEL`, `ATTRIBUTES`, `SETATTRIBUTES` and
    `LASTACTIVITY` accept encoders; the `SNAPSHOT` of a series is `'…' UNWRAP`;
    `PARSEVALUE` (`valueparse.rs`, `GTSHelper.parseValue` with its nested `[ … ]` encoders).
-   Next: `ADDVALUE` / `SETVALUE` on
-   encoders and series or encoders as values (stored wrapped), the other GTS functions that
-   accept encoders (`CHUNK`, `CLIP`, `CLONE`, `SIZE`, `TICKLIST`, `TIMECLIP`, `VALUES`…) and
-   the MV functions.
+   `ADDVALUE` / `SETVALUE` on encoders and series or encoders as values (stored wrapped),
+   `TICKLIST`, `VALUES`, `CLONEEMPTY`, `TICKINDEX`, `SIZE`, `CLONE`, `TOSELECTOR`,
+   `TIMECLIP`, `CLIP`, `CHUNK` and `MERGE` (with the sorted merge) on encoders.
+   Next: `FOREACH`, `VALUEHISTOGRAM` and `POLYFUNC` on encoders, `PIVOT` and the MV
+   functions.
 5. **BigDecimal** (`BD*`, `MUSIGMA`, `NSUMSUMSQ`, `LR`): either a spec-derived decimal
    implementation or a vetted crate (`cargo deny` compatible).
 6. **Geo** (`GeoXPLib` shapes, `HAVERSINE`, `LOCATIONOFFSET`, `GEO.*`), **datastore**

@@ -4,18 +4,23 @@
 //! Time transforms of Geo Time Series: `TIMESHIFT`, `TIMESCALE`, `TIMEMODULO`, `TIMECLIP`,
 //! `CLIP`, `TIMESPLIT`, `CHUNK`, `CROP`, `MERGE`, `FUSE` and `SHRINK`.
 
-use std::collections::BTreeMap;
+use std::cell::RefCell;
+use std::cmp::Ordering;
+use std::collections::{BTreeMap, HashMap};
+use std::rc::Rc;
 
 use indexmap::IndexMap;
 
 use super::Entry;
 use super::args::{fail, fail_with_cause};
-use super::gts::{element_or_list, gts_or_list_try};
+use super::gts::{decoded, element_or_list, gts_or_list_try};
 use super::time::parse_iso8601;
+use crate::encoder::{EncodedValue, GtsEncoder};
 use crate::error::{Error, Result};
-use crate::gts::{GeoTimeSerie, Gts, Type};
+use crate::gts::{GeoTimeSerie, Gts, Metadata, Type};
+use crate::selector::build_selector_ordered;
 use crate::stack::Stack;
-use crate::value::{Value, double_to_long};
+use crate::value::{Encoder, Value, double_to_long};
 
 /// The functions of this module.
 pub const FUNCTIONS: &[(&str, Entry)] = &[
@@ -172,6 +177,24 @@ fn timeclip_gts(gts: &mut GeoTimeSerie, start: i64, end: i64) -> GeoTimeSerie {
     clipped
 }
 
+/// `GTSHelper.timeclip` of an encoder: a new encoder (base 0, same metadata) with the
+/// datapoints whose tick lies in `[start, end]`.
+fn timeclip_encoder(encoder: &GtsEncoder, start: i64, end: i64) -> Result<GtsEncoder> {
+    let mut clipped = GtsEncoder::new(0);
+    clipped.metadata = encoder.metadata.clone();
+    for (tick, location, elevation, value) in decoded(encoder)? {
+        if tick >= start && tick <= end {
+            clipped.add_value(tick, location, elevation, &value);
+        }
+    }
+    Ok(clipped)
+}
+
+/// An encoder as a value.
+fn encoder_value(encoder: GtsEncoder) -> Value {
+    Value::Encoder(Rc::new(RefCell::new(encoder)))
+}
+
 /// `TIMECLIP`: the datapoints of a Geo Time Series (or of each of a list) within a time
 /// frame given as an end and either a duration or an ISO 8601 start.
 fn timeclip(stack: &mut Stack) -> Result<()> {
@@ -199,16 +222,19 @@ fn timeclip(stack: &mut Stack) -> Result<()> {
     if !iso8601 {
         start = end.wrapping_sub(start).wrapping_add(1);
     }
-    element_or_list(stack, |element| {
-        let Value::Gts(gts) = element else {
-            return Err(fail(
-                NAME,
-                "expects a Geo Time Series, a GTSEncoder or a list thereof under the timeframe definition.",
-            ));
-        };
-        Ok(Value::Gts(
+    element_or_list(stack, |element| match element {
+        Value::Gts(gts) => Ok(Value::Gts(
             timeclip_gts(&mut gts.borrow_mut(), start, end).shared(),
-        ))
+        )),
+        Value::Encoder(encoder) => Ok(encoder_value(timeclip_encoder(
+            &encoder.borrow(),
+            start,
+            end,
+        )?)),
+        _ => Err(fail(
+            NAME,
+            "expects a Geo Time Series, a GTSEncoder or a list thereof under the timeframe definition.",
+        )),
     })
 }
 
@@ -237,20 +263,31 @@ fn clip(stack: &mut Stack) -> Result<()> {
         }
         pairs.push((lower.min(upper), lower.max(upper)));
     }
-    element_or_list(stack, |element| {
-        let Value::Gts(gts) = element else {
-            return Err(fail(
-                NAME,
-                "expects a GeoTimeSeries, a GTSEncoder or a list thereof under the list of limit.",
-            ));
-        };
-        let mut gts = gts.borrow_mut();
-        Ok(series_list(
-            pairs
-                .iter()
-                .map(|&(lower, upper)| timeclip_gts(&mut gts, lower, upper))
-                .collect(),
-        ))
+    element_or_list(stack, |element| match element {
+        Value::Gts(gts) => {
+            let mut gts = gts.borrow_mut();
+            Ok(series_list(
+                pairs
+                    .iter()
+                    .map(|&(lower, upper)| timeclip_gts(&mut gts, lower, upper))
+                    .collect(),
+            ))
+        }
+        Value::Encoder(encoder) => {
+            let encoder = encoder.borrow();
+            Ok(Value::list(
+                pairs
+                    .iter()
+                    .map(|&(lower, upper)| {
+                        timeclip_encoder(&encoder, lower, upper).map(encoder_value)
+                    })
+                    .collect::<Result<_>>()?,
+            ))
+        }
+        _ => Err(fail(
+            NAME,
+            "expects a GeoTimeSeries, a GTSEncoder or a list thereof under the list of limit.",
+        )),
     })
 }
 
@@ -549,6 +586,124 @@ fn chunk_gts(gts: &mut GeoTimeSerie, params: &Chunking) -> Result<Vec<GeoTimeSer
         .collect())
 }
 
+/// `GTSHelper.chunk` of an encoder: each datapoint goes to the chunk ending at the first
+/// `lastchunk + k × chunkwidth` at or after its tick (and to the adjacent chunks it overlaps),
+/// then the chunks from the most recent one down are kept according to `chunkcount` and
+/// `keepempty`, and returned oldest first.
+fn chunk_encoder(encoder: &GtsEncoder, params: &Chunking) -> Result<Vec<GtsEncoder>> {
+    let Chunking {
+        lastchunk,
+        chunkwidth,
+        mut chunkcount,
+        chunklabel,
+        keepempty,
+        overlap,
+    } = *params;
+    if overlap < 0 || overlap > chunkwidth {
+        return Err(Error::new("Overlap cannot exceed chunk width."));
+    }
+    if encoder.metadata.labels.contains_key(chunklabel) {
+        return Err(Error::new(format!(
+            "Cannot operate on encoders which already have a label named '{chunklabel}'"
+        )));
+    }
+    if encoder.count() == 0 && encoder.size() == 0 && lastchunk == 0 {
+        return Ok(Vec::new());
+    }
+    // As for series, a zero width is refused where Warp 10 divides by it (or loops forever).
+    if chunkwidth == 0 {
+        return Err(Error::new("/ by zero"));
+    }
+    let zero_chunk_count = chunkcount == 0;
+    if zero_chunk_count {
+        chunkcount = i64::from(i32::MAX);
+    }
+    let new_chunk = |chunkid: i64| {
+        let mut chunk = GtsEncoder::new(0);
+        chunk.metadata = encoder.metadata.clone();
+        chunk
+            .metadata
+            .labels
+            .insert(chunklabel.to_owned(), chunkid.to_string());
+        chunk
+    };
+    let mut chunks: HashMap<i64, GtsEncoder> = HashMap::new();
+    let mut oldest = i64::MAX;
+    let mut newest = i64::MIN;
+    let mut decoder = encoder.decoder();
+    while decoder.next()? {
+        let tick = decoder.timestamp();
+        let (location, elevation, value) =
+            (decoder.location(), decoder.elevation(), decoder.value());
+        let mut delta = tick.wrapping_sub(lastchunk);
+        if delta < 0 {
+            delta = delta.wrapping_add(delta.wrapping_neg().wrapping_rem(chunkwidth));
+        } else if delta.wrapping_rem(chunkwidth) != 0 {
+            delta = delta
+                .wrapping_sub(delta.wrapping_rem(chunkwidth))
+                .wrapping_add(chunkwidth);
+        }
+        let chunkid = lastchunk.wrapping_add(delta);
+        chunks
+            .entry(chunkid)
+            .or_insert_with(|| new_chunk(chunkid))
+            .add_value(tick, location, elevation, &value);
+        if overlap > 0 {
+            if tick >= chunkid.wrapping_add(1).wrapping_sub(overlap) {
+                let next = chunkid.wrapping_add(chunkwidth);
+                chunks
+                    .entry(next)
+                    .or_insert_with(|| {
+                        newest = newest.max(next);
+                        new_chunk(next)
+                    })
+                    .add_value(tick, location, elevation, &value);
+            }
+            if tick <= chunkid.wrapping_sub(chunkwidth).wrapping_add(overlap) {
+                let previous = chunkid.wrapping_sub(chunkwidth);
+                chunks
+                    .entry(previous)
+                    .or_insert_with(|| {
+                        oldest = oldest.min(previous);
+                        new_chunk(previous)
+                    })
+                    .add_value(tick, location, elevation, &value);
+            }
+        }
+        oldest = oldest.min(chunkid);
+        newest = newest.max(chunkid);
+    }
+    let firstchunkid = if zero_chunk_count {
+        oldest
+    } else {
+        lastchunk.wrapping_sub(chunkcount.wrapping_sub(1).wrapping_mul(chunkwidth))
+    };
+    let mut lastchunkid = if lastchunk == 0 { newest } else { lastchunk };
+    if !keepempty && lastchunkid > newest {
+        if !zero_chunk_count {
+            chunkcount = chunkcount.wrapping_sub(lastchunkid.wrapping_sub(newest) / chunkwidth);
+        }
+        lastchunkid = newest;
+    }
+    let mut kept = Vec::new();
+    let mut chunkid = lastchunkid;
+    while chunkid >= firstchunkid
+        && (zero_chunk_count || lastchunkid.wrapping_sub(chunkid) / chunkwidth < chunkcount)
+    {
+        if let Some(chunk) = chunks.remove(&chunkid) {
+            kept.push(chunk);
+        } else if keepempty {
+            kept.push(new_chunk(chunkid));
+        }
+        let Some(previous) = chunkid.checked_sub(chunkwidth) else {
+            break;
+        };
+        chunkid = previous;
+    }
+    kept.reverse();
+    Ok(kept)
+}
+
 /// `CHUNK`: cut a Geo Time Series (or each of a list) into chunks:
 /// `lastchunk chunkwidth overlap chunkcount label keepempty CHUNK`.
 fn chunk(stack: &mut Stack) -> Result<()> {
@@ -594,14 +749,18 @@ fn chunk(stack: &mut Stack) -> Result<()> {
         keepempty,
         overlap: overlap.max(0),
     };
-    element_or_list(stack, |element| {
-        let Value::Gts(gts) = element else {
-            return Err(fail(
-                NAME,
-                "expects a Geo Time Series, a GTSEncoder or a list thereof under the lastchunk parameter.",
-            ));
-        };
-        Ok(series_list(chunk_gts(&mut gts.borrow_mut(), &params)?))
+    element_or_list(stack, |element| match element {
+        Value::Gts(gts) => Ok(series_list(chunk_gts(&mut gts.borrow_mut(), &params)?)),
+        Value::Encoder(encoder) => Ok(Value::list(
+            chunk_encoder(&encoder.borrow(), &params)?
+                .into_iter()
+                .map(encoder_value)
+                .collect(),
+        )),
+        _ => Err(fail(
+            NAME,
+            "expects a Geo Time Series, a GTSEncoder or a list thereof under the lastchunk parameter.",
+        )),
     })
 }
 
@@ -690,39 +849,63 @@ fn crop(stack: &mut Stack) -> Result<()> {
 fn merge(stack: &mut Stack) -> Result<()> {
     const NAME: &str = "MERGE";
     let mut top = stack.pop()?;
-    let mut sorted_merge = false;
-    if let Value::Boolean(_) = top {
-        sorted_merge = true;
+    let mut reversed = None;
+    if let Value::Boolean(b) = top {
+        reversed = Some(b);
         top = stack.pop()?;
     }
     let Value::List(params) = top else {
         return Err(fail(NAME, "operates on a LIST containing GTS or ENCODERs."));
     };
-    if sorted_merge {
-        // `GTSHelper.sortedMerge` produces a GTS Encoder.
-        return Err(fail_with_cause(
-            NAME,
-            "encountered an error while merging.",
-            Error::new("GTS Encoders are not supported."),
-        ));
+    if let Some(reversed) = reversed {
+        // Runtime exceptions (corrupt encoders) escape unwrapped.
+        let merged = sorted_merge(&params.borrow(), reversed).map_err(|e| {
+            if e.is_runtime() {
+                e
+            } else {
+                fail_with_cause(NAME, "encountered an error while merging.", e)
+            }
+        })?;
+        stack.push(encoder_value(merged));
+        return Ok(());
     }
     let mut series: Vec<Gts> = Vec::new();
+    let mut encoders: Vec<Encoder> = Vec::new();
     for param in params.borrow().iter() {
         match param {
             Value::Gts(gts) => series.push(gts.clone()),
+            Value::Encoder(encoder) => encoders.push(encoder.clone()),
             Value::List(list) => {
                 for element in list.borrow().iter() {
-                    let Value::Gts(gts) = element else {
-                        return Err(fail(
-                            NAME,
-                            "expects a list of Geo Time Series or encoders as first parameter.",
-                        ));
-                    };
-                    series.push(gts.clone());
+                    match element {
+                        Value::Gts(gts) => series.push(gts.clone()),
+                        Value::Encoder(encoder) => encoders.push(encoder.clone()),
+                        _ => {
+                            return Err(fail(
+                                NAME,
+                                "expects a list of Geo Time Series or encoders as first parameter.",
+                            ));
+                        }
+                    }
                 }
             }
             _ => {}
         }
+    }
+    if let Some(first) = encoders.first() {
+        if !series.is_empty() {
+            return Err(fail(
+                NAME,
+                "can only operate on homogeneous lists of Geo Time Series or encoders.",
+            ));
+        }
+        let mut merged = GtsEncoder::new(0);
+        merged.metadata = first.borrow().metadata.clone();
+        for encoder in &encoders {
+            merged.merge(&encoder.borrow())?;
+        }
+        stack.push(encoder_value(merged));
+        return Ok(());
     }
     // `GTSHelper.mergeViaEncoders`: every datapoint goes through an encoder carrying the
     // metadata of the first series, then is decoded into a new series.
@@ -738,6 +921,189 @@ fn merge(stack: &mut Stack) -> Result<()> {
     }
     stack.push(Value::Gts(merged.shared()));
     Ok(())
+}
+
+/// A source of `sortedMerge`: the datapoints of an encoder (with its metadata, to report it
+/// unsorted) or of a series, and the index of the current one.
+struct MergeSource {
+    points: Vec<(i64, i64, i64, EncodedValue)>,
+    encoder: Option<Metadata>,
+    idx: usize,
+}
+
+/// `GTSHelper.sortedMerge`: the datapoints of encoders and of series sorted in the requested
+/// order, in a single encoder, merged through a `java.util.PriorityQueue` of the sources keyed
+/// by their current tick (so that the sources sharing a tick are visited in the same order).
+fn sorted_merge(params: &[Value], reversed: bool) -> Result<GtsEncoder> {
+    let mut encoders: Vec<Encoder> = Vec::new();
+    let mut series: Vec<Gts> = Vec::new();
+    let mut add = |value: &Value, nested: bool| -> Result<()> {
+        match value {
+            Value::Gts(gts) => {
+                let g = gts.borrow();
+                if g.size() > 1 {
+                    if !g.sorted {
+                        return Err(Error::new(format!(
+                            "GTS {} is not sorted.",
+                            build_selector_ordered(&g.metadata, false)
+                        )));
+                    }
+                    if g.reversed != reversed {
+                        return Err(Error::new(format!(
+                            "GTS {} is not sorted in the expected order.",
+                            build_selector_ordered(&g.metadata, false)
+                        )));
+                    }
+                }
+                series.push(gts.clone());
+            }
+            Value::Encoder(encoder) => encoders.push(encoder.clone()),
+            _ if nested => {
+                return Err(Error::new(
+                    "expects a list of Geo Time Series or encoders or of lists thereof.",
+                ));
+            }
+            _ => {}
+        }
+        Ok(())
+    };
+    for param in params {
+        match param {
+            Value::List(list) => {
+                for element in list.borrow().iter() {
+                    add(element, true)?;
+                }
+            }
+            other => add(other, false)?,
+        }
+    }
+    let mut merged = GtsEncoder::new(0);
+    if let Some(first) = encoders.first() {
+        merged.metadata = first.borrow().metadata.clone();
+    } else if let Some(first) = series.first() {
+        merged.metadata = first.borrow().metadata.clone();
+    }
+    let mut sources = Vec::new();
+    for encoder in &encoders {
+        let encoder = encoder.borrow();
+        let points = decoded(&encoder)?;
+        if !points.is_empty() {
+            sources.push(MergeSource {
+                points,
+                encoder: Some(encoder.metadata.clone()),
+                idx: 0,
+            });
+        }
+    }
+    for gts in &series {
+        let gts = gts.borrow();
+        if gts.size() == 0 {
+            continue;
+        }
+        // Series values always convert.
+        let points = (0..gts.size())
+            .map(|i| {
+                (
+                    gts.tick_at(i),
+                    gts.location_at(i),
+                    gts.elevation_at(i),
+                    EncodedValue::from_value(&gts.value_at(i)).unwrap_or(EncodedValue::Null),
+                )
+            })
+            .collect();
+        sources.push(MergeSource {
+            points,
+            encoder: None,
+            idx: 0,
+        });
+    }
+    let tick = |sources: &[MergeSource], s: usize| sources[s].points[sources[s].idx].0;
+    let order = |a: i64, b: i64| if reversed { b.cmp(&a) } else { a.cmp(&b) };
+    let mut queue = JavaQueue::default();
+    for s in 0..sources.len() {
+        queue.add(s, |a, b| order(tick(&sources, a), tick(&sources, b)));
+    }
+    while let Some(&first) = queue.heap.first() {
+        let last_tick = tick(&sources, first);
+        while let Some(s) = queue.poll(|a, b| order(tick(&sources, a), tick(&sources, b))) {
+            if tick(&sources, s) != last_tick {
+                queue.add(s, |a, b| order(tick(&sources, a), tick(&sources, b)));
+                break;
+            }
+            let source = &mut sources[s];
+            let mut exhausted = false;
+            while let Some((t, location, elevation, value)) = source.points.get(source.idx) {
+                if *t != last_tick {
+                    break;
+                }
+                merged.add_value(*t, *location, *elevation, value);
+                source.idx += 1;
+                match (source.points.get(source.idx), &source.encoder) {
+                    (None, _) => exhausted = true,
+                    (Some(next), Some(metadata))
+                        if (reversed && next.0 > last_tick)
+                            || (!reversed && next.0 < last_tick) =>
+                    {
+                        return Err(Error::new(format!(
+                            "ENCODER {} is not sorted in expected order.",
+                            build_selector_ordered(metadata, false)
+                        )));
+                    }
+                    _ => {}
+                }
+            }
+            if !exhausted {
+                queue.add(s, |a, b| order(tick(&sources, a), tick(&sources, b)));
+            }
+        }
+    }
+    Ok(merged)
+}
+
+/// A `java.util.PriorityQueue` of source indexes (`siftUp` / `siftDown` with the given
+/// comparator), whose layout decides the order of the sources sharing a tick.
+#[derive(Default)]
+struct JavaQueue {
+    heap: Vec<usize>,
+}
+
+impl JavaQueue {
+    fn add(&mut self, entry: usize, cmp: impl Fn(usize, usize) -> Ordering) {
+        let mut k = self.heap.len();
+        self.heap.push(entry);
+        while k > 0 {
+            let parent = (k - 1) >> 1;
+            if cmp(entry, self.heap[parent]).is_ge() {
+                break;
+            }
+            self.heap[k] = self.heap[parent];
+            k = parent;
+        }
+        self.heap[k] = entry;
+    }
+
+    fn poll(&mut self, cmp: impl Fn(usize, usize) -> Ordering) -> Option<usize> {
+        let last = self.heap.pop()?;
+        let n = self.heap.len();
+        if n == 0 {
+            return Some(last);
+        }
+        let result = self.heap[0];
+        let mut k = 0;
+        while k < n >> 1 {
+            let mut child = (k << 1) + 1;
+            if child + 1 < n && cmp(self.heap[child], self.heap[child + 1]).is_gt() {
+                child += 1;
+            }
+            if cmp(last, self.heap[child]).is_le() {
+                break;
+            }
+            self.heap[k] = self.heap[child];
+            k = child;
+        }
+        self.heap[k] = last;
+        Some(result)
+    }
 }
 
 /// `GTSHelper.fuse`: the datapoints of all the chunks in a single series, bucketized when the
