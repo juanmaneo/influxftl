@@ -65,7 +65,7 @@ fn with_doubles(gts: &GeoTimeSerie, values: impl Iterator<Item = f64>) -> GeoTim
 
 /// `GTSHelper.musigma`: the mean and standard deviation (Bessel-corrected on request) of
 /// the values of a numeric series, in plain double arithmetic.
-fn musigma(values: &[f64], bessel: bool) -> (f64, f64) {
+pub(super) fn musigma(values: &[f64], bessel: bool) -> (f64, f64) {
     let n = values.len() as f64;
     let mut sum = 0.0;
     let mut sumsq = 0.0;

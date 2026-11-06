@@ -446,7 +446,10 @@ impl GeoTimeSerie {
         sub.lastbucket = 0;
         sub.keep_range(first, end);
         if first == end {
-            // An empty result is a fresh series in Warp 10, not flagged as sorted.
+            // An empty result is a fresh series in Warp 10: untyped, not flagged as sorted.
+            sub.values = Values::Undefined;
+            sub.locations = None;
+            sub.elevations = None;
             sub.sorted = false;
             sub.reversed = false;
         }

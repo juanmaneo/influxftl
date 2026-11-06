@@ -38,6 +38,7 @@ pub mod misc;
 pub mod mv;
 pub mod numerical;
 pub mod operators;
+pub mod outliers;
 pub mod pack;
 pub mod patterns;
 pub mod polyfunc;
@@ -120,6 +121,7 @@ const TABLES: &[&[(&str, Entry)]] = &[
     geo::FUNCTIONS,
     shape::FUNCTIONS,
     gts_misc::FUNCTIONS,
+    outliers::FUNCTIONS,
     selectors::FUNCTIONS,
     crate::aggregators::basic::FUNCTIONS,
     crate::aggregators::stats::FUNCTIONS,
@@ -306,6 +308,8 @@ mod mv_tests;
 mod numerical_tests;
 #[cfg(test)]
 mod operators_tests;
+#[cfg(test)]
+mod outliers_tests;
 #[cfg(test)]
 mod pack_tests;
 #[cfg(test)]

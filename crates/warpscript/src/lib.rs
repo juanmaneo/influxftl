@@ -22,6 +22,9 @@ pub mod cmath;
 pub mod curvefit;
 #[cfg(test)]
 mod curvefit_tests;
+pub mod distribution;
+#[cfg(test)]
+mod distribution_tests;
 pub mod encoder;
 #[cfg(test)]
 mod encoder_tests;

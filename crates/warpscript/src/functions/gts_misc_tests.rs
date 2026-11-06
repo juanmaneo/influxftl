@@ -74,6 +74,14 @@ fn check(cases: &[(&str, Result<&str, &str>)]) {
 }
 
 #[test]
+fn windows() {
+    check(&[(
+        r"max.tick.sliding.window max.time.sliding.window",
+        Ok(r"[-4611686018427387904,4611686018427387903]"),
+    )]);
+}
+
+#[test]
 fn correlate() {
     check(&[
         (

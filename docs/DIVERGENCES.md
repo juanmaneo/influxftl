@@ -904,3 +904,12 @@ their JDK 11+ messages). The differences:
   encoder. Inside a nested `[ … ]` encoder they are stored as `BigDecimal`s, so the bytes
   match Warp 10's. Error causes carry the JDK 27 texts (`Index 0 out of bounds for length 0`,
   `No digits found.`…) where the oracle prints JDK 8's.
+
+## 21. Outlier tests and the t distribution
+
+`THRESHOLDTEST`, `ZSCORETEST`, `GRUBBSTEST` and `ESDTEST` follow `GTSOutliersHelper`. The
+critical values come from a port of Commons Math's `TDistribution` (`distribution.rs`), which
+evaluates with `FastMath` where the port uses the standard library: the quantiles may differ
+in their last bits (they match Commons Math exactly on the tested values), which can only flip
+a test whose statistic equals its critical value to the last bit. Messages of Commons Math
+render `NaN` as `NaN` (JDK 11+) where the oracle's JDK 8 prints `\uFFFD`.

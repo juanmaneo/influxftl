@@ -1,7 +1,8 @@
 // Copyright 2026 The influxftl Authors. Licensed under the Apache License, Version 2.0.
 // Derived from Warp 10 (Copyright 2018-2026 SenX S.A.S., Apache-2.0), ported to Rust and modified.
 
-//! `CORRELATE`, `LOWERHULL`, `UPPERHULL`, `LOCATIONOFFSET` and `MOTIONSPLIT`.
+//! `CORRELATE`, `LOWERHULL`, `UPPERHULL`, `LOCATIONOFFSET`, `MOTIONSPLIT`,
+//! `max.tick.sliding.window` and `max.time.sliding.window`.
 
 use std::rc::Rc;
 
@@ -24,6 +25,21 @@ pub const FUNCTIONS: &[(&str, Entry)] = &[
     ("UPPERHULL", Entry::Stack(|s| hull(s, "UPPERHULL", true))),
     ("LOCATIONOFFSET", Entry::Stack(locationoffset)),
     ("MOTIONSPLIT", Entry::Stack(motionsplit)),
+    // The widest sliding windows of the mappers, in ticks and in time.
+    (
+        "max.tick.sliding.window",
+        Entry::Stack(|s| {
+            s.push(Value::Long(i64::MAX / 2));
+            Ok(())
+        }),
+    ),
+    (
+        "max.time.sliding.window",
+        Entry::Stack(|s| {
+            s.push(Value::Long(i64::MIN / 2));
+            Ok(())
+        }),
+    ),
 ];
 
 /// The `double` of a numeric value (`NaN` otherwise, which numeric series never hold).
