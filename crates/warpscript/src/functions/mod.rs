@@ -33,6 +33,7 @@ pub mod json;
 pub mod limits;
 pub mod math;
 pub mod misc;
+pub mod mv;
 pub mod numerical;
 pub mod operators;
 pub mod pack;
@@ -112,6 +113,7 @@ const TABLES: &[&[(&str, Entry)]] = &[
     dtw::FUNCTIONS,
     patterns::FUNCTIONS,
     polyfunc::FUNCTIONS,
+    mv::FUNCTIONS,
     selectors::FUNCTIONS,
     crate::aggregators::basic::FUNCTIONS,
     crate::aggregators::stats::FUNCTIONS,
@@ -286,6 +288,8 @@ mod limits_tests;
 mod math_tests;
 #[cfg(test)]
 mod misc_tests;
+#[cfg(test)]
+mod mv_tests;
 #[cfg(test)]
 mod numerical_tests;
 #[cfg(test)]

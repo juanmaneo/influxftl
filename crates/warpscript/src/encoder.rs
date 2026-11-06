@@ -256,7 +256,7 @@ fn latin1_string(bytes: &[u8]) -> String {
 }
 
 /// `String.getBytes(ISO_8859_1)`: unmappable characters become `?`.
-fn latin1_bytes(text: &str) -> Vec<u8> {
+pub fn latin1_bytes(text: &str) -> Vec<u8> {
     text.chars()
         .map(|c| u8::try_from(u32::from(c)).unwrap_or(b'?'))
         .collect()
