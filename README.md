@@ -335,6 +335,8 @@ This project would not exist without the work of others:
 - **[The Legion of the Bouncy Castle](https://www.bouncycastle.org)** (MIT-style license)
   for the Argon2 implementation ported for `ARGON2`.
 - **fdlibm** (Sun Microsystems) for the IEEE remainder algorithm.
+- **[Pyrolite](https://github.com/irmen/pickle)** (Irmen de Jong, MIT License), whose
+  pickle serializer and deserializer are ported for `->PICKLE` and `PICKLE->`.
 - **[GeoXP](https://github.com/senx/geoxplib)** (SenX, Apache-2.0) for the HHCode
   geo-indexing scheme reproduced in the geo functions.
 - **Joda-Time** (Joda.org), the **Jackson JSON processor** (Tatu Saloranta and

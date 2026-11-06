@@ -626,7 +626,7 @@ fn split_by_type(mut decoder: GtsDecoder) -> Result<Vec<(&'static str, GeoTimeSe
 /// the value types to the series (or to lists thereof for a list input); with a map of
 /// selectors by type, one series per input converted to the selected type (or to the type of
 /// its first value), with a type label.
-fn togts(stack: &mut Stack, name: &'static str) -> Result<()> {
+pub(super) fn togts(stack: &mut Stack, name: &'static str) -> Result<()> {
     let mut top = stack.pop()?;
     let type_map = match &top {
         Value::Map(map) => {

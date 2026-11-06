@@ -953,3 +953,30 @@ immutable one. Every mutating function (`SET`, `PUT`, `REMOVE`, `REVERSE`, `+!`,
 `SHUFFLE`, `SORTBY`, `SORTWITH`, `MSORT`) fails on a frozen collection with the same
 `UnsupportedOperationException` as Warp 10, in the same check order; `APPEND` copies a
 frozen list or set like Warp 10 does.
+
+## 26. Python pickles
+
+`->PICKLE` reproduces the protocol 2 output of Pyrolite 4.30 byte for byte, including its
+memo (by Java `hashCode` / `equals`) and the Java `HashMap` / `HashSet` iteration order of
+sets and series maps. Labels and attributes follow the Java `HashMap` order of their keys,
+which may differ from Warp 10 when two keys collide in a bucket (§18).
+
+`PICKLE->` decodes protocols 0 to 5 like Pyrolite, but pushes WarpScript values where
+Warp 10 pushes opaque Java objects:
+
+- tuples and `array.array`s are `LIST`s (Warp 10: `Object[]` and primitive arrays), and
+  `array('u')` / `array('c')` a `STRING` (`char[]`); `float` arrays hold the `DOUBLE` of
+  the shortest decimal form of each `float`;
+- integers beyond the `LONG` range are `BIGDECIMAL`s (Warp 10: `BigInteger`);
+- `datetime` and `date` are their instant in milliseconds, as a `LONG` (Warp 10:
+  `GregorianCalendar`); dates before 1582 use the proleptic Gregorian calendar;
+- `complex`, `time` and `timedelta` are `MAP`s of their fields; time zones are their id as a
+  `STRING`, `tzinfo` objects and constructors `NULL`; Python exceptions are their message;
+- byte arrays, tuples, arrays and exceptions, which Java compares by identity, become
+  values: equal ones merge as map keys or set members;
+- `bytearray(…, encoding)` supports ISO-8859-1, UTF-8 and US-ASCII only;
+- a lone UTF-16 surrogate becomes U+FFFD;
+- structures nested more than 2000 levels deep fail with `StackOverflowError`.
+
+Error messages follow JDK 11+ (`Index 1 out of bounds for length 1`, helpful
+`NullPointerException` messages) where the Warp 10 3.5 oracle runs on JDK 8.

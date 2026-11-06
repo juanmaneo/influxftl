@@ -210,7 +210,7 @@ The project is Apache-2.0 and must stay redistributable under it (see `README.md
 
 ## 9. Status and next steps
 
-1992 / 2193 functions are ported (`docs/FUNCTIONS.md`; the inventory includes the names
+1994 / 2193 functions are ported (`docs/FUNCTIONS.md`; the inventory includes the names
 Warp 10 registers through `Builder`s and constants). The Geo Time Series model, the
 `GTSHelper` transforms (time, datapoints, statistics), `BUCKETIZE` and `MAP` with the
 shared aggregators (`sum`, `mean`, `min`, `max`, `first`, `last`, `count`, `and`, `or`,
@@ -320,5 +320,7 @@ the order that unlocks the most:
    `[[]]`.
    `PARSE` (`gtsparse.rs`, the GTS input format of `GTSHelper.parse`, reusable by `UPDATE`).
    `IMMUTABLE` (frozen copies, DIVERGENCES §25).
+   `->PICKLE` / `PICKLE->` (`pickle.rs`, `unpickle.rs`, ports of Pyrolite 4.30, with the Java
+   `HashMap` order of `javamap.rs`; DIVERGENCES §26).
 6. **Geo** (`GeoXPLib` shapes, `HAVERSINE`, `LOCATIONOFFSET`, `GEO.*`), **datastore**
    (`FETCH` / `FIND` / `UPDATE` / `META` / `DELETE` on InfluxDB 3), PKI crypto, Processing.

@@ -47,14 +47,17 @@ pub mod gtsparse;
 pub mod interpolation;
 #[cfg(test)]
 mod interpolation_tests;
+pub mod javamap;
 pub mod jmath;
 pub mod jrandom;
 pub mod macros;
+pub mod pickle;
 pub mod sax;
 pub mod selector;
 pub mod snapshot;
 pub mod stack;
 pub mod thrift;
+pub mod unpickle;
 pub mod value;
 pub mod valueparse;
 

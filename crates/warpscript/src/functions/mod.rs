@@ -46,6 +46,7 @@ pub mod operators;
 pub mod outliers;
 pub mod pack;
 pub mod patterns;
+pub mod pickle;
 pub mod platform;
 pub mod polyfunc;
 pub mod quaternions;
@@ -134,6 +135,7 @@ const TABLES: &[&[(&str, Entry)]] = &[
     matrix::FUNCTIONS,
     platform::FUNCTIONS,
     gts_parse::FUNCTIONS,
+    pickle::FUNCTIONS,
     selectors::FUNCTIONS,
     crate::aggregators::basic::FUNCTIONS,
     crate::aggregators::stats::FUNCTIONS,
@@ -338,6 +340,8 @@ mod outliers_tests;
 mod pack_tests;
 #[cfg(test)]
 mod patterns_tests;
+#[cfg(test)]
+mod pickle_tests;
 #[cfg(test)]
 mod pivot_tests;
 #[cfg(test)]
