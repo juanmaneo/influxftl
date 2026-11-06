@@ -92,3 +92,60 @@ fn split_hhcode(hhcode: i64) -> (i64, i64) {
     }
     (lat, lon)
 }
+
+/// `HHCodeHelper.deltaHHCode`: the HHCode `latdelta` / `londelta` cells of `resolution`
+/// away (`northHHCode` and friends).
+pub fn delta_hhcode(hhcode: i64, resolution: i32, latdelta: i64, londelta: i64) -> i64 {
+    let (lat, lon) = split_hhcode(hhcode);
+    let step = 1i64 << (32 - resolution);
+    build_hhcode(
+        lat.wrapping_add(latdelta.wrapping_mul(step)),
+        lon.wrapping_add(londelta.wrapping_mul(step)),
+    )
+}
+
+/// `HHCodeHelper.getCenter`: the HHCode of the center of the cell of `resolution`.
+pub fn hhcode_center(hhcode: i64, resolution: i32) -> i64 {
+    const CENTER: u64 = 0xC000_0000_0000_0000;
+    if resolution == 0 {
+        CENTER as i64
+    } else if resolution < 32 {
+        let trimmed = hhcode & ((u64::MAX << (64 - resolution * 2)) as i64);
+        trimmed | (CENTER >> (2 * resolution)) as i64
+    } else {
+        hhcode
+    }
+}
+
+/// `HHCodeHelper.getHHCodeBBox`: the `[ south west north east ]` bounds of the cell of
+/// `resolution`.
+pub fn hhcode_bbox(hhcode: i64, resolution: i32) -> [f64; 4] {
+    let (lat, lon) = split_hhcode(hhcode);
+    let mask = (1i64 << (32 - resolution)) - 1;
+    let (north, east) = (lat | mask, lon | mask);
+    let (south, west) = (north ^ mask, east ^ mask);
+    [
+        south as f64 * DEGREES_PER_LAT_UNIT - 90.0,
+        west as f64 * DEGREES_PER_LON_UNIT - 180.0,
+        north as f64 * DEGREES_PER_LAT_UNIT - 90.0,
+        east as f64 * DEGREES_PER_LON_UNIT - 180.0,
+    ]
+}
+
+/// `HHCodeHelper.toString(hhcode, resolution)`: the first `resolution / 2` hexadecimal
+/// digits of the HHCode (the resolution made even).
+pub fn hhcode_to_string(hhcode: i64, resolution: i32) -> String {
+    let mut hex = format!("{hhcode:016x}");
+    hex.truncate(((resolution & 0xfe) >> 1) as usize);
+    hex
+}
+
+/// `HHCodeHelper.toGeoCell`: the geocell of an even `resolution` (2 to 30), `0` otherwise.
+pub fn to_geocell(hhcode: i64, resolution: i32) -> i64 {
+    if !(2..=31).contains(&resolution) || resolution % 2 == 1 {
+        return 0;
+    }
+    let mut geocell = i64::from(resolution) << 59;
+    geocell |= (hhcode >> 4) & 0x0fff_ffff_ffff_ffff;
+    geocell & !((1i64 << (4 * (15 - (resolution >> 1)))) - 1)
+}

@@ -16,6 +16,7 @@ pub mod crypto;
 pub mod dtw;
 pub mod encoders;
 pub mod functional;
+pub mod geo;
 pub mod gts;
 pub mod gts_apply;
 pub mod gts_calendar;
@@ -114,6 +115,7 @@ const TABLES: &[&[(&str, Entry)]] = &[
     patterns::FUNCTIONS,
     polyfunc::FUNCTIONS,
     mv::FUNCTIONS,
+    geo::FUNCTIONS,
     selectors::FUNCTIONS,
     crate::aggregators::basic::FUNCTIONS,
     crate::aggregators::stats::FUNCTIONS,
@@ -254,6 +256,8 @@ mod dtw_tests;
 mod encoders_tests;
 #[cfg(test)]
 mod functional_tests;
+#[cfg(test)]
+mod geo_tests;
 #[cfg(test)]
 mod gold_tests;
 #[cfg(test)]

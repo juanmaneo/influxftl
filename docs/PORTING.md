@@ -210,7 +210,7 @@ The project is Apache-2.0 and must stay redistributable under it (see `README.md
 
 ## 9. Status and next steps
 
-1855 / 2193 functions are ported (`docs/FUNCTIONS.md`; the inventory includes the names
+1875 / 2193 functions are ported (`docs/FUNCTIONS.md`; the inventory includes the names
 Warp 10 registers through `Builder`s and constants). The Geo Time Series model, the
 `GTSHelper` transforms (time, datapoints, statistics), `BUCKETIZE` and `MAP` with the
 shared aggregators (`sum`, `mean`, `min`, `max`, `first`, `last`, `count`, `and`, `or`,
@@ -294,6 +294,9 @@ the order that unlocks the most:
    `0x00…`) fails with a `NullPointerException`.
    `GOLDWRAP` (with `GTSHelper.fullsort` of series and encoders, byte for byte),
    `METAMATCH`, `ATTRDELTA` and `ATTRSKIP` (the flags `META` / `UPDATE` will read).
+   HHCodes (`functions/geo.rs`): `->HHCODE`, `->HHCODELONG`, `->GTSHHCODE`,
+   `->GTSHHCODELONG`, `HHCODE->`, `GTSHHCODE->`, `->GEOCELL`, `GEOCELL->`, `HHCODE.*`,
+   `HAVERSINE` and `COPYGEO`.
 5. **BigDecimal** (`BD*`, `MUSIGMA`, `NSUMSUMSQ`, `LR`): either a spec-derived decimal
    implementation or a vetted crate (`cargo deny` compatible).
 6. **Geo** (`GeoXPLib` shapes, `HAVERSINE`, `LOCATIONOFFSET`, `GEO.*`), **datastore**
