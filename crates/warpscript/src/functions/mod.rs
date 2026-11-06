@@ -38,6 +38,7 @@ pub mod limits;
 pub mod math;
 pub mod misc;
 pub mod mv;
+pub mod numbers;
 pub mod numerical;
 pub mod operators;
 pub mod outliers;
@@ -126,6 +127,7 @@ const TABLES: &[&[(&str, Entry)]] = &[
     outliers::FUNCTIONS,
     interpolators::FUNCTIONS,
     bd::FUNCTIONS,
+    numbers::FUNCTIONS,
     selectors::FUNCTIONS,
     crate::aggregators::basic::FUNCTIONS,
     crate::aggregators::stats::FUNCTIONS,
@@ -312,6 +314,8 @@ mod math_tests;
 mod misc_tests;
 #[cfg(test)]
 mod mv_tests;
+#[cfg(test)]
+mod numbers_tests;
 #[cfg(test)]
 mod numerical_tests;
 #[cfg(test)]

@@ -630,9 +630,9 @@ unstable, order), `GeoTimeSerie.toString` and `dump` (`TOSTRING`), and the JSON 
   (`lastValue != value`), so it only groups `LONG`s in the `Integer` cache (-128 to 127),
   `BOOLEAN`s and `STRING`s that happen to be the same instance; every other value counts as
   its own mode (a `DOUBLE` series reports all its values). The port groups equal values.
-- **`MUSIGMA`, `NSUMSUMSQ` and `LR`** compute with `BigDecimal` in Warp 10 and are not ported
-  yet (they will come with the `BD*` functions). `STANDARDIZE`, `ZSCORE`, `SKEWNESS` and
-  `KURTOSIS` use the plain double arithmetic of their Java counterparts.
+- **`MUSIGMA`, `NSUMSUMSQ` and `LR`** compute with `BigDecimal` like Warp 10 (§22);
+  `STANDARDIZE`, `ZSCORE`, `SKEWNESS` and `KURTOSIS` use the plain double arithmetic of their
+  Java counterparts.
 
 ## 19. `BUCKETIZE`, `MAP` and the aggregators
 

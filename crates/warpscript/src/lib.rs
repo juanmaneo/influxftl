@@ -18,6 +18,8 @@
 pub mod aggregators;
 pub mod argon2;
 pub mod bigdecimal;
+#[cfg(test)]
+mod bigdecimal_tests;
 pub mod bitset;
 pub mod cmath;
 pub mod curvefit;

@@ -88,7 +88,13 @@ impl BigDecimal {
         if !value.is_finite() {
             return Err(number_format("Infinite or NaN"));
         }
+        Ok(BigDecimal::from_finite_f64(value))
+    }
+
+    /// [`BigDecimal::from_f64`] of a finite double (whose `Double.toString` always parses).
+    pub fn from_finite_f64(value: f64) -> BigDecimal {
         BigDecimal::parse(&crate::format::java_double_to_string(value))
+            .unwrap_or(BigDecimal::from_i64(0))
     }
 
     /// `new BigDecimal(double)`: the exact binary value of a finite double.
@@ -234,6 +240,14 @@ impl BigDecimal {
     pub fn multiply(&self, other: &BigDecimal) -> Result<BigDecimal> {
         let scale = self.check_scale(i64::from(self.scale) + i64::from(other.scale))?;
         Ok(BigDecimal::new(&self.unscaled * &other.unscaled, scale))
+    }
+
+    /// `multiply` of operands whose scales add up within an `int`.
+    pub fn times(&self, other: &BigDecimal) -> BigDecimal {
+        BigDecimal::new(
+            &self.unscaled * &other.unscaled,
+            saturate(i64::from(self.scale) + i64::from(other.scale)),
+        )
     }
 
     /// `checkScale`: a scale computed in `long`, saturated for zero, `ArithmeticException`
@@ -422,6 +436,37 @@ impl BigDecimal {
         } else {
             Ok(quotient)
         }
+    }
+
+    /// `divide(divisor, roundingMode)`: the quotient at the scale of the dividend.
+    pub fn divide_rounded(&self, divisor: &BigDecimal, mode: RoundingMode) -> Result<BigDecimal> {
+        // JDK 27 divides the compact (long) values: a zero divisor fails like `long` division.
+        if divisor.unscaled.is_zero() {
+            return Err(arithmetic("/ by zero"));
+        }
+        Ok(self.divide_nonzero(divisor, mode))
+    }
+
+    /// [`BigDecimal::divide_rounded`] by a non zero divisor.
+    pub fn divide_nonzero(&self, divisor: &BigDecimal, mode: RoundingMode) -> BigDecimal {
+        // `self.unscaled × 10^(scale - self.scale + divisor.scale) / divisor.unscaled`.
+        let shift = i64::from(divisor.scale);
+        let (mut numerator, mut denominator) = if shift >= 0 {
+            (
+                &self.unscaled * ten_pow(shift as u32),
+                divisor.unscaled.clone(),
+            )
+        } else {
+            (
+                self.unscaled.clone(),
+                &divisor.unscaled * ten_pow(shift.unsigned_abs() as u32),
+            )
+        };
+        if denominator.is_negative() {
+            numerator = -numerator;
+            denominator = -denominator;
+        }
+        BigDecimal::new(divide_rounded(&numerator, &denominator, mode), self.scale)
     }
 
     /// `divideToIntegralValue(divisor)`: the integer part of the quotient, its trailing zeros
