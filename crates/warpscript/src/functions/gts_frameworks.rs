@@ -12,12 +12,12 @@ use super::Entry;
 use super::args::fail;
 use super::gts::{Datapoint, datapoint_from_list};
 use crate::aggregators::{Aggregator, AggregatorArgs, Window, aggregator_of};
-use crate::error::{Error, Result};
+use crate::error::{Class, Error, Result};
 use crate::geoxp;
 use crate::gts::{GeoTimeSerie, Gts, NO_ELEVATION, NO_LOCATION};
 use crate::macros::Macro;
 use crate::stack::Stack;
-use crate::value::Value;
+use crate::value::{Value, ValueKind};
 
 /// The functions of this module.
 pub const FUNCTIONS: &[(&str, Entry)] = &[
@@ -276,10 +276,7 @@ fn bucketize_gts(
                 let Mapped::Single(MappedDatapoint { datapoint, .. }) =
                     aggregate(stack, *aggregator, &args)?
                 else {
-                    return Err(Error::class_cast(
-                        "java.util.LinkedHashMap",
-                        "[Ljava.lang.Object;",
-                    ));
+                    return Err(Error::class_cast(ValueKind::Map, Class::ObjectArray));
                 };
                 if !datapoint.value.is_null() {
                     bucketized.set_value(
@@ -333,7 +330,7 @@ impl MappedDatapoint {
             return Ok(tick);
         }
         if self.integer_tick {
-            return Err(Error::class_cast("java.lang.Integer", "java.lang.Long"));
+            return Err(Error::class_cast(Class::Integer, ValueKind::Long));
         }
         Ok(self.datapoint.tick)
     }
@@ -356,7 +353,7 @@ fn macro_result(stack: &mut Stack) -> Result<Mapped> {
             let mut results = Vec::with_capacity(map.borrow().len());
             for (key, value) in map.borrow().iter() {
                 let Value::List(list) = value else {
-                    return Err(Error::class_cast(value.java_class(), "java.util.List"));
+                    return Err(Error::class_cast(value.kind(), Class::List));
                 };
                 results.push((key.to_string(), MappedDatapoint::from_list(&list.borrow())?));
             }

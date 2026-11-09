@@ -12,11 +12,11 @@ use super::gts::{datapoint_from_list, gts_or_list, gts_or_list_try};
 use super::gts_frameworks::{Mapped, MappedDatapoint, aggregate, datapoint_from_stack};
 use super::time::{Period, Zone, add_period, duration_to_period};
 use crate::aggregators::{Aggregator, AggregatorArgs, Window, aggregator_of};
-use crate::error::{Error, Result};
+use crate::error::{Class, Error, Result};
 use crate::gts::{GeoTimeSerie, Gts};
 use crate::macros::Macro;
 use crate::stack::Stack;
-use crate::value::Value;
+use crate::value::{Value, ValueKind};
 
 /// The functions of this module.
 pub const FUNCTIONS: &[(&str, Entry)] = &[
@@ -187,10 +187,7 @@ fn aggregate_and_set(
             let Mapped::Single(MappedDatapoint { datapoint, .. }) =
                 aggregate(stack, *aggregator, &args)?
             else {
-                return Err(Error::class_cast(
-                    "java.util.LinkedHashMap",
-                    "[Ljava.lang.Object;",
-                ));
+                return Err(Error::class_cast(ValueKind::Map, Class::ObjectArray));
             };
             datapoint
         }

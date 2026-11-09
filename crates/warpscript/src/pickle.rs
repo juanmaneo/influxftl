@@ -16,7 +16,7 @@ use num_bigint::{BigInt, Sign};
 use num_traits::Zero;
 
 use crate::bigdecimal::BigDecimal;
-use crate::error::{Error, Result};
+use crate::error::{Error, Result, compat};
 use crate::geoxp::from_geoxp_point;
 use crate::gts::{GeoTimeSerie, NO_LOCATION};
 use crate::javamap::JavaHashMap;
@@ -430,7 +430,7 @@ impl Pickler {
             _ => {
                 return Err(pickle_error(format!(
                     "couldn't pickle object of type class {}",
-                    value.java_class()
+                    compat::value_class(value.kind())
                 )));
             }
         }

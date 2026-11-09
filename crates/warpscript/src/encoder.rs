@@ -8,18 +8,18 @@
 //!
 //! The encoder and the decoder are faithful ports, including the quirks of the format (the
 //! state of the decoder that `getEncoder` captures, the deltas `merge` keeps) and the errors a
-//! malformed payload raises, which are Java runtime exceptions (see [`Error::runtime`]).
+//! malformed payload raises ([`EncoderError`]).
 
 use std::fmt;
 use std::rc::Rc;
 
-use crate::error::{Error, Result};
+use crate::error::{Error, IoFailure, Result, compat};
 use crate::format::java_double_to_string;
 use crate::functions::compression::{gzip_bytes, ungzip_bytes};
 use crate::functions::strings::decode_utf8_java;
 use crate::gts::{GeoTimeSerie, Metadata, NO_ELEVATION, NO_LOCATION, Type};
 use crate::thrift::GtsWrapper;
-use crate::value::Value;
+use crate::value::{Value, ValueKind};
 
 const FLAGS_CONTINUATION: u8 = 0x80;
 const FLAGS_MASK_TIMESTAMP: u8 = 0x60;
@@ -197,6 +197,57 @@ impl fmt::Display for Decimal {
 // Values
 // -----------------------------------------------------------------------------------------
 
+/// A failure of the binary encoding or decoding of datapoints.
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+pub enum EncoderError {
+    /// A value of a kind the encoder cannot hold.
+    #[error("Unsuported value type 'class {}'", compat::value_class(*.0))]
+    UnsupportedValue(ValueKind),
+    /// A read past the end of the payload.
+    #[error("BufferUnderflowException")]
+    BufferUnderflow,
+    /// A variable length quantity of more than 9 continuation bytes.
+    #[error("Variable length quantity is too long")]
+    VarintTooLong,
+    /// A skip to before the start of the payload.
+    #[error("newPosition < 0: ({target} < 0)")]
+    PositionBeforeStart {
+        /// The position skipped to.
+        target: i32,
+    },
+    /// A skip to after the end of the payload.
+    #[error("newPosition > limit: ({target} > {limit})")]
+    PositionAfterLimit {
+        /// The position skipped to.
+        target: i32,
+        /// The length of the payload.
+        limit: usize,
+    },
+    /// A string longer than what is left of the payload.
+    #[error("Invalid string length.")]
+    InvalidStringLength,
+    /// A string whose length overflows an `int`.
+    #[error("{0}")]
+    NegativeStringLength(i32),
+    /// A boolean that is neither 0 nor 1.
+    #[error("Invalid boolean value.")]
+    InvalidBoolean,
+    /// A compressed payload that does not inflate.
+    #[error("Invalid compressed content.")]
+    InvalidCompressedContent(#[source] IoFailure),
+    /// An encoder asked of a decoder that has not read a datapoint yet.
+    #[error("Can only get an encoder for a decoder on which 'next' was called at least once.")]
+    DecoderNotStarted,
+}
+
+impl EncoderError {
+    /// `true` for the failures Warp 10 raises as runtime exceptions, `false` for the
+    /// `IOException` of a decoder that was not started.
+    pub fn is_runtime(&self) -> bool {
+        !matches!(self, EncoderError::DecoderNotStarted)
+    }
+}
+
 /// A value an encoder stores (`addValue`) or a decoder returns (`getBinaryValue`).
 #[derive(Clone, Debug, PartialEq)]
 pub enum EncodedValue {
@@ -228,10 +279,7 @@ impl EncodedValue {
             Value::String(s) => EncodedValue::String(Rc::clone(s)),
             Value::Bytes(b) => EncodedValue::Bytes(Rc::clone(b)),
             other => {
-                return Err(Error::runtime(
-                    "java.lang.RuntimeException",
-                    format!("Unsuported value type 'class {}'", other.java_class()),
-                ));
+                return Err(EncoderError::UnsupportedValue(other.kind()).into());
             }
         })
     }
@@ -303,19 +351,6 @@ fn put_raw(out: &mut Vec<u8>, value: i64) {
     out.extend_from_slice(&value.to_be_bytes());
 }
 
-/// `java.nio.BufferUnderflowException`.
-fn underflow() -> Error {
-    Error::runtime(
-        "java.nio.BufferUnderflowException",
-        "BufferUnderflowException",
-    )
-}
-
-/// A `java.lang.RuntimeException` raised by the decoder.
-fn decoder_error(message: &str) -> Error {
-    Error::runtime("java.lang.RuntimeException", message)
-}
-
 /// A `ByteBuffer` over the payload of a decoder.
 #[derive(Clone, Debug)]
 struct Buffer {
@@ -336,14 +371,17 @@ impl Buffer {
     }
 
     fn get(&mut self) -> Result<u8> {
-        let byte = *self.bytes.get(self.pos).ok_or_else(underflow)?;
+        let byte = *self
+            .bytes
+            .get(self.pos)
+            .ok_or(EncoderError::BufferUnderflow)?;
         self.pos += 1;
         Ok(byte)
     }
 
     fn get_long(&mut self) -> Result<i64> {
         if self.remaining() < 8 {
-            return Err(underflow());
+            return Err(EncoderError::BufferUnderflow.into());
         }
         let mut raw = [0u8; 8];
         raw.copy_from_slice(&self.bytes[self.pos..self.pos + 8]);
@@ -363,10 +401,7 @@ impl Buffer {
             value |= i64::from(byte & 0x7f) << (shift % 64);
             shift += 7;
             if shift > 63 {
-                return Err(Error::runtime(
-                    "java.lang.IllegalArgumentException",
-                    "Variable length quantity is too long",
-                ));
+                return Err(EncoderError::VarintTooLong.into());
             }
         }
     }
@@ -382,16 +417,10 @@ impl Buffer {
         let target = (self.pos as i32).wrapping_add(delta);
         let limit = self.bytes.len();
         if target < 0 {
-            return Err(Error::runtime(
-                "java.lang.IllegalArgumentException",
-                format!("newPosition < 0: ({target} < 0)"),
-            ));
+            return Err(EncoderError::PositionBeforeStart { target }.into());
         }
         if target as usize > limit {
-            return Err(Error::runtime(
-                "java.lang.IllegalArgumentException",
-                format!("newPosition > limit: ({target} > {limit})"),
-            ));
+            return Err(EncoderError::PositionAfterLimit { target, limit }.into());
         }
         self.pos = target as usize;
         Ok(())
@@ -1014,18 +1043,15 @@ impl GtsDecoder {
                 } else {
                     let len = self.buffer.unsigned()?;
                     if len > self.buffer.remaining() as i64 {
-                        return Err(decoder_error("Invalid string length."));
+                        return Err(EncoderError::InvalidStringLength.into());
                     }
                     let len = len as i32;
                     if len < 0 {
-                        return Err(Error::runtime(
-                            "java.lang.NegativeArraySizeException",
-                            len.to_string(),
-                        ));
+                        return Err(EncoderError::NegativeStringLength(len).into());
                     }
                     let len = len as usize;
                     if len > self.buffer.remaining() {
-                        return Err(underflow());
+                        return Err(EncoderError::BufferUnderflow.into());
                     }
                     let start = self.buffer.pos;
                     self.buffer.pos += len;
@@ -1050,7 +1076,7 @@ impl GtsDecoder {
                     self.last_type = LastType::Boolean;
                     self.last_boolean = false;
                 }
-                _ => return Err(decoder_error("Invalid boolean value.")),
+                _ => return Err(EncoderError::InvalidBoolean.into()),
             },
         }
         self.consuming_next_calls += 1;
@@ -1060,9 +1086,7 @@ impl GtsDecoder {
     /// `getEncoder`: an encoder holding the datapoints from the current one on.
     pub fn encoder(&self) -> Result<GtsEncoder> {
         if !self.next_called {
-            return Err(Error::new(
-                "Can only get an encoder for a decoder on which 'next' was called at least once.",
-            ));
+            return Err(EncoderError::DecoderNotStarted.into());
         }
         let mut encoder = GtsEncoder::with_content(
             self.base,
@@ -1261,15 +1285,8 @@ fn unwrap_encoded(wrapper: &GtsWrapper, encoded: &[u8]) -> Result<Vec<u8>> {
         return Ok(bytes);
     }
     for _ in 0..wrapper.compression_passes() {
-        bytes = match ungzip_bytes(&bytes) {
-            Ok(out) if !bytes.is_empty() => out,
-            _ => {
-                return Err(Error::runtime(
-                    "java.lang.RuntimeException",
-                    "Invalid compressed content.",
-                ));
-            }
-        };
+        bytes = ungzip_bytes(&bytes)
+            .map_err(|err| EncoderError::InvalidCompressedContent(err.into()))?;
     }
     Ok(bytes)
 }

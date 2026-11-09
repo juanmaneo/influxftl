@@ -5,9 +5,10 @@
 use std::error::Error as _;
 use std::fmt::{self, Write};
 
-use super::error::Error;
-use super::error::compat::exception_class;
+use super::error::compat::{self, exception_class};
+use super::error::{Class, Error, IoFailure};
 use super::finite::NotFinite;
+use super::value::ValueKind;
 
 /// A writer that fails after `n` successful writes, to exercise the error paths of `Display`.
 pub(crate) struct FailAfter(pub usize);
@@ -85,8 +86,8 @@ fn typed_failures() {
     assert_eq!(Error::empty_stack(), Error::EmptyStack);
     assert_eq!(Error::empty_stack().to_string(), "Empty stack.");
     assert_eq!(
-        Error::class_cast("a.B", "c.D").to_string(),
-        "class a.B cannot be cast to class c.D"
+        Error::class_cast(ValueKind::String, Class::Number).to_string(),
+        "class java.lang.String cannot be cast to class java.lang.Number"
     );
     assert_eq!(
         Error::index_out_of_bounds(-1, 3).to_string(),
@@ -95,7 +96,7 @@ fn typed_failures() {
     assert_eq!(Error::null_pointer().to_string(), "NullPointerException");
     for err in [
         Error::empty_stack(),
-        Error::class_cast("a.B", "c.D"),
+        Error::class_cast(ValueKind::String, Class::Number),
         Error::index_out_of_bounds(0, 0),
         Error::null_pointer(),
         Error::runtime("java.lang.ArithmeticException", "/ by zero"),
@@ -159,7 +160,7 @@ fn exception_classes() {
             "io.warp10.script.InformativeEmptyStackException",
         ),
         (
-            Error::class_cast("a.B", "c.D"),
+            Error::class_cast(ValueKind::String, Class::Number),
             "java.lang.ClassCastException",
         ),
         (
@@ -171,4 +172,92 @@ fn exception_classes() {
     for (err, class) in cases {
         assert_eq!(exception_class(&err), class, "{err}");
     }
+}
+
+#[test]
+fn classes_of_every_kind_of_value() {
+    for (kind, class) in [
+        (ValueKind::Null, "null"),
+        (ValueKind::Boolean, "java.lang.Boolean"),
+        (ValueKind::Long, "java.lang.Long"),
+        (ValueKind::Double, "java.lang.Double"),
+        (ValueKind::BigDecimal, "java.math.BigDecimal"),
+        (
+            ValueKind::Matrix,
+            "org.apache.commons.math3.linear.Array2DRowRealMatrix",
+        ),
+        (
+            ValueKind::Vector,
+            "org.apache.commons.math3.linear.ArrayRealVector",
+        ),
+        (ValueKind::String, "java.lang.String"),
+        (ValueKind::Bytes, "[B"),
+        (ValueKind::BitSet, "java.util.BitSet"),
+        (ValueKind::List, "java.util.ArrayList"),
+        (ValueKind::Map, "java.util.LinkedHashMap"),
+        (ValueKind::Set, "java.util.HashSet"),
+        (ValueKind::Macro, "io.warp10.script.WarpScriptStack$Macro"),
+        (
+            ValueKind::Function,
+            "io.warp10.script.NamedWarpScriptFunction",
+        ),
+        (ValueKind::Mark, "io.warp10.script.WarpScriptStack$Mark"),
+        (
+            ValueKind::Context,
+            "io.warp10.script.MemoryWarpScriptStack$StackContext",
+        ),
+        (ValueKind::Counter, "java.util.concurrent.atomic.AtomicLong"),
+        (ValueKind::Gts, "io.warp10.continuum.gts.GeoTimeSerie"),
+        (ValueKind::Encoder, "io.warp10.continuum.gts.GTSEncoder"),
+    ] {
+        assert_eq!(compat::class_name(Class::Value(kind)), class);
+        assert_eq!(compat::value_class(kind), class);
+    }
+    assert_eq!(compat::class_name(Class::Number), "java.lang.Number");
+    assert_eq!(
+        compat::class_name(Class::Comparable),
+        "java.lang.Comparable"
+    );
+    assert_eq!(compat::class_name(Class::List), "java.util.List");
+    assert_eq!(compat::class_name(Class::Integer), "java.lang.Integer");
+    assert_eq!(
+        compat::class_name(Class::ObjectArray),
+        "[Ljava.lang.Object;"
+    );
+    assert_eq!(Class::from(ValueKind::Long), Class::Value(ValueKind::Long));
+}
+
+#[test]
+fn every_value_has_a_kind() {
+    use std::rc::Rc;
+
+    use super::value::Value;
+
+    let values = [
+        (Value::Null, ValueKind::Null),
+        (Value::Boolean(true), ValueKind::Boolean),
+        (Value::Long(1), ValueKind::Long),
+        (Value::Double(1.0), ValueKind::Double),
+        (Value::string("s"), ValueKind::String),
+        (Value::bytes([1]), ValueKind::Bytes),
+        (Value::list(Vec::new()), ValueKind::List),
+        (Value::Mark, ValueKind::Mark),
+        (Value::Vector(Rc::from(vec![1.0])), ValueKind::Vector),
+    ];
+    for (value, kind) in values {
+        assert_eq!(value.kind(), kind);
+    }
+}
+
+#[test]
+fn io_failures_compare_by_kind_and_message() {
+    let failure =
+        |kind, message: &str| IoFailure::from(std::io::Error::new(kind, message.to_owned()));
+    let a = failure(std::io::ErrorKind::UnexpectedEof, "short");
+    assert_eq!(a, a.clone());
+    assert_eq!(a, failure(std::io::ErrorKind::UnexpectedEof, "short"));
+    assert_ne!(a, failure(std::io::ErrorKind::InvalidData, "short"));
+    assert_ne!(a, failure(std::io::ErrorKind::UnexpectedEof, "long"));
+    assert_eq!(a.to_string(), "short");
+    assert!(a.source().is_none());
 }

@@ -6,7 +6,7 @@
 
 use super::Entry;
 use super::args::{fail, fail_with_cause};
-use crate::error::{Error, Result};
+use crate::error::{Class, Error, Result};
 use crate::geoxp;
 use crate::gts::{GeoTimeSerie, Gts, NO_ELEVATION, NO_LOCATION, Type};
 use crate::jmath;
@@ -484,7 +484,7 @@ fn doubles(list: &[Value]) -> Result<Vec<f64>> {
             Value::Null => Err(Error::null_pointer()),
             other => other
                 .as_f64()
-                .ok_or_else(|| Error::class_cast(other.java_class(), "java.lang.Number")),
+                .ok_or_else(|| Error::class_cast(other.kind(), Class::Number)),
         })
         .collect()
 }

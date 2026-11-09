@@ -121,6 +121,52 @@ pub enum Value {
     Encoder(Encoder),
 }
 
+/// The kind of a [`Value`], without its content. Failures carry it instead of the value; the
+/// Java class a script reads in their message is named in `error::compat`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ValueKind {
+    /// `null`.
+    Null,
+    /// `BOOLEAN`.
+    Boolean,
+    /// `LONG`.
+    Long,
+    /// `DOUBLE`.
+    Double,
+    /// `BIGDECIMAL`.
+    BigDecimal,
+    /// `MATRIX`.
+    Matrix,
+    /// `VECTOR`.
+    Vector,
+    /// `STRING`.
+    String,
+    /// `BYTES`.
+    Bytes,
+    /// `BITSET`.
+    BitSet,
+    /// `LIST`.
+    List,
+    /// `MAP`.
+    Map,
+    /// `SET`.
+    Set,
+    /// `MACRO`.
+    Macro,
+    /// A function object.
+    Function,
+    /// `MARK`.
+    Mark,
+    /// A saved execution context.
+    Context,
+    /// `COUNTER`.
+    Counter,
+    /// `GTS`.
+    Gts,
+    /// `GTSENCODER`.
+    Encoder,
+}
+
 /// A `GTSENCODER` as held by the stack.
 pub type Encoder = Rc<RefCell<GtsEncoder>>;
 
@@ -176,30 +222,29 @@ impl Value {
         }
     }
 
-    /// The Java class name of the value (`getClass().getName()`), for the error messages that
-    /// mention it (`ClassCastException`, `IllegalFormatConversionException`…).
-    pub fn java_class(&self) -> &'static str {
+    /// What the value is, for the failures that name it (a failed cast, an unsupported type).
+    pub fn kind(&self) -> ValueKind {
         match self {
-            Value::Null => "null",
-            Value::Boolean(_) => "java.lang.Boolean",
-            Value::Long(_) => "java.lang.Long",
-            Value::Double(_) => "java.lang.Double",
-            Value::BigDecimal(_) => "java.math.BigDecimal",
-            Value::Matrix(_) => "org.apache.commons.math3.linear.Array2DRowRealMatrix",
-            Value::Vector(_) => "org.apache.commons.math3.linear.ArrayRealVector",
-            Value::String(_) => "java.lang.String",
-            Value::Bytes(_) => "[B",
-            Value::BitSet(_) => "java.util.BitSet",
-            Value::List(_) => "java.util.ArrayList",
-            Value::Map(_) => "java.util.LinkedHashMap",
-            Value::Set(_) => "java.util.HashSet",
-            Value::Macro(_) => "io.warp10.script.WarpScriptStack$Macro",
-            Value::Function(_) => "io.warp10.script.NamedWarpScriptFunction",
-            Value::Mark => "io.warp10.script.WarpScriptStack$Mark",
-            Value::Context(_) => "io.warp10.script.MemoryWarpScriptStack$StackContext",
-            Value::Counter(_) => "java.util.concurrent.atomic.AtomicLong",
-            Value::Gts(_) => "io.warp10.continuum.gts.GeoTimeSerie",
-            Value::Encoder(_) => "io.warp10.continuum.gts.GTSEncoder",
+            Value::Null => ValueKind::Null,
+            Value::Boolean(_) => ValueKind::Boolean,
+            Value::Long(_) => ValueKind::Long,
+            Value::Double(_) => ValueKind::Double,
+            Value::BigDecimal(_) => ValueKind::BigDecimal,
+            Value::Matrix(_) => ValueKind::Matrix,
+            Value::Vector(_) => ValueKind::Vector,
+            Value::String(_) => ValueKind::String,
+            Value::Bytes(_) => ValueKind::Bytes,
+            Value::BitSet(_) => ValueKind::BitSet,
+            Value::List(_) => ValueKind::List,
+            Value::Map(_) => ValueKind::Map,
+            Value::Set(_) => ValueKind::Set,
+            Value::Macro(_) => ValueKind::Macro,
+            Value::Function(_) => ValueKind::Function,
+            Value::Mark => ValueKind::Mark,
+            Value::Context(_) => ValueKind::Context,
+            Value::Counter(_) => ValueKind::Counter,
+            Value::Gts(_) => ValueKind::Gts,
+            Value::Encoder(_) => ValueKind::Encoder,
         }
     }
 

@@ -14,7 +14,7 @@ use super::misc::TIME_UNITS_PER_MS;
 use crate::encoder::{
     DEFAULT_COMP_RATIO_THRESHOLD, EncodedValue, GtsEncoder, encoder_to_wrapper, gts_to_wrapper,
 };
-use crate::error::{Error, Result};
+use crate::error::{Class, Error, Result};
 use crate::geoxp;
 use crate::gts::{GeoTimeSerie, Gts, Metadata, NO_ELEVATION, NO_LOCATION};
 use crate::stack::Stack;
@@ -196,7 +196,7 @@ fn makegts(stack: &mut Stack) -> Result<()> {
     let number = |value: &Value| match value {
         Value::Null => Err(Error::null_pointer()),
         _ if value.is_number() => Ok(value.clone()),
-        _ => Err(Error::class_cast(value.java_class(), "java.lang.Number")),
+        _ => Err(Error::class_cast(value.kind(), Class::Number)),
     };
     let len = [&values, &elevations, &longitudes, &latitudes, &ticks]
         .iter()
@@ -248,7 +248,7 @@ pub(crate) fn datapoint_from_list(elements: &[Value]) -> Result<Datapoint> {
         let value = &elements[index];
         value
             .as_f64()
-            .ok_or_else(|| Error::class_cast(value.java_class(), "java.lang.Number"))
+            .ok_or_else(|| Error::class_cast(value.kind(), Class::Number))
     };
     let location = |lat: usize, lon: usize| -> Result<i64> {
         let (lat, lon) = (number(lat)?, number(lon)?);

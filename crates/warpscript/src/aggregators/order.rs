@@ -7,7 +7,7 @@
 use std::cmp::Ordering;
 
 use super::{Aggregated, Aggregator, AggregatorArgs, Named, Num, Roles, double_value};
-use crate::error::{Error, Result};
+use crate::error::{Class, Error, Result};
 use crate::format::java_double_to_string;
 use crate::functions::Entry;
 use crate::functions::functional::java_double_compare;
@@ -15,7 +15,7 @@ use crate::geoxp;
 use crate::gts::{NO_ELEVATION, NO_LOCATION, java_binary_search};
 use crate::jmath;
 use crate::stack::Stack;
-use crate::value::Value;
+use crate::value::{Value, ValueKind};
 
 /// The registered names of this module.
 pub const FUNCTIONS: &[(&str, Entry)] = &[
@@ -225,8 +225,8 @@ fn natural_sort(values: &[Value]) -> Result<Sorted<'_>> {
     let Some(first) = values.first() else {
         return Ok(Sorted::Empty);
     };
-    if let Some(other) = values.iter().find(|v| v.java_class() != first.java_class()) {
-        return Err(Error::class_cast(first.java_class(), other.java_class()));
+    if let Some(other) = values.iter().find(|v| v.kind() != first.kind()) {
+        return Err(Error::class_cast(first.kind(), other.kind()));
     }
     Ok(match first {
         Value::Long(_) => {
@@ -251,10 +251,7 @@ fn natural_sort(values: &[Value]) -> Result<Sorted<'_>> {
         }
         // Series hold no other type; such a window would not even be `Comparable`.
         other => {
-            return Err(Error::class_cast(
-                other.java_class(),
-                "java.lang.Comparable",
-            ));
+            return Err(Error::class_cast(other.kind(), Class::Comparable));
         }
     })
 }
@@ -287,17 +284,17 @@ fn median_of_doubles(sorted: &[f64]) -> f64 {
 }
 
 /// Java's `(double) median` on a `STRING` or `BOOLEAN` median: the `ClassCastException`.
-fn double_cast(class: &str) -> Error {
-    Error::class_cast(class, "java.lang.Double")
+fn double_cast(kind: ValueKind) -> Error {
+    Error::class_cast(kind, ValueKind::Double)
 }
 
 /// The median of non numeric values: Warp 10 selects it like for numbers (identical
 /// extrema, the central value of an odd count) and then fails to cast it to a double, or
 /// fails right away on an even count of distinct values.
-fn non_numeric_median<T: PartialEq>(sorted: &[T], class: &str) -> Error {
+fn non_numeric_median<T: PartialEq>(sorted: &[T], kind: ValueKind) -> Error {
     let n = sorted.len();
     if sorted[0] == sorted[n - 1] || n % 2 == 1 {
-        double_cast(class)
+        double_cast(kind)
     } else {
         Error::new("Unable to compute median on an even number of non numeric values.")
     }
@@ -381,10 +378,10 @@ impl Aggregator for Mad {
                 Value::Double(median_of_doubles(&residuals))
             }
             Sorted::Strings(strings) => {
-                return Err(non_numeric_median(&strings, "java.lang.String"));
+                return Err(non_numeric_median(&strings, ValueKind::String));
             }
             Sorted::Booleans(booleans) => {
-                return Err(non_numeric_median(&booleans, "java.lang.Boolean"));
+                return Err(non_numeric_median(&booleans, ValueKind::Boolean));
             }
         };
         Ok(Aggregated {

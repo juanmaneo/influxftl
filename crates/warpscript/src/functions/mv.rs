@@ -96,8 +96,9 @@ fn as_wrapper(value: &EncodedValue, strings: bool) -> Result<Option<GtsWrapper>>
     };
     match deserialize_wrapper(&bytes) {
         Ok(wrapper) => Ok(Some(wrapper)),
-        Err(err) if err.is_runtime() => Err(err),
-        Err(_) => Ok(None),
+        // Not a wrapper: the value is a plain string or byte array, not a multivariate value.
+        Err(err) if err.is_malformed_input() => Ok(None),
+        Err(err) => Err(err.into()),
     }
 }
 

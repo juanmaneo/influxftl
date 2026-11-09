@@ -15,7 +15,7 @@ use super::gts::{gts_or_list, long_value, tuple_at_index};
 use super::gts_frameworks::{MapParams, map_gts};
 use super::misc::TIME_UNITS_PER_MS;
 use crate::aggregators::aggregator_of;
-use crate::error::{Error, Result};
+use crate::error::{Class, Error, Result};
 use crate::gts::{GeoTimeSerie, Gts, Metadata, Values};
 use crate::stack::Stack;
 use crate::value::{List, Value};
@@ -658,12 +658,9 @@ fn metasort(stack: &mut Stack) -> Result<()> {
 
 /// Java `((Number) value).doubleValue()` on a datapoint value.
 fn number_value(value: &Value) -> Result<f64> {
-    value.as_f64().ok_or_else(|| {
-        Error::new(format!(
-            "class {} cannot be cast to class java.lang.Number",
-            value.java_class()
-        ))
-    })
+    value
+        .as_f64()
+        .ok_or_else(|| Error::class_cast(value.kind(), Class::Number))
 }
 
 /// `GTSHelper.integrate`: the series (sorted in place) integrated as rates of change per

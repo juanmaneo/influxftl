@@ -13,7 +13,7 @@ use std::rc::Rc;
 
 use indexmap::IndexMap;
 
-use crate::error::{Error, Result};
+use crate::error::{Class, Error, Result};
 use crate::functions::Entry;
 use crate::functions::functional::java_double_compare;
 
@@ -22,7 +22,7 @@ use crate::macros::Macro;
 use crate::selector::{MetadataSelectorMatcher, Selector, build_selector};
 use crate::snapshot::value_snapshot;
 use crate::stack::Stack;
-use crate::value::{FunctionObject, Value};
+use crate::value::{FunctionObject, Value, ValueKind};
 
 /// The registered names of this module.
 pub const FUNCTIONS: &[(&str, Entry)] = &[
@@ -308,7 +308,7 @@ fn bylabels_builder(
             } else {
                 key
             };
-            return Err(Error::class_cast(other.java_class(), "java.lang.String"));
+            return Err(Error::class_cast(other.kind(), ValueKind::String));
         };
         let selector = if source.is_empty() || &**source == "=" {
             None
@@ -405,7 +405,7 @@ impl Comparison {
 fn compare_threshold(threshold: &Value, value: &Value) -> Result<Option<Ordering>> {
     let number = || match value {
         Value::Long(_) | Value::Double(_) => Ok(value),
-        other => Err(Error::class_cast(other.java_class(), "java.lang.Number")),
+        other => Err(Error::class_cast(other.kind(), Class::Number)),
     };
     Ok(Some(match threshold {
         Value::Long(t) => {
@@ -726,7 +726,7 @@ const LATENCY_OPTIONS: [&str; 8] = [
 fn hash_of(value: &Value) -> Result<i64> {
     value
         .as_i64()
-        .ok_or_else(|| Error::class_cast(value.java_class(), "java.lang.Number"))
+        .ok_or_else(|| Error::class_cast(value.kind(), Class::Number))
 }
 
 /// A `cloneEmpty` of `gts` named after it with `suffix`.

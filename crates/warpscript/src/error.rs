@@ -13,10 +13,69 @@
 
 pub mod compat;
 
+use std::sync::Arc;
+use std::{fmt, io};
+
+use crate::encoder::EncoderError;
 use crate::finite::NotFinite;
+use crate::thrift::ThriftError;
+use crate::value::ValueKind;
 
 /// Tail of the message of a `BREAK` / `CONTINUE` that escaped every loop.
 const LOOP_ONLY: &str = "must be used in a one of FOR, FOREACH, FORSTEP, WHILE, UNTIL loop.";
+
+/// An I/O failure, shared and comparable so that [`Error`] stays `Clone + Eq`.
+#[derive(Debug, Clone)]
+pub struct IoFailure(Arc<io::Error>);
+
+impl From<io::Error> for IoFailure {
+    fn from(err: io::Error) -> Self {
+        IoFailure(Arc::new(err))
+    }
+}
+
+impl PartialEq for IoFailure {
+    fn eq(&self, other: &Self) -> bool {
+        self.0.kind() == other.0.kind() && self.0.to_string() == other.0.to_string()
+    }
+}
+
+impl Eq for IoFailure {}
+
+impl fmt::Display for IoFailure {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.0.fmt(f)
+    }
+}
+
+impl std::error::Error for IoFailure {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        self.0.source()
+    }
+}
+
+/// A class a value was cast from or to when the cast failed.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Class {
+    /// The class of a value of this kind.
+    Value(ValueKind),
+    /// Any number (`LONG`, `DOUBLE` or `BIGDECIMAL`).
+    Number,
+    /// Anything an ordering can compare.
+    Comparable,
+    /// Any list (the interface, not the class of a `LIST` value).
+    List,
+    /// A 32-bit integer.
+    Integer,
+    /// An array of objects, the shape of a datapoint.
+    ObjectArray,
+}
+
+impl From<ValueKind> for Class {
+    fn from(kind: ValueKind) -> Self {
+        Class::Value(kind)
+    }
+}
 
 /// A WarpScript error or control-flow signal.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
@@ -51,12 +110,16 @@ pub enum Error {
     #[error("Empty stack.")]
     EmptyStack,
     /// A value of a type other than the one a function operates on.
-    #[error("class {from} cannot be cast to class {to}")]
+    #[error(
+        "class {} cannot be cast to class {}",
+        compat::class_name(*from),
+        compat::class_name(*to)
+    )]
     ClassCast {
-        /// The class name of the value found.
-        from: String,
-        /// The class name of the value expected.
-        to: String,
+        /// The class of the value found.
+        from: Class,
+        /// The class expected.
+        to: Class,
     },
     /// An access to `index` in an array of `length` elements.
     #[error("Index {index} out of bounds for length {length}")]
@@ -73,6 +136,12 @@ pub enum Error {
     /// A number which is not finite entered where only finite numbers are accepted.
     #[error(transparent)]
     NotFinite(#[from] NotFinite),
+    /// A failure of the binary encoding of datapoints.
+    #[error(transparent)]
+    Encoder(#[from] EncoderError),
+    /// A malformed Thrift payload, or a defect of the reader.
+    #[error(transparent)]
+    Thrift(#[from] ThriftError),
     /// A failure which has no variant of its own yet: its Warp 10 wording, and the class of
     /// the Java `RuntimeException` it stands for when Warp 10 lets one escape rather than
     /// raising a `WarpScriptException` (the functions that catch and wrap those let them
@@ -117,10 +186,10 @@ impl Error {
     }
 
     /// The failure of casting a `from` object to class `to`.
-    pub fn class_cast(from: &str, to: &str) -> Self {
+    pub fn class_cast(from: impl Into<Class>, to: impl Into<Class>) -> Self {
         Error::ClassCast {
-            from: from.to_owned(),
-            to: to.to_owned(),
+            from: from.into(),
+            to: to.into(),
         }
     }
 
@@ -142,19 +211,26 @@ impl Error {
         )
     }
 
-    /// `true` for the failures Warp 10 raises as a Java `RuntimeException`, which the
-    /// functions that wrap script failures let through unwrapped.
+    /// `true` for the failures that are defects of the code rather than of the script (Warp 10
+    /// raises them as runtime exceptions): the functions that wrap script failures let them
+    /// through unwrapped.
     pub fn is_runtime(&self) -> bool {
-        matches!(
-            self,
-            Error::Legacy {
-                runtime: Some(_),
-                ..
-            } | Error::EmptyStack
-                | Error::ClassCast { .. }
-                | Error::IndexOutOfBounds { .. }
-                | Error::NullPointer
-        )
+        match self {
+            Error::Legacy { runtime, .. } => runtime.is_some(),
+            Error::Thrift(err) => !err.is_malformed_input(),
+            Error::Encoder(err) => err.is_runtime(),
+            Error::EmptyStack
+            | Error::ClassCast { .. }
+            | Error::IndexOutOfBounds { .. }
+            | Error::NullPointer => true,
+            Error::Return
+            | Error::Stop(_)
+            | Error::Break
+            | Error::Continue
+            | Error::Abort(_)
+            | Error::Context { .. }
+            | Error::NotFinite(_) => false,
+        }
     }
 
     /// The message of this failure alone, without its causes.

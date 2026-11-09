@@ -89,7 +89,10 @@ fn encoders() {
     assert_top("NEWENCODER NEWENCODER ==", false);
     assert_top("NEWENCODER DUP 2 ->LIST ->SET SIZE", 1);
     let encoder = Value::Encoder(Rc::new(RefCell::new(GtsEncoder::new(0))));
-    assert_eq!(encoder.java_class(), "io.warp10.continuum.gts.GTSEncoder");
+    assert_eq!(
+        crate::error::compat::value_class(encoder.kind()),
+        "io.warp10.continuum.gts.GTSEncoder"
+    );
     assert_eq!(encoder.to_string(), "io.warp10.continuum.gts.GTSEncoder@0");
 }
 

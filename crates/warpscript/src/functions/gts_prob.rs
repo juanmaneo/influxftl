@@ -14,7 +14,7 @@ use super::args::fail;
 use super::gts::gts_or_list_try;
 use super::gts_stats::value_counts;
 use super::template::java_trim;
-use crate::error::{Error, Result};
+use crate::error::{Class, Error, Result};
 use crate::gts::{GeoTimeSerie, Gts};
 use crate::macros::{Callable, StackFunction, StackObject};
 use crate::snapshot::value_snapshot;
@@ -191,7 +191,7 @@ fn probability(stack: &mut Stack) -> Result<()> {
             Value::Null => Err(Error::null_pointer()),
             other => other
                 .as_f64()
-                .ok_or_else(|| Error::class_cast(other.java_class(), "java.lang.Number")),
+                .ok_or_else(|| Error::class_cast(other.kind(), Class::Number)),
         }
     };
     let mut total = 0.0;

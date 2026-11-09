@@ -56,7 +56,7 @@ use std::rc::Rc;
 
 use indexmap::IndexMap;
 
-use crate::error::{Error, Result};
+use crate::error::{Class, Error, Result};
 use crate::functions::functional::java_double_compare;
 use crate::functions::operators::compare_long_double;
 use crate::gts::{NO_ELEVATION, NO_LOCATION};
@@ -251,7 +251,7 @@ pub fn aggregator_of(value: &Value) -> Option<&dyn Aggregator> {
 /// Java `((Number) value).longValue()` / `doubleValue()` on a datapoint value: the
 /// `ClassCastException` of a non numeric value.
 pub(crate) fn class_cast(value: &Value) -> Error {
-    Error::class_cast(value.java_class(), "java.lang.Number")
+    Error::class_cast(value.kind(), Class::Number)
 }
 
 /// `((Number) value).longValue()`.

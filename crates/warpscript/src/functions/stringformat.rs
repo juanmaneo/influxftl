@@ -15,7 +15,7 @@ use std::iter::repeat_n;
 
 use super::Entry;
 use super::args::{fail, fail_with_cause};
-use crate::error::{Error, Result};
+use crate::error::{Error, Result, compat};
 use crate::format::java_double_to_string;
 use crate::stack::Stack;
 use crate::value::Value;
@@ -506,7 +506,11 @@ pub(super) fn java_hash(value: &Value) -> i32 {
 
 /// `IllegalFormatConversionException`: `d != java.lang.Double`.
 fn conversion_error(spec: &Spec, value: &Value) -> Error {
-    Error::new(format!("{} != {}", spec.conversion, value.java_class()))
+    Error::new(format!(
+        "{} != {}",
+        spec.conversion,
+        compat::value_class(value.kind())
+    ))
 }
 
 /// Format one argument with `spec`.

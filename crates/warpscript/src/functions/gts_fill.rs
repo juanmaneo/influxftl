@@ -20,7 +20,7 @@ use crate::gts::{
     java_binary_search_range,
 };
 use crate::stack::Stack;
-use crate::value::{List, Map, Value};
+use crate::value::{List, Map, Value, ValueKind};
 
 /// The functions of this module.
 pub const FUNCTIONS: &[(&str, Entry)] = &[
@@ -692,7 +692,7 @@ fn cast_double(value: &Value) -> Result<f64> {
     match value {
         Value::Double(d) => Ok(*d),
         Value::Null => Err(Error::null_pointer()),
-        other => Err(Error::class_cast(other.java_class(), "java.lang.Double")),
+        other => Err(Error::class_cast(other.kind(), ValueKind::Double)),
     }
 }
 
@@ -701,7 +701,7 @@ fn cast_long(value: &Value) -> Result<i64> {
     match value {
         Value::Long(l) => Ok(*l),
         Value::Null => Err(Error::null_pointer()),
-        other => Err(Error::class_cast(other.java_class(), "java.lang.Long")),
+        other => Err(Error::class_cast(other.kind(), ValueKind::Long)),
     }
 }
 

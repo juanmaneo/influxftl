@@ -14,7 +14,7 @@ use super::gts::{element_or_list, gts_or_list, gts_or_list_try};
 use super::gts_reduce::java_hash_order;
 use super::stringformat::java_hash;
 use crate::encoder::{Decimal, EncodedValue, GtsEncoder};
-use crate::error::{Error, Result};
+use crate::error::{Class, Error, Result};
 use crate::gts::{GeoTimeSerie, NO_LOCATION, Type, Values};
 use crate::interpolation::java_binary_search_doubles;
 use crate::jmath;
@@ -613,12 +613,9 @@ fn quantize(stack: &mut Stack) -> Result<()> {
     }
     let mut bounds = Vec::with_capacity(bounds_list.len());
     for (i, bound) in bounds_list.iter().enumerate() {
-        let bound = bound.as_f64().ok_or_else(|| {
-            Error::new(format!(
-                "class {} cannot be cast to class java.lang.Number",
-                bound.java_class()
-            ))
-        })?;
+        let bound = bound
+            .as_f64()
+            .ok_or_else(|| Error::class_cast(bound.kind(), Class::Number))?;
         if !bound.is_finite() {
             return Err(fail(NAME, "expects the bounds to be finite."));
         }

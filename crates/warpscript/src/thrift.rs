@@ -8,15 +8,78 @@
 //! Decoding reproduces the reader faithfully, malformed input included: the unchecked "fast"
 //! varint path that runs off the end of the array, the missing negative length check of
 //! binary fields, the `MaxMessageSize` accounting of containers, the skipping of unknown
-//! fields and of fields of an unexpected type. Errors standing for a `TException` are plain
-//! script errors (the callers wrap them as the cause of their own message); the Java runtime
-//! exceptions that escape the deserializer are runtime errors (see [`Error::is_runtime`]).
+//! fields and of fields of an unexpected type. A [`ThriftError`] is either a malformed payload
+//! (what `TDeserializer` reports as a `TException`, which callers wrap as the cause of their own
+//! message) or a defect of the reader that escapes unwrapped (see
+//! [`ThriftError::is_malformed_input`]).
 
 use indexmap::IndexMap;
 
-use crate::error::{Error, Result};
 use crate::functions::strings::decode_utf8_java;
 use crate::gts::Metadata;
+
+/// A failure of the compact protocol reader.
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+pub enum ThriftError {
+    /// The payload ends before the value being read does.
+    #[error(
+        "Cannot read. Remote side has closed. Tried to read {wanted} bytes, but only got {got} \
+         bytes. (This is often indicative of an internal error on the server side. Please check \
+         your server logs.)"
+    )]
+    EndOfInput {
+        /// The number of bytes the value needs.
+        wanted: usize,
+        /// The number of bytes left.
+        got: usize,
+    },
+    /// A container or binary larger than what is left of the message size budget.
+    #[error("MaxMessageSize reached")]
+    MessageTooLarge,
+    /// A container, string or binary with a negative length.
+    #[error("Negative length: {0}")]
+    NegativeLength(i32),
+    /// A value of a type `TProtocolUtil.skip` cannot skip.
+    #[error("Unrecognized type {0}")]
+    UnrecognizedType(u8),
+    /// A compact type nibble that is not a type.
+    #[error("don't know what type: {0}")]
+    UnknownCompactType(u8),
+    /// The unchecked varint fast path read past the end of the payload.
+    #[error("Index {index} out of bounds for length {length}")]
+    VarintOverrun {
+        /// The offset read.
+        index: usize,
+        /// The length of the payload.
+        length: usize,
+    },
+    /// The slice of a binary with a negative length (it has no length check of its own).
+    #[error("IndexOutOfBoundsException")]
+    NegativeBinaryLength,
+    /// Skipped values nested deeper than the stack of the reader allows.
+    #[error("StackOverflowError")]
+    SkipTooDeep,
+}
+
+impl ThriftError {
+    /// `true` when the payload is malformed (a `TException`), `false` for the defects of the
+    /// reader that Warp 10 lets escape as runtime failures. Callers wrap the former as the
+    /// cause of their own message and let the latter through.
+    pub fn is_malformed_input(&self) -> bool {
+        match self {
+            ThriftError::EndOfInput { .. }
+            | ThriftError::MessageTooLarge
+            | ThriftError::NegativeLength(_)
+            | ThriftError::UnrecognizedType(_)
+            | ThriftError::UnknownCompactType(_) => true,
+            ThriftError::VarintOverrun { .. }
+            | ThriftError::NegativeBinaryLength
+            | ThriftError::SkipTooDeep => false,
+        }
+    }
+}
+
+type Result<T> = std::result::Result<T, ThriftError>;
 
 /// `TType.STOP`.
 const STOP: u8 = 0;
@@ -100,15 +163,6 @@ impl GtsWrapper {
 // Reading
 // -----------------------------------------------------------------------------------------
 
-/// The `TTransportException` of a read past the end of the payload.
-fn end_of_input(wanted: usize, got: usize) -> Error {
-    Error::new(format!(
-        "Cannot read. Remote side has closed. Tried to read {wanted} bytes, but only got {got} \
-         bytes. (This is often indicative of an internal error on the server side. Please check \
-         your server logs.)"
-    ))
-}
-
 /// `TCompactProtocol.getTType`: the `TType` of a compact type nibble.
 fn ttype(compact: u8) -> Result<u8> {
     Ok(match compact & 0x0f {
@@ -124,7 +178,7 @@ fn ttype(compact: u8) -> Result<u8> {
         10 => SET,
         11 => MAP,
         12 => STRUCT,
-        other => return Err(Error::new(format!("don't know what type: {other}"))),
+        other => return Err(ThriftError::UnknownCompactType(other)),
     })
 }
 
@@ -171,7 +225,10 @@ impl<'a> Reader<'a> {
     }
 
     fn read_byte(&mut self) -> Result<u8> {
-        let byte = *self.buf.get(self.pos).ok_or_else(|| end_of_input(1, 0))?;
+        let byte = *self
+            .buf
+            .get(self.pos)
+            .ok_or(ThriftError::EndOfInput { wanted: 1, got: 0 })?;
         self.pos += 1;
         Ok(byte)
     }
@@ -186,7 +243,7 @@ impl<'a> Reader<'a> {
     /// `TTransport.checkReadBytesAvailable`.
     fn check_read_bytes(&self, len: i64) -> Result<()> {
         if self.remaining_message < len {
-            return Err(Error::new("MaxMessageSize reached"));
+            return Err(ThriftError::MessageTooLarge);
         }
         Ok(())
     }
@@ -202,9 +259,12 @@ impl<'a> Reader<'a> {
         loop {
             let Some(&byte) = self.buf.get(self.pos) else {
                 return Err(if unchecked {
-                    Error::index_out_of_bounds(self.pos as i64, self.buf.len())
+                    ThriftError::VarintOverrun {
+                        index: self.pos,
+                        length: self.buf.len(),
+                    }
                 } else {
-                    end_of_input(1, 0)
+                    ThriftError::EndOfInput { wanted: 1, got: 0 }
                 });
             };
             self.pos += 1;
@@ -238,7 +298,10 @@ impl<'a> Reader<'a> {
     /// `readDouble`, whose value no structure needs: it is only ever skipped.
     fn skip_double(&mut self) -> Result<()> {
         if self.available() < 8 {
-            return Err(end_of_input(8, self.available()));
+            return Err(ThriftError::EndOfInput {
+                wanted: 8,
+                got: self.available(),
+            });
         }
         self.take(8);
         self.remaining_message -= 8;
@@ -249,10 +312,7 @@ impl<'a> Reader<'a> {
     fn read_binary(&mut self) -> Result<Vec<u8>> {
         let len = self.read_varint32()?;
         if len < 0 {
-            return Err(Error::runtime(
-                "java.lang.IndexOutOfBoundsException",
-                "IndexOutOfBoundsException",
-            ));
+            return Err(ThriftError::NegativeBinaryLength);
         }
         self.read_bytes(len)
     }
@@ -262,7 +322,10 @@ impl<'a> Reader<'a> {
         self.check_read_bytes(i64::from(len))?;
         let len = len as usize;
         if self.available() < len {
-            return Err(end_of_input(len, self.available()));
+            return Err(ThriftError::EndOfInput {
+                wanted: len,
+                got: self.available(),
+            });
         }
         Ok(self.take(len).to_vec())
     }
@@ -270,7 +333,7 @@ impl<'a> Reader<'a> {
     /// `checkContainerReadLength` / `checkStringReadLength`.
     fn check_length(len: i32) -> Result<i64> {
         if len < 0 {
-            return Err(Error::new(format!("Negative length: {len}")));
+            return Err(ThriftError::NegativeLength(len));
         }
         Ok(i64::from(len))
     }
@@ -335,10 +398,7 @@ impl<'a> Reader<'a> {
     /// `TProtocolUtil.skip`.
     fn skip(&mut self, field_type: u8, depth: usize) -> Result<()> {
         if depth > MAX_SKIP_DEPTH {
-            return Err(Error::runtime(
-                "java.lang.StackOverflowError",
-                "StackOverflowError",
-            ));
+            return Err(ThriftError::SkipTooDeep);
         }
         match field_type {
             BOOL => {
@@ -381,7 +441,7 @@ impl<'a> Reader<'a> {
                     self.skip(element, depth + 1)?;
                 }
             }
-            other => return Err(Error::new(format!("Unrecognized type {other}"))),
+            other => return Err(ThriftError::UnrecognizedType(other)),
         }
         Ok(())
     }

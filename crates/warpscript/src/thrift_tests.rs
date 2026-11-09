@@ -1,22 +1,18 @@
 // Copyright 2026 The influxftl Authors. Licensed under the Apache License, Version 2.0.
 // Derived from Warp 10 (Copyright 2018-2026 SenX S.A.S., Apache-2.0), ported to Rust and modified.
 
-#![allow(
-    clippy::unwrap_used,
-    clippy::expect_used,
-    clippy::panic,
-    clippy::format_collect
-)]
+#![allow(clippy::format_collect)]
 
 use indexmap::IndexMap;
 
+use crate::error::Error;
 use crate::gts::Metadata;
-use crate::thrift::{GtsWrapper, deserialize_wrapper, serialize_wrapper};
+use crate::thrift::{GtsWrapper, ThriftError, deserialize_wrapper, serialize_wrapper};
 
 pub(crate) fn hex(text: &str) -> Vec<u8> {
     (0..text.len())
         .step_by(2)
-        .map(|i| u8::from_str_radix(&text[i..i + 2], 16).unwrap())
+        .map(|i| u8::from_str_radix(&text[i..i + 2], 16).expect("two hexadecimal digits"))
         .collect()
 }
 
@@ -25,14 +21,15 @@ fn to_hex(bytes: &[u8]) -> String {
 }
 
 fn err(bytes: &[u8]) -> (String, &'static str) {
-    let e = deserialize_wrapper(bytes).unwrap_err();
+    let e = Error::from(deserialize_wrapper(bytes).expect_err("the payload is malformed"));
     (e.message(), crate::error::compat::exception_class(&e))
 }
 
 const EOF1: &str = "Cannot read. Remote side has closed. Tried to read 1 bytes, but only got 0 bytes. \
                     (This is often indicative of an internal error on the server side. Please check \
                     your server logs.)";
-const SCRIPT: &str = "io.warp10.script.WarpScriptException";
+const TRANSPORT: &str = "org.apache.thrift.transport.TTransportException";
+const PROTOCOL: &str = "org.apache.thrift.protocol.TProtocolException";
 
 #[test]
 fn round_trip() {
@@ -63,16 +60,22 @@ fn round_trip() {
         compression_passes: Some(-2),
     };
     let bytes = serialize_wrapper(&wrapper);
-    assert_eq!(deserialize_wrapper(&bytes).unwrap(), wrapper);
+    assert_eq!(
+        deserialize_wrapper(&bytes).expect("the payload is a valid wrapper"),
+        wrapper
+    );
     let mut compressed = wrapper.clone();
     compressed.compressed = Some(true);
     compressed.metadata = Some(Metadata::default());
     let bytes = serialize_wrapper(&compressed);
-    let mut back = deserialize_wrapper(&bytes).unwrap();
+    let mut back = deserialize_wrapper(&bytes).expect("the payload is a valid wrapper");
     assert!(back.is_compressed());
     assert_eq!(back.compression_passes(), -2);
     assert_eq!((back.base(), back.count()), (-1, 3));
-    let meta = back.metadata.take().unwrap();
+    let meta = back
+        .metadata
+        .take()
+        .expect("the payload is a valid wrapper");
     assert_eq!(meta.name, None);
     assert!(meta.class_id_set && !meta.last_activity_set);
 }
@@ -106,8 +109,11 @@ fn oracle_bytes() {
     };
     assert_eq!(to_hex(&serialize_wrapper(&empty)), "7800160000");
     let s = hex("1c1801731b018801610162160016001b000068094c02020e04060c0104160600");
-    let wrapper = deserialize_wrapper(&s).unwrap();
-    let meta = wrapper.metadata.clone().unwrap();
+    let wrapper = deserialize_wrapper(&s).expect("the payload is a valid wrapper");
+    let meta = wrapper
+        .metadata
+        .clone()
+        .expect("the payload is a valid wrapper");
     assert_eq!(meta.name.as_deref(), Some("s"));
     assert_eq!(meta.labels.get("a").map(String::as_str), Some("b"));
     assert_eq!(wrapper.encoded.as_ref().map(Vec::len), Some(9));
@@ -120,9 +126,16 @@ fn oracle_bytes() {
 #[test]
 fn skipped_fields() {
     // A struct ends on a type nibble 0; a metadata name of type MAP is skipped.
-    assert_eq!(deserialize_wrapper(&[0x10]).unwrap(), GtsWrapper::default());
-    let w = deserialize_wrapper(&hex("1c1b0188016101620000")).unwrap();
-    assert_eq!(w.metadata.unwrap().name, None);
+    assert_eq!(
+        deserialize_wrapper(&[0x10]).expect("the payload is a valid wrapper"),
+        GtsWrapper::default()
+    );
+    let w =
+        deserialize_wrapper(&hex("1c1b0188016101620000")).expect("the payload is a valid wrapper");
+    assert_eq!(
+        w.metadata.expect("the payload is a valid wrapper").name,
+        None
+    );
     // Unknown metadata field, then every skippable type in the wrapper (field 11+).
     let w = deserialize_wrapper(&hex(concat!(
         "1cb60200",           // metadata { 11: i64 }
@@ -142,23 +155,23 @@ fn skipped_fields() {
         "1c00",               // 25: empty struct
         "00",
     )))
-    .unwrap();
+    .expect("the payload is a valid wrapper");
     assert!(w.metadata.is_some());
     // Long field headers: `lastbucket` (id 2) and `encoded` (id 7).
-    let w = deserialize_wrapper(&hex("0604020800")).unwrap_err();
-    assert_eq!(w.message(), EOF1);
-    let w = deserialize_wrapper(&hex("060414080e010000")).unwrap();
+    let w = deserialize_wrapper(&hex("0604020800")).expect_err("the binary is cut short");
+    assert_eq!(w.to_string(), EOF1);
+    let w = deserialize_wrapper(&hex("060414080e010000")).expect("the payload is a valid wrapper");
     assert_eq!((w.lastbucket, w.encoded), (Some(10), Some(vec![0])));
     // Booleans and compression passes.
-    let w = deserialize_wrapper(&hex("91150400")).unwrap();
+    let w = deserialize_wrapper(&hex("91150400")).expect("the payload is a valid wrapper");
     assert_eq!((w.compressed, w.compression_passes), (Some(true), Some(2)));
-    let w = deserialize_wrapper(&hex("9200")).unwrap();
+    let w = deserialize_wrapper(&hex("9200")).expect("the payload is a valid wrapper");
     assert_eq!(w.compressed, Some(false));
 }
 
 #[test]
 fn errors() {
-    assert_eq!(err(&[]), (EOF1.to_owned(), SCRIPT));
+    assert_eq!(err(&[]), (EOF1.to_owned(), TRANSPORT));
     // Fast varint path running off the array, slow path short read.
     assert_eq!(
         err(&hex("a5ffffffffff")),
@@ -236,7 +249,7 @@ fn errors() {
         "46",
         "86",
     ] {
-        assert_eq!(err(&hex(bytes)).1, SCRIPT, "{bytes}");
+        assert_eq!(err(&hex(bytes)).1, TRANSPORT, "{bytes}");
     }
     for bytes in [
         "b3",
@@ -254,5 +267,69 @@ fn errors() {
         "96",
     ] {
         assert!(deserialize_wrapper(&hex(bytes)).is_err(), "{bytes}");
+    }
+}
+
+#[test]
+fn failures_are_typed() {
+    let typed =
+        |bytes: &str| deserialize_wrapper(&hex(bytes)).expect_err("the payload is malformed");
+    assert_eq!(typed(""), ThriftError::EndOfInput { wanted: 1, got: 0 });
+    assert_eq!(typed("1c18ffffffff0f"), ThriftError::NegativeLength(-1));
+    assert_eq!(typed("1c2b01ff"), ThriftError::UnknownCompactType(15));
+    assert_eq!(typed("b91000"), ThriftError::UnrecognizedType(0));
+    assert_eq!(
+        typed("b70000000000000000080ef8ffffff07"),
+        ThriftError::MessageTooLarge
+    );
+    assert_eq!(
+        typed("a5ffffffffff"),
+        ThriftError::VarintOverrun {
+            index: 6,
+            length: 6
+        }
+    );
+    assert_eq!(typed("78ffffffff0f"), ThriftError::NegativeBinaryLength);
+    assert_eq!(
+        typed(&format!("b9{}", "19".repeat(600))),
+        ThriftError::SkipTooDeep
+    );
+}
+
+#[test]
+fn malformed_input_is_told_from_reader_defects() {
+    for (error, malformed, class) in [
+        (
+            ThriftError::EndOfInput { wanted: 1, got: 0 },
+            true,
+            TRANSPORT,
+        ),
+        (ThriftError::MessageTooLarge, true, TRANSPORT),
+        (ThriftError::NegativeLength(-1), true, PROTOCOL),
+        (ThriftError::UnrecognizedType(0), true, PROTOCOL),
+        (ThriftError::UnknownCompactType(15), true, PROTOCOL),
+        (
+            ThriftError::VarintOverrun {
+                index: 1,
+                length: 1,
+            },
+            false,
+            "java.lang.ArrayIndexOutOfBoundsException",
+        ),
+        (
+            ThriftError::NegativeBinaryLength,
+            false,
+            "java.lang.IndexOutOfBoundsException",
+        ),
+        (
+            ThriftError::SkipTooDeep,
+            false,
+            "java.lang.StackOverflowError",
+        ),
+    ] {
+        assert_eq!(error.is_malformed_input(), malformed, "{error}");
+        let error = Error::from(error);
+        assert_eq!(error.is_runtime(), !malformed, "{error}");
+        assert_eq!(crate::error::compat::exception_class(&error), class);
     }
 }

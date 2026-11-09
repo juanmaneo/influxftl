@@ -12,7 +12,7 @@ use super::gts::{element_or_list, gts_or_list_try};
 use super::gts_stats::standardize_gts;
 use super::gts_time::timeclip_gts;
 use super::misc::TIME_UNITS_PER_MS;
-use crate::error::{Error, Result};
+use crate::error::{Class, Error, Result};
 use crate::geoxp::{loxodromic_distance, orthodromic_distance};
 use crate::gts::{GeoTimeSerie, Gts, NO_ELEVATION, NO_LOCATION, Values};
 use crate::stack::Stack;
@@ -111,7 +111,7 @@ fn correlate(stack: &mut Stack) -> Result<()> {
             Value::Null => return Err(Error::null_pointer()),
             other => other
                 .as_i64()
-                .ok_or_else(|| Error::class_cast(other.java_class(), "java.lang.Number"))?,
+                .ok_or_else(|| Error::class_cast(other.kind(), Class::Number))?,
         });
     }
     let top = stack.pop()?;

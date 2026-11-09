@@ -13,10 +13,10 @@ use indexmap::IndexMap;
 use super::Entry;
 use super::gts_frameworks::{Mapped, aggregate};
 use crate::aggregators::{Aggregator, AggregatorArgs, aggregator_of};
-use crate::error::{Error, Result};
+use crate::error::{Class, Error, Result};
 use crate::gts::{GeoTimeSerie, Gts, NO_ELEVATION, NO_LOCATION};
 use crate::stack::Stack;
-use crate::value::Value;
+use crate::value::{Value, ValueKind};
 
 /// The functions of this module.
 pub const FUNCTIONS: &[(&str, Entry)] = &[
@@ -129,10 +129,7 @@ fn label_names(labels: &[Value], has_series: bool) -> Result<Vec<String>> {
         .filter_map(|label| match label {
             Value::String(name) => Some(Ok(name.to_string())),
             _ if !has_series => None,
-            other => Some(Err(Error::class_cast(
-                other.java_class(),
-                "java.lang.String",
-            ))),
+            other => Some(Err(Error::class_cast(other.kind(), ValueKind::String))),
         })
         .collect()
 }
@@ -183,7 +180,7 @@ fn partition_fn(stack: &mut Stack, name: &str, strict: bool) -> Result<()> {
         other => {
             return Err(Error::with_cause(
                 format!("{name} expects a list of labels or null on the top of the stack."),
-                Error::class_cast(other.java_class(), "java.util.List"),
+                Error::class_cast(other.kind(), Class::List),
             ));
         }
     };
@@ -196,7 +193,7 @@ fn partition_fn(stack: &mut Stack, name: &str, strict: bool) -> Result<()> {
                 format!(
                     "{name} expects a list of Geo Time Series instances under the top of the stack."
                 ),
-                Error::class_cast(other.java_class(), "java.util.List"),
+                Error::class_cast(other.kind(), Class::List),
             ));
         }
     };

@@ -4,7 +4,10 @@
 //! Warp 10 compatibility of the errors: the Java exception class a script reads in the `type`
 //! of `ERROR`. Nothing else in the crate names a Java class of an error.
 
-use super::Error;
+use super::{Class, Error};
+use crate::encoder::EncoderError;
+use crate::thrift::ThriftError;
+use crate::value::ValueKind;
 
 /// `WarpScriptException`, the exception of every failure Warp 10 reports itself.
 const WARP_SCRIPT_EXCEPTION: &str = "io.warp10.script.WarpScriptException";
@@ -19,6 +22,8 @@ pub fn exception_class(err: &Error) -> &'static str {
         Error::Legacy { runtime: None, .. } | Error::Context { .. } | Error::NotFinite(_) => {
             WARP_SCRIPT_EXCEPTION
         }
+        Error::Thrift(err) => thrift_class(err),
+        Error::Encoder(err) => encoder_class(err),
         Error::Return => "io.warp10.script.WarpScriptReturnException",
         Error::Stop(_) => "io.warp10.script.WarpScriptStopException",
         Error::Break => "io.warp10.script.WarpScriptLoopBreakException",
@@ -28,5 +33,74 @@ pub fn exception_class(err: &Error) -> &'static str {
         Error::ClassCast { .. } => "java.lang.ClassCastException",
         Error::IndexOutOfBounds { .. } => "java.lang.ArrayIndexOutOfBoundsException",
         Error::NullPointer => "java.lang.NullPointerException",
+    }
+}
+
+/// The class of the `libthrift` / JDK exception a reader failure stands for.
+fn thrift_class(err: &ThriftError) -> &'static str {
+    match err {
+        ThriftError::EndOfInput { .. } | ThriftError::MessageTooLarge => {
+            "org.apache.thrift.transport.TTransportException"
+        }
+        ThriftError::NegativeLength(_)
+        | ThriftError::UnrecognizedType(_)
+        | ThriftError::UnknownCompactType(_) => "org.apache.thrift.protocol.TProtocolException",
+        ThriftError::VarintOverrun { .. } => "java.lang.ArrayIndexOutOfBoundsException",
+        ThriftError::NegativeBinaryLength => "java.lang.IndexOutOfBoundsException",
+        ThriftError::SkipTooDeep => "java.lang.StackOverflowError",
+    }
+}
+
+/// The name of `class`, as a `ClassCastException` message gives it.
+pub fn class_name(class: Class) -> &'static str {
+    match class {
+        Class::Value(kind) => value_class(kind),
+        Class::Number => "java.lang.Number",
+        Class::Comparable => "java.lang.Comparable",
+        Class::List => "java.util.List",
+        Class::Integer => "java.lang.Integer",
+        Class::ObjectArray => "[Ljava.lang.Object;",
+    }
+}
+
+/// `getClass().getName()` of a value of `kind`.
+pub fn value_class(kind: ValueKind) -> &'static str {
+    match kind {
+        ValueKind::Null => "null",
+        ValueKind::Boolean => "java.lang.Boolean",
+        ValueKind::Long => "java.lang.Long",
+        ValueKind::Double => "java.lang.Double",
+        ValueKind::BigDecimal => "java.math.BigDecimal",
+        ValueKind::Matrix => "org.apache.commons.math3.linear.Array2DRowRealMatrix",
+        ValueKind::Vector => "org.apache.commons.math3.linear.ArrayRealVector",
+        ValueKind::String => "java.lang.String",
+        ValueKind::Bytes => "[B",
+        ValueKind::BitSet => "java.util.BitSet",
+        ValueKind::List => "java.util.ArrayList",
+        ValueKind::Map => "java.util.LinkedHashMap",
+        ValueKind::Set => "java.util.HashSet",
+        ValueKind::Macro => "io.warp10.script.WarpScriptStack$Macro",
+        ValueKind::Function => "io.warp10.script.NamedWarpScriptFunction",
+        ValueKind::Mark => "io.warp10.script.WarpScriptStack$Mark",
+        ValueKind::Context => "io.warp10.script.MemoryWarpScriptStack$StackContext",
+        ValueKind::Counter => "java.util.concurrent.atomic.AtomicLong",
+        ValueKind::Gts => "io.warp10.continuum.gts.GeoTimeSerie",
+        ValueKind::Encoder => "io.warp10.continuum.gts.GTSEncoder",
+    }
+}
+
+/// The class of the exception a decoder failure stands for.
+fn encoder_class(err: &EncoderError) -> &'static str {
+    match err {
+        EncoderError::UnsupportedValue(_)
+        | EncoderError::InvalidStringLength
+        | EncoderError::InvalidBoolean
+        | EncoderError::InvalidCompressedContent(_) => "java.lang.RuntimeException",
+        EncoderError::BufferUnderflow => "java.nio.BufferUnderflowException",
+        EncoderError::VarintTooLong
+        | EncoderError::PositionBeforeStart { .. }
+        | EncoderError::PositionAfterLimit { .. } => "java.lang.IllegalArgumentException",
+        EncoderError::NegativeStringLength(_) => "java.lang.NegativeArraySizeException",
+        EncoderError::DecoderNotStarted => "java.io.IOException",
     }
 }

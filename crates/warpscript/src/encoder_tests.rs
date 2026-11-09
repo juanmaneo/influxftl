@@ -11,9 +11,10 @@
 use std::rc::Rc;
 
 use crate::encoder::{
-    DEFAULT_COMP_RATIO_THRESHOLD, Decimal, EncodedValue, GtsDecoder, GtsEncoder,
+    DEFAULT_COMP_RATIO_THRESHOLD, Decimal, EncodedValue, EncoderError, GtsDecoder, GtsEncoder,
     encoder_to_wrapper, gts_to_wrapper, wrapper_to_encoder, wrapper_to_gts,
 };
+use crate::error::Error;
 use crate::geoxp::to_geoxp_point;
 use crate::gts::{GeoTimeSerie, Metadata, NO_ELEVATION, NO_LOCATION};
 use crate::thrift::{GtsWrapper, deserialize_wrapper, serialize_wrapper};
@@ -660,4 +661,104 @@ fn unwrapping() {
     };
     assert!(wrapper_to_gts(&w, false).is_err());
     assert!(wrapper_to_encoder(&w).is_err());
+}
+
+#[test]
+fn failures_have_the_wording_and_class_of_warp10() {
+    use crate::error::compat::exception_class;
+    use crate::value::ValueKind;
+
+    let io = std::io::Error::new(std::io::ErrorKind::InvalidData, "corrupt deflate stream");
+    for (error, message, class, runtime) in [
+        (
+            EncoderError::UnsupportedValue(ValueKind::List),
+            "Unsuported value type 'class java.util.ArrayList'",
+            "java.lang.RuntimeException",
+            true,
+        ),
+        (
+            EncoderError::BufferUnderflow,
+            "BufferUnderflowException",
+            "java.nio.BufferUnderflowException",
+            true,
+        ),
+        (
+            EncoderError::VarintTooLong,
+            "Variable length quantity is too long",
+            "java.lang.IllegalArgumentException",
+            true,
+        ),
+        (
+            EncoderError::PositionBeforeStart { target: -1 },
+            "newPosition < 0: (-1 < 0)",
+            "java.lang.IllegalArgumentException",
+            true,
+        ),
+        (
+            EncoderError::PositionAfterLimit {
+                target: 9,
+                limit: 4,
+            },
+            "newPosition > limit: (9 > 4)",
+            "java.lang.IllegalArgumentException",
+            true,
+        ),
+        (
+            EncoderError::InvalidStringLength,
+            "Invalid string length.",
+            "java.lang.RuntimeException",
+            true,
+        ),
+        (
+            EncoderError::NegativeStringLength(-5),
+            "-5",
+            "java.lang.NegativeArraySizeException",
+            true,
+        ),
+        (
+            EncoderError::InvalidBoolean,
+            "Invalid boolean value.",
+            "java.lang.RuntimeException",
+            true,
+        ),
+        (
+            EncoderError::InvalidCompressedContent(io.into()),
+            "Invalid compressed content.",
+            "java.lang.RuntimeException",
+            true,
+        ),
+        (
+            EncoderError::DecoderNotStarted,
+            "Can only get an encoder for a decoder on which 'next' was called at least once.",
+            "java.io.IOException",
+            false,
+        ),
+    ] {
+        let error = Error::from(error);
+        assert_eq!(error.to_string(), message);
+        assert_eq!(exception_class(&error), class, "{message}");
+        assert_eq!(error.is_runtime(), runtime, "{message}");
+    }
+}
+
+#[test]
+fn a_corrupt_deflate_stream_is_the_source_of_the_invalid_content() {
+    use std::error::Error as _;
+
+    let wrapper = GtsWrapper {
+        encoded: Some(vec![1, 2, 3]),
+        compressed: Some(true),
+        compression_passes: Some(1),
+        ..GtsWrapper::default()
+    };
+    let err = wrapper_to_encoder(&wrapper).expect_err("the content is not gzip");
+    assert_eq!(err.to_string(), "Invalid compressed content.");
+    assert!(matches!(
+        err,
+        Error::Encoder(EncoderError::InvalidCompressedContent(_))
+    ));
+    let source = err
+        .source()
+        .expect("the failure of the inflater is the source");
+    assert_ne!(source.to_string(), "");
 }

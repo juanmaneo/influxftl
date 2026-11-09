@@ -14,7 +14,7 @@ use super::math::{ATTRIBUTE_SEEDED_PRNG, secure_double};
 use crate::aggregators::{Aggregated, Aggregator, AggregatorArgs, Roles};
 use crate::curvefit::polynomial_value;
 use crate::encoder::EncodedValue;
-use crate::error::{Error, Result};
+use crate::error::{Class, Error, Result};
 use crate::gts::{GeoTimeSerie, NO_ELEVATION, NO_LOCATION, java_binary_search};
 use crate::jrandom::JavaRandom;
 use crate::macros::{Callable, StackFunction, StackObject};
@@ -350,10 +350,7 @@ impl SortKey {
             }
             Value::Boolean(b) => SortKey::Boolean(*b),
             other => {
-                return Err(Error::class_cast(
-                    other.java_class(),
-                    "java.lang.Comparable",
-                ));
+                return Err(Error::class_cast(other.kind(), Class::Comparable));
             }
         })
     }
@@ -373,7 +370,7 @@ fn randpdf(stack: &mut Stack, name: &'static str) -> Result<()> {
             Value::Null => return Err(Error::null_pointer()),
             other => other
                 .as_f64()
-                .ok_or_else(|| Error::class_cast(other.java_class(), "java.lang.Number"))?,
+                .ok_or_else(|| Error::class_cast(other.kind(), Class::Number))?,
         };
         total += count;
         counts.push(count);
@@ -385,7 +382,7 @@ fn randpdf(stack: &mut Stack, name: &'static str) -> Result<()> {
         if let Some((_, first, _)) = entries.first()
             && std::mem::discriminant(first) != std::mem::discriminant(key)
         {
-            return Err(Error::class_cast(first.java_class(), key.java_class()));
+            return Err(Error::class_cast(first.kind(), key.kind()));
         }
         entries.push((sort_key, key.clone(), count / total));
     }

@@ -327,7 +327,13 @@ fn cast_error(value: &Py, class: &str) -> Error {
     if *value == Py::None {
         return Error::null_pointer();
     }
-    Error::class_cast(value.java_class(), class)
+    Error::runtime(
+        "java.lang.ClassCastException",
+        format!(
+            "class {} cannot be cast to class {class}",
+            value.java_class()
+        ),
+    )
 }
 
 /// A `(String)` cast.

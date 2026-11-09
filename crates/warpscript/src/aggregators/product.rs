@@ -13,7 +13,7 @@ use crate::functions::Entry;
 use crate::gts::{NO_ELEVATION, NO_LOCATION};
 use crate::jmath;
 use crate::stack::Stack;
-use crate::value::Value;
+use crate::value::{Value, ValueKind};
 
 /// The registered names of this module.
 pub const FUNCTIONS: &[(&str, Entry)] = &[
@@ -297,7 +297,7 @@ fn dot_product_builder(
         .map(|element| match element {
             Value::Double(d) => Ok(*d),
             Value::Null => Err(Error::null_pointer()),
-            other => Err(Error::class_cast(other.java_class(), "java.lang.Double")),
+            other => Err(Error::class_cast(other.kind(), ValueKind::Double)),
         })
         .collect::<Result<Vec<f64>>>()?;
     stack.push(Value::Function(Named::object(

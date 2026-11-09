@@ -14,7 +14,7 @@ use crate::functions::Entry;
 use crate::functions::strings::{CompiledPattern, regex_replace};
 use crate::gts::{NO_ELEVATION, NO_LOCATION};
 use crate::stack::Stack;
-use crate::value::Value;
+use crate::value::{Value, ValueKind};
 
 /// The registered names of this module.
 pub const FUNCTIONS: &[(&str, Entry)] = &[
@@ -28,7 +28,7 @@ fn string_of(value: &Value) -> Result<&str> {
     match value {
         Value::String(s) => Ok(s),
         Value::Null => Err(Error::null_pointer()),
-        other => Err(Error::class_cast(other.java_class(), "java.lang.String")),
+        other => Err(Error::class_cast(other.kind(), ValueKind::String)),
     }
 }
 

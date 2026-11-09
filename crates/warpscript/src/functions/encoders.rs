@@ -59,7 +59,7 @@ fn gold_encoder(bytes: &[u8], reversed: bool) -> Result<GtsEncoder> {
         wrap_error(
             "GOLDWRAP",
             "encountered an error while manipulating GTS Wrapper.",
-            err,
+            err.into(),
         )
     })?;
     fullsort_encoder(&wrapper_to_encoder(&wrapper)?, reversed, 0)
@@ -218,7 +218,7 @@ impl Wrapped {
             }
             Wrapped::Raw(b) => b.to_vec(),
         };
-        deserialize_wrapper(&bytes).map_err(|err| wrap_error(name, what, err))
+        deserialize_wrapper(&bytes).map_err(|err| wrap_error(name, what, err.into()))
     }
 }
 

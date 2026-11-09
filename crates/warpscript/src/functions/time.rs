@@ -22,7 +22,7 @@ use super::Entry;
 use super::args::{fail, fail_with_cause, int_value};
 use super::misc::TIME_UNITS_PER_MS;
 use super::runtime::current_time;
-use crate::error::{Error, Result};
+use crate::error::{Class, Error, Result};
 use crate::stack::Stack;
 use crate::value::Value;
 
@@ -409,12 +409,7 @@ fn int_element(elements: &[Value], index: usize) -> Result<i32> {
             elements.len()
         ))
     })?;
-    int_value(value).ok_or_else(|| {
-        Error::new(format!(
-            "class {} cannot be cast to class java.lang.Number",
-            value.java_class()
-        ))
-    })
+    int_value(value).ok_or_else(|| Error::class_cast(value.kind(), Class::Number))
 }
 
 /// `TSELEMENTS->`: the timestamp of a list of components (year, month, day, hour, minute,
