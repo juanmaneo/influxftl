@@ -93,6 +93,14 @@ pub(crate) fn split_hhcode(hhcode: i64) -> (i64, i64) {
     (lat, lon)
 }
 
+/// `HHCodeHelper.stableSplitHHCode`: the `(latitude, longitude)` units of an HHCode, keeping
+/// the `resolution` leading bits of each (`0` to `32`) and clearing the others.
+pub(crate) fn stable_split_hhcode(hhcode: i64, resolution: u32) -> (i64, i64) {
+    let (lat, lon) = split_hhcode(hhcode);
+    let mask = (0xFFFF_FFFFi64 << (32 - resolution)) & 0xFFFF_FFFF;
+    (lat & mask, lon & mask)
+}
+
 /// `HHCodeHelper.deltaHHCode`: the HHCode `latdelta` / `londelta` cells of `resolution`
 /// away (`northHHCode` and friends).
 pub fn delta_hhcode(hhcode: i64, resolution: i32, latdelta: i64, londelta: i64) -> i64 {

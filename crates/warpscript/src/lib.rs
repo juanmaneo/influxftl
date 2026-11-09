@@ -93,6 +93,8 @@ mod finite_tests;
 #[cfg(test)]
 mod format_tests;
 #[cfg(test)]
+mod geoshape_tests;
+#[cfg(test)]
 mod geoxp_tests;
 #[cfg(test)]
 mod gts_tests;

@@ -10,6 +10,9 @@
 
 use std::collections::BTreeSet;
 
+use crate::error::Result;
+use crate::error::fault::BoundsError;
+
 /// The HHCode bits a cell of each resolution keeps (index `r` for resolution `2 * (r + 1)`).
 const PREFIX_MASK: [i64; 16] = {
     let mut masks = [0i64; 16];
@@ -20,6 +23,11 @@ const PREFIX_MASK: [i64; 16] = {
     }
     masks
 };
+
+/// `HHCodeHelper.MIN_RESOLUTION`.
+pub const MIN_RESOLUTION: u32 = 2;
+/// `HHCodeHelper.MAX_RESOLUTION`.
+pub const MAX_RESOLUTION: u32 = 32;
 
 /// `Coverage`: the cells of each of the 16 resolutions (2, 4 … 32).
 #[derive(Clone, Debug, Default)]
@@ -45,9 +53,181 @@ impl Coverage {
         self.auto_optimize = true;
     }
 
+    /// `setAutoOptimize(true)`: optimize as cells are added, merging 16 children (the
+    /// thresholds are those of [`Coverage::new`]).
+    pub fn set_auto_optimize(&mut self) {
+        self.auto_optimize = true;
+    }
+
     /// `setAutoDedup`.
     pub fn set_auto_dedup(&mut self, auto_dedup: bool) {
         self.auto_dedup = auto_dedup;
+    }
+
+    /// `new Coverage(long[] geocells)`: the cells of a shape, as they are (no masking of the
+    /// HHCode bits below the resolution).
+    ///
+    /// # Errors
+    ///
+    /// [`BoundsError::ArrayIndex`] for a geocell without resolution, which no shape holds.
+    pub fn from_cells(geocells: &[i64]) -> Result<Coverage> {
+        let mut coverage = Coverage::new();
+        for geocell in geocells {
+            let level = ((*geocell as u64) >> 60) as usize;
+            let cells = level
+                .checked_sub(1)
+                .and_then(|level| coverage.cells.get_mut(level))
+                .ok_or(BoundsError::ArrayIndex {
+                    index: -1,
+                    length: 16,
+                })?;
+            cells.insert(*geocell << 4);
+        }
+        Ok(coverage)
+    }
+
+    /// `CoverageHelper.fromGeoCells`: add the cells of a shape one by one (the geocells
+    /// without resolution are ignored) and merge them with [`Coverage::optimize`].
+    pub fn from_geocells(geocells: &[i64]) -> Coverage {
+        let mut coverage = Coverage::new();
+        for geocell in geocells {
+            coverage.add_cell((((*geocell as u64) >> 60) << 1) as i32, *geocell << 4);
+        }
+        coverage.optimize(0, MIN_RESOLUTION);
+        coverage
+    }
+
+    /// `merge`: add the cells of `other`.
+    pub fn merge(&mut self, other: &Coverage) {
+        for (cells, others) in self.cells.iter_mut().zip(&other.cells) {
+            cells.extend(others);
+        }
+    }
+
+    /// `dedup`: drop the cells under a coarser cell.
+    pub fn dedup(&mut self) {
+        for level in (0..16).rev() {
+            let (coarser, finer) = self.cells.split_at_mut(level);
+            finer[0].retain(|hhcode| {
+                !coarser
+                    .iter()
+                    .zip(&PREFIX_MASK)
+                    .any(|(cells, mask)| cells.contains(&(hhcode & mask)))
+            });
+        }
+    }
+
+    /// `removeCell`: remove the cell of the resolution `2 * (level + 1)` holding `hhcode`.
+    fn remove_cell(&mut self, level: usize, hhcode: i64) {
+        self.cells[level].remove(&(hhcode & PREFIX_MASK[level]));
+    }
+
+    /// `splitTo`: replace the cell holding `hhcode` by its children, and those by theirs,
+    /// down to the resolution of `level`, when a coarser cell covers `hhcode`.
+    fn split_to(&mut self, level: usize, hhcode: i64) {
+        while let Some(covered) =
+            (0..=level).find(|r| self.cells[*r].contains(&(hhcode & PREFIX_MASK[*r])))
+        {
+            if covered == level {
+                return;
+            }
+            let parent = hhcode & PREFIX_MASK[covered];
+            self.cells[covered].remove(&parent);
+            let child_shift = 60 - 4 * (covered + 1);
+            for child in 0..16i64 {
+                self.cells[covered + 1]
+                    .insert((parent | (child << child_shift)) & PREFIX_MASK[covered + 1]);
+            }
+        }
+    }
+
+    /// `Coverage.normalize(a, b)`: split the cells of each coverage so that wherever one
+    /// has a cell, the other has cells of that resolution only.
+    pub fn normalize(a: &mut Coverage, b: &mut Coverage) {
+        for level in 0..16 {
+            for hhcode in &a.cells[level] {
+                b.split_to(level, *hhcode);
+            }
+            for hhcode in &b.cells[level] {
+                a.split_to(level, *hhcode);
+            }
+        }
+    }
+
+    /// `Coverage.minus(a, b, false)`: remove from `self` the cells of `other`. Both are
+    /// optimized and normalized in the process.
+    pub fn minus(&mut self, other: &mut Coverage) {
+        self.optimize(0, MIN_RESOLUTION);
+        other.optimize(0, MIN_RESOLUTION);
+        Coverage::normalize(self, other);
+        for (level, cells) in other.cells.iter().enumerate() {
+            for hhcode in cells {
+                self.remove_cell(level, *hhcode);
+            }
+        }
+    }
+
+    /// `parent` replaces its 16 children at `level`.
+    fn replace_children(&mut self, level: usize, parent: i64) {
+        self.cells[level - 1].insert(parent);
+        for offset in 0..16 {
+            self.cells[level].remove(&(parent | (offset << (4 * (15 - level)))));
+        }
+    }
+
+    /// `optimize(thresholds, minresolution, MAX_RESOLUTION, 0)`: from the finest resolution up
+    /// to `min_resolution`, replace the children of a parent by the parent when there are at
+    /// least as many as the threshold of their resolution (a nibble of `thresholds`, 0
+    /// meaning all 16). `min_resolution` is at least 2: nothing is coarser than the
+    /// resolution 2.
+    ///
+    /// The Java scans the sorted cells of a resolution by groups of siblings and counts the
+    /// last cell with the group before it, whatever its parent: that is kept, as Warp 10
+    /// optimizes shapes that way.
+    pub fn optimize(&mut self, thresholds: i64, min_resolution: u32) {
+        let coarsest = ((min_resolution >> 1) as usize).max(1);
+        for level in (coarsest..16).rev() {
+            let threshold = (thresholds >> (4 * (15 - level))) & 0xf;
+            let merges = |children: i64| (threshold > 0 && children >= threshold) || children == 16;
+            let sorted: Vec<i64> = self.cells[level].iter().copied().collect();
+            let mut parent_cell = 0i64;
+            let mut last_parent = 0i64;
+            let mut children = 0i64;
+            for (index, hhcode) in sorted.iter().enumerate() {
+                let last = index + 1 == sorted.len();
+                parent_cell = hhcode & PREFIX_MASK[level - 1];
+                if index == 0 {
+                    last_parent = parent_cell;
+                    children = 0;
+                }
+                if last_parent != parent_cell || last {
+                    if last {
+                        children += 1;
+                    }
+                    if merges(children) {
+                        self.replace_children(level, last_parent);
+                    }
+                    if !last {
+                        last_parent = parent_cell;
+                    }
+                    children = 1;
+                } else {
+                    children += 1;
+                }
+            }
+            if last_parent != parent_cell && merges(children) {
+                self.replace_children(level, parent_cell);
+            }
+        }
+        // A cell two resolutions under a cell already there is redundant.
+        for level in 0..14 {
+            if self.cells[level].is_empty() {
+                continue;
+            }
+            let (coarser, finer) = self.cells.split_at_mut(level + 2);
+            let coarser = &coarser[level];
+            finer[0].retain(|hhcode| !coarser.contains(&(hhcode & PREFIX_MASK[level])));
+        }
     }
 
     /// `addCell(resolution, hhcode)`: add the cell of `resolution` (even, 2 to 32) holding

@@ -18,6 +18,7 @@ pub mod dtw;
 pub mod encoders;
 pub mod functional;
 pub mod geo;
+pub mod geoops;
 pub mod geoshape;
 pub mod gts;
 pub mod gts_apply;
@@ -129,6 +130,7 @@ const TABLES: &[&[(&str, Entry)]] = &[
     polyfunc::FUNCTIONS,
     mv::FUNCTIONS,
     geo::FUNCTIONS,
+    geoops::FUNCTIONS,
     geoshape::FUNCTIONS,
     shape::FUNCTIONS,
     gts_misc::FUNCTIONS,
@@ -285,6 +287,10 @@ mod encoders_tests;
 mod functional_tests;
 #[cfg(test)]
 mod geo_tests;
+#[cfg(test)]
+mod geoops_errors_tests;
+#[cfg(test)]
+mod geoops_tests;
 #[cfg(test)]
 mod geoshape_tests;
 #[cfg(test)]
