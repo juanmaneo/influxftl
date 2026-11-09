@@ -10,9 +10,8 @@
 pub mod coverage;
 pub mod functions_doc;
 
-use std::fmt;
 use std::path::{Path, PathBuf};
-use std::process::Command;
+use std::process::{Command, ExitStatus};
 
 /// Packages that contain `#[kani::proof]` harnesses and are verified by `cargo xtask proof`.
 pub const PROOF_PACKAGES: &[&str] = &["warpscript"];
@@ -21,57 +20,41 @@ pub const PROOF_PACKAGES: &[&str] = &["warpscript"];
 pub const COVERAGE_EXCLUDED_PACKAGES: &[&str] = &["xtask"];
 
 /// Errors produced by the xtask commands.
-#[derive(Debug)]
+#[derive(Debug, thiserror::Error)]
 pub enum Error {
     /// The command line could not be understood.
+    #[error("{0}\n\n{usage}", usage = USAGE)]
     Usage(String),
+    /// A tool could not be started.
+    #[error("`{program} {}` could not be started: {source}", .args.join(" "))]
+    Spawn {
+        /// The program that was run.
+        program: String,
+        /// Its arguments.
+        args: Vec<String>,
+        /// Why it could not be started.
+        #[source]
+        source: std::io::Error,
+    },
     /// A spawned tool exited unsuccessfully.
+    #[error("`{program} {}` failed: {status}", .args.join(" "))]
     Tool {
         /// The program that was run.
         program: String,
         /// Its arguments.
         args: Vec<String>,
-        /// Exit status or spawn error.
-        status: String,
+        /// How it ended.
+        status: ExitStatus,
     },
     /// An I/O error while reading or writing files.
-    Io(std::io::Error),
+    #[error("I/O error: {0}")]
+    Io(#[from] std::io::Error),
     /// The coverage gate failed.
+    #[error("coverage gate failed:\n{0}")]
     Coverage(String),
     /// The coverage JSON export could not be parsed.
-    Json(serde_json::Error),
-}
-
-impl fmt::Display for Error {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Error::Usage(msg) => write!(f, "{msg}\n\n{USAGE}"),
-            Error::Tool {
-                program,
-                args,
-                status,
-            } => {
-                write!(f, "`{program} {}` failed: {status}", args.join(" "))
-            }
-            Error::Io(err) => write!(f, "I/O error: {err}"),
-            Error::Coverage(msg) => write!(f, "coverage gate failed:\n{msg}"),
-            Error::Json(err) => write!(f, "invalid coverage export: {err}"),
-        }
-    }
-}
-
-impl std::error::Error for Error {}
-
-impl From<std::io::Error> for Error {
-    fn from(err: std::io::Error) -> Self {
-        Error::Io(err)
-    }
-}
-
-impl From<serde_json::Error> for Error {
-    fn from(err: serde_json::Error) -> Self {
-        Error::Json(err)
-    }
+    #[error("invalid coverage export: {0}")]
+    Json(#[from] serde_json::Error),
 }
 
 /// Abstraction over process spawning so that the command plumbing can be tested without
@@ -93,10 +76,10 @@ impl Runner for ProcessRunner {
             .args(args)
             .current_dir(self.workspace_root())
             .status()
-            .map_err(|err| Error::Tool {
+            .map_err(|source| Error::Spawn {
                 program: program.to_owned(),
                 args: args.iter().map(|a| (*a).to_owned()).collect(),
-                status: err.to_string(),
+                source,
             })?;
         if status.success() {
             Ok(())
@@ -104,7 +87,7 @@ impl Runner for ProcessRunner {
             Err(Error::Tool {
                 program: program.to_owned(),
                 args: args.iter().map(|a| (*a).to_owned()).collect(),
-                status: status.to_string(),
+                status,
             })
         }
     }

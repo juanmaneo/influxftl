@@ -79,7 +79,7 @@ fn decode_err(bytes: &str) -> (String, &'static str) {
         match d.next() {
             Ok(true) => {}
             Ok(false) => panic!("no error for {bytes}"),
-            Err(e) => return (e.message(), e.java_class()),
+            Err(e) => return (e.message(), crate::error::compat::exception_class(&e)),
         }
     }
 }
@@ -127,7 +127,10 @@ fn values() {
         e.message(),
         "Unsuported value type 'class java.util.ArrayList'"
     );
-    assert_eq!(e.java_class(), "java.lang.RuntimeException");
+    assert_eq!(
+        crate::error::compat::exception_class(&e),
+        "java.lang.RuntimeException"
+    );
     for v in [
         Value::Null,
         Value::Boolean(true),
@@ -630,7 +633,10 @@ fn unwrapping() {
     );
     // Encoders.
     let e = wrapper_to_encoder(&GtsWrapper::default()).unwrap_err();
-    assert_eq!(e.java_class(), "java.lang.NullPointerException");
+    assert_eq!(
+        crate::error::compat::exception_class(&e),
+        "java.lang.NullPointerException"
+    );
     let w = GtsWrapper {
         encoded: Some(Vec::new()),
         base: Some(4),

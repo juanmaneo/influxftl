@@ -3,7 +3,9 @@
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
 use std::collections::BTreeSet;
+use std::os::unix::process::ExitStatusExt;
 use std::path::{Path, PathBuf};
+use std::process::ExitStatus;
 
 use super::coverage::{self, Axis};
 use super::functions_doc;
@@ -22,7 +24,7 @@ impl Runner for FakeRunner {
             Some(needle) if call.contains(needle.as_str()) => Err(Error::Tool {
                 program: program.to_owned(),
                 args: args.iter().map(|a| (*a).to_owned()).collect(),
-                status: "exit status: 1".to_owned(),
+                status: ExitStatus::from_raw(1 << 8),
             }),
             _ => Ok(()),
         }
@@ -130,10 +132,20 @@ fn error_display_covers_every_variant() {
     let tool = Error::Tool {
         program: "p".into(),
         args: vec!["a".into()],
-        status: "s".into(),
+        status: ExitStatus::from_raw(2 << 8),
     };
-    assert_eq!(tool.to_string(), "`p a` failed: s");
+    assert_eq!(tool.to_string(), "`p a` failed: exit status: 2");
     assert!(format!("{tool:?}").contains("Tool"));
+    let spawn = Error::Spawn {
+        program: "p".into(),
+        args: vec!["a".into(), "b".into()],
+        source: std::io::Error::new(std::io::ErrorKind::NotFound, "no such file"),
+    };
+    assert_eq!(
+        spawn.to_string(),
+        "`p a b` could not be started: no such file"
+    );
+    assert!(std::error::Error::source(&spawn).is_some());
 }
 
 #[test]

@@ -1,0 +1,4 @@
+# Tests assert with `expect("what should have happened")` and may panic on a failed assertion.
+# `unwrap()` stays denied everywhere (docs/RUST_RULES.md §2).
+allow-expect-in-tests = true
+allow-panic-in-tests = true

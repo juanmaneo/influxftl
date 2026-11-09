@@ -39,6 +39,7 @@ mod fillers_tests;
 pub mod filters;
 #[cfg(test)]
 mod filters_tests;
+pub mod finite;
 pub mod format;
 pub mod functions;
 pub mod geoxp;
@@ -61,7 +62,7 @@ pub mod unpickle;
 pub mod value;
 pub mod valueparse;
 
-pub use error::{Error, Result, ScriptError};
+pub use error::{Error, Result};
 pub use macros::{Callable, Macro, Statement};
 pub use stack::{Limits, Stack};
 pub use value::{FunctionObject, Value};
@@ -81,6 +82,8 @@ mod cmath_tests;
 mod encoding_tests;
 #[cfg(test)]
 mod error_tests;
+#[cfg(test)]
+mod finite_tests;
 #[cfg(test)]
 mod format_tests;
 #[cfg(test)]

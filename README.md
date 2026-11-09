@@ -130,7 +130,8 @@ Known, documented divergences live in [`docs/DIVERGENCES.md`](docs/DIVERGENCES.m
 ├── xtask/                     # `cargo xtask` developer automation
 ├── docs/
 │   ├── FUNCTIONS.md           # port status of every WarpLib function
-│   └── DIVERGENCES.md         # documented behavioural differences
+│   ├── DIVERGENCES.md         # documented behavioural differences
+│   └── RUST_RULES.md          # coding rules: no unsafe, typed errors, NaN policy
 ├── reference/                 # git-ignored sparse checkout of Warp 10 (Java) for porting
 ├── LICENSE                    # Apache-2.0
 └── NOTICE                     # attribution
@@ -235,6 +236,9 @@ Build arguments: `RUST_VERSION` (default from `rust-toolchain.toml`), `DEBIAN_VE
 
 ## 7. Development workflow
 
+- Code follows [`docs/RUST_RULES.md`](docs/RUST_RULES.md): no `unsafe`, no `unwrap()` in library
+  code, typed `thiserror` errors propagated with `?`, no swallowed errors, NaN/Infinity refused
+  at the edges. This is a Rust port, not a transliteration of the Java.
 - Work is committed **locally and iteratively**; nothing is pushed automatically.
   Each commit must leave `cargo xtask dev-check` green.
 - Long-running commands (`dev-check`, coverage, Kani) are best launched detached from the

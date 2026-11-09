@@ -10,7 +10,8 @@ use indexmap::IndexMap;
 
 use super::Entry;
 use super::args::{fail, pop_bool, pop_long, pop_macro, pop_string};
-use crate::error::{Error, Result, ScriptError};
+use crate::error::compat::exception_class;
+use crate::error::{Error, Result};
 use crate::geoxp::from_geoxp_point;
 use crate::gts::{NO_ELEVATION, NO_LOCATION};
 use crate::macros::Macro;
@@ -574,7 +575,7 @@ pub(crate) fn rethrow(stack: &mut Stack) -> Result<()> {
 
 /// Java class name reported by `ERROR` for each kind of error.
 fn error_type(err: &Error) -> String {
-    format!("class {}", err.java_class())
+    format!("class {}", exception_class(err))
 }
 
 /// `ERROR`: the last caught error and its causes as a list of maps.
@@ -587,12 +588,7 @@ fn error(stack: &mut Stack) -> Result<()> {
         map.insert(Value::from("message"), Value::from(err.message()));
         map.insert(Value::from("stacktrace"), Value::list(Vec::new()));
         errors.push(Value::map(map));
-        current = match err {
-            Error::Script(ScriptError {
-                cause: Some(cause), ..
-            }) => Some(cause),
-            _ => None,
-        };
+        current = err.cause();
     }
     stack.push(Value::list(errors));
     Ok(())

@@ -133,7 +133,10 @@ fn null_values_of_reducers() {
             Some(value) => assert_eq!(window.value(&compare), value),
             None => {
                 let err = window.apply(&compare).unwrap_err();
-                assert_eq!(err.java_class(), "java.lang.NullPointerException");
+                assert_eq!(
+                    crate::error::compat::exception_class(&err),
+                    "java.lang.NullPointerException"
+                );
                 assert_eq!(err.to_string(), "NullPointerException");
             }
         }

@@ -10,11 +10,25 @@ use std::process::Command;
 fn prints_the_number_of_registered_functions() {
     let output = Command::new(env!("CARGO_BIN_EXE_influxftl"))
         .output()
-        .expect("failed to run influxftl");
+        .expect("influxftl should start");
     assert!(output.status.success());
-    let stdout = String::from_utf8(output.stdout).unwrap();
+    let stdout = String::from_utf8(output.stdout).expect("the report is UTF-8");
     assert!(
         stdout.starts_with("influxftl: ") && stdout.trim_end().ends_with(" functions registered"),
         "{stdout}"
     );
+}
+
+/// `/dev/full` fails every write with `ENOSPC`: the failure is reported and the exit code is not 0.
+#[cfg(target_os = "linux")]
+#[test]
+fn a_full_stdout_fails_the_process() {
+    let full = std::fs::File::create("/dev/full").expect("/dev/full should be writable");
+    let output = Command::new(env!("CARGO_BIN_EXE_influxftl"))
+        .stdout(full)
+        .output()
+        .expect("influxftl should start");
+    assert!(!output.status.success());
+    let stderr = String::from_utf8(output.stderr).expect("the report is UTF-8");
+    assert!(stderr.contains("writing to stdout"), "{stderr}");
 }

@@ -79,7 +79,7 @@ fn replacements() {
     assert!(message.contains("(No group 2)"), "{message}");
     assert!(!message.contains("invalid parameters"), "{message}");
     assert_eq!(
-        err.root_cause().java_class(),
+        crate::error::compat::exception_class(err.root_cause()),
         "java.lang.IndexOutOfBoundsException"
     );
     let err = fail(&mapped("'b' '$x' mapper.regexp.replace 0 0 0"));
@@ -88,7 +88,7 @@ fn replacements() {
         "{err}"
     );
     assert_eq!(
-        err.root_cause().java_class(),
+        crate::error::compat::exception_class(err.root_cause()),
         "java.lang.IllegalArgumentException"
     );
     assert_fails(

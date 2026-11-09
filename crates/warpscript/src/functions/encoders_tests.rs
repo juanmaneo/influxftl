@@ -148,7 +148,7 @@ fn unwrap_errors() {
         assert!(message.contains("Invalid compressed content."), "{message}");
         assert!(!message.contains("failed to unwrap"), "{message}");
         assert_eq!(
-            fail(script).root_cause().java_class(),
+            crate::error::compat::exception_class(fail(script).root_cause()),
             "java.lang.RuntimeException"
         );
     }

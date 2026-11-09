@@ -223,9 +223,7 @@ fn builders() {
         assert_fails(script, message);
     }
     assert_eq!(
-        fail("10 -1 mapper.kernel.uniform")
-            .root_cause()
-            .java_class(),
+        crate::error::compat::exception_class(fail("10 -1 mapper.kernel.uniform").root_cause()),
         "java.lang.NegativeArraySizeException"
     );
     // The width is an `int`.

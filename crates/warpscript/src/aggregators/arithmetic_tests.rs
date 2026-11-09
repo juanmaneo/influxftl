@@ -93,7 +93,10 @@ fn mod_min_max() {
     let err = Window::of(&[Value::Long(7)])
         .apply(&arithmetic(Op::Mod, Num::Long(0)))
         .unwrap_err();
-    assert_eq!(err.java_class(), "java.lang.ArithmeticException");
+    assert_eq!(
+        crate::error::compat::exception_class(&err),
+        "java.lang.ArithmeticException"
+    );
     let message = fail(&map_values("7", "0 mapper.mod")).to_string();
     assert!(message.contains("(/ by zero)"), "{message}");
     assert!(!message.contains("invalid parameters"), "{message}");

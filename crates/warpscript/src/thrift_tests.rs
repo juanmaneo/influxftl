@@ -26,7 +26,7 @@ fn to_hex(bytes: &[u8]) -> String {
 
 fn err(bytes: &[u8]) -> (String, &'static str) {
     let e = deserialize_wrapper(bytes).unwrap_err();
-    (e.message(), e.java_class())
+    (e.message(), crate::error::compat::exception_class(&e))
 }
 
 const EOF1: &str = "Cannot read. Remote side has closed. Tried to read 1 bytes, but only got 0 bytes. \

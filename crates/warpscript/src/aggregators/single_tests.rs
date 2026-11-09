@@ -433,7 +433,10 @@ fn date_time_builders() {
         );
     }
     let err = TimeZone::for_offset_millis(i32::MIN).unwrap_err();
-    assert_eq!(err.java_class(), "java.lang.IllegalArgumentException");
+    assert_eq!(
+        crate::error::compat::exception_class(&err),
+        "java.lang.IllegalArgumentException"
+    );
     assert_eq!(err.message(), "Millis out of range: -2147483648");
     assert_top("NaN mapper.year SNAPSHOT", "'UTC' mapper.year ");
     assert_fails(

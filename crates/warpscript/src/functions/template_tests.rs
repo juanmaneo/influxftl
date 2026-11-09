@@ -6,7 +6,7 @@
 //! Warp 10's `TEMPLATE` configuration: every expected output below was produced by Java.
 
 use super::template::render_template;
-use crate::error::{Error, ScriptError};
+use crate::error::Error;
 use crate::tests::{assert_fails, fail, top};
 use crate::value::Value;
 
@@ -46,9 +46,7 @@ fn error(template: &str) -> String {
     let mut err = fail(&format!("'{}' {BASE} TEMPLATE", encode(template)));
     for _ in 0..2 {
         err = match err {
-            Error::Script(ScriptError {
-                cause: Some(cause), ..
-            }) => *cause,
+            Error::Context { source, .. } => *source,
             other => panic!("unexpected error {other}"),
         };
     }
