@@ -9,6 +9,7 @@ use std::cmp::Ordering;
 use super::{
     Aggregated, Aggregator, AggregatorArgs, Named, Roles, double_value, latest, long_value,
 };
+use crate::error::aggregator::AggregatorError;
 use crate::error::{Error, Result};
 use crate::functions::Entry;
 use crate::functions::functional::java_double_compare;
@@ -480,10 +481,7 @@ impl Extreme {
         }
         // Warp 10 reads the arrays at index -1 when no value was retained.
         let Some((idx, extremum)) = best else {
-            return Err(Error::new(format!(
-                "Index -1 out of bounds for length {}",
-                args.ticks.len()
-            )));
+            return Err(AggregatorError::NothingRetained(args.ticks.len()).into());
         };
         let value = if has_nulls && !self.ignore_nulls {
             Value::Null

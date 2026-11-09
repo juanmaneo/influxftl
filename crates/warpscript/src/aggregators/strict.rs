@@ -7,6 +7,7 @@
 use std::rc::Rc;
 
 use super::{Aggregated, Aggregator, AggregatorArgs, Num, Roles};
+use crate::error::aggregator::AggregatorError;
 use crate::error::{Error, Result};
 use crate::functions::Entry;
 use crate::gts::{NO_ELEVATION, NO_LOCATION};
@@ -144,10 +145,7 @@ impl StackObject for StrictMacro {
         let top = stack.pop()?;
         let Value::Gts(gts) = &top else {
             stack.push(top);
-            return Err(Error::new(format!(
-                "{}'s resulting function can only be applied on a GTS.",
-                self.name
-            )));
+            return Err(AggregatorError::NotASeries(self.name.to_string()).into());
         };
         let (size, timespan) = {
             let gts = gts.borrow();

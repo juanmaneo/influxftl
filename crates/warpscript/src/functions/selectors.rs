@@ -6,6 +6,7 @@
 //! `ATTRSKIP` flags of the metadata updates.
 
 use super::Entry;
+use crate::error::series::SeriesError;
 use crate::error::{Error, Result};
 use crate::selector::{MetadataSelectorMatcher, build_selector, parse_selector};
 use crate::stack::Stack;
@@ -102,7 +103,7 @@ fn parseselector(stack: &mut Stack) -> Result<()> {
     };
     let wrap = |cause: Error| Error::with_cause(format!("{NAME} could not parse input."), cause);
     let (class, labels) = match parse_selector(&selector) {
-        None => return Err(wrap(Error::new(" invalid syntax for selector."))),
+        None => return Err(wrap(SeriesError::InvalidSelectorSpaced.into())),
         // The `IllegalArgumentException` of a bad percent-encoding is not wrapped.
         Some(Err(err)) if err.is_runtime() => return Err(err),
         Some(Err(err)) => return Err(wrap(err)),

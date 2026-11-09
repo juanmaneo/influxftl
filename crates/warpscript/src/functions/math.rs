@@ -9,6 +9,7 @@ use super::Entry;
 use super::args::fail;
 use super::numerical::{self, Binary, Unary};
 use crate::cmath;
+use crate::error::platform::PlatformError;
 use crate::error::{Error, Result};
 use crate::jmath;
 use crate::jrandom::JavaRandom;
@@ -123,9 +124,7 @@ fn isnull(stack: &mut Stack) -> Result<()> {
 
 /// The error raised when the operating system cannot provide entropy.
 pub(crate) fn entropy_error(err: getrandom::Error) -> Error {
-    Error::new(format!(
-        "Unable to obtain random data from the operating system ({err})."
-    ))
+    PlatformError::Entropy(err).into()
 }
 
 /// Push a uniformly distributed double in `[0, 1)` built from the top 53 bits of `entropy`,

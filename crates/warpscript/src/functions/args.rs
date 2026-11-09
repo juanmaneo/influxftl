@@ -96,13 +96,14 @@ pub fn compute_and_check_index(index: i32, size: i32) -> Result<i32> {
     if index < 0 {
         index = index.wrapping_add(size);
     } else if index >= size {
-        return Err(Error::new(format!("Index out of bound, {index} >= {size}")));
+        return Err(StackError::IndexAboveStack { index, size }.into());
     }
     if index < 0 {
-        return Err(Error::new(format!(
-            "Index out of bound, {} < -{size}",
-            index.wrapping_sub(size)
-        )));
+        return Err(StackError::IndexBelowStack {
+            shifted: index.wrapping_sub(size),
+            size,
+        }
+        .into());
     }
     Ok(index)
 }
@@ -112,7 +113,7 @@ pub fn compute_and_check_index(index: i32, size: i32) -> Result<i32> {
 pub fn getn(stack: &mut Stack) -> Result<usize> {
     let top = stack.pop()?;
     let Some(n) = int_value(&top) else {
-        return Err(Error::new("Unexpected type, expecting a numerical value."));
+        return Err(StackError::NotNumeric.into());
     };
     if n < 0 || stack.depth() < n as usize {
         return Err(StackError::IndexOutOfBound.into());

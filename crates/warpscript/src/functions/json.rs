@@ -28,6 +28,8 @@ use super::Entry;
 use super::args::{fail_with_cause, pop_string};
 use super::misc::ATTRIBUTE_JSON_STRICT;
 use crate::encoder::GtsEncoder;
+use crate::error::fault::ResourceError;
+use crate::error::text::TextError;
 use crate::error::{Error, Result};
 use crate::format::java_double_to_string;
 use crate::geoxp;
@@ -406,9 +408,11 @@ pub fn from_json(input: &str) -> Result<Value> {
     };
     parser.skip_ws()?;
     let Some(first) = parser.peek_char() else {
-        return Err(Error::new(format!(
-            "No content to map due to end-of-input\n at {ROOT_START}"
-        )));
+        return Err(TextError::JsonLocated {
+            message: "No content to map due to end-of-input".to_owned(),
+            location: ROOT_START.to_owned(),
+        }
+        .into());
     };
     let value = parser.parse_value(first, 0, true)?;
     parser.skip_ws()?;
@@ -500,7 +504,11 @@ impl Parser<'_> {
 
     /// An error located at the byte offset `pos`.
     fn error(&self, pos: usize, message: impl AsRef<str>) -> Error {
-        Error::new(format!("{}\n at {}", message.as_ref(), self.location(pos)))
+        TextError::JsonLocated {
+            message: message.as_ref().to_owned(),
+            location: self.location(pos),
+        }
+        .into()
     }
 
     /// `_reportUnexpectedChar`: consume `c` (the character at the current position) and
@@ -543,10 +551,11 @@ impl Parser<'_> {
 
     /// `StreamReadConstraints`: the nesting depth limit.
     fn too_deep() -> Error {
-        Error::new(format!(
-            "Document nesting depth ({}) exceeds the maximum allowed ({MAX_NESTING_DEPTH}, from `StreamReadConstraints.getMaxNestingDepth()`)",
-            MAX_NESTING_DEPTH + 1
-        ))
+        TextError::JsonNestingDepth {
+            depth: MAX_NESTING_DEPTH + 1,
+            max: MAX_NESTING_DEPTH,
+        }
+        .into()
     }
 
     /// `_reportInvalidToken`: the token starts at `start`, `matched_end` is where it stopped
@@ -842,12 +851,15 @@ impl Parser<'_> {
                     // inside a string is just the character after which the error is found.
                     let (line, column) = self.line_column(self.pos);
                     self.pos += 1;
-                    return Err(Error::new(format!(
-                        "Illegal unquoted character ({}): has to be escaped using backslash to be included in {}\n at [line: {line}, column: {}]",
-                        char_desc(char::from(b)),
-                        if name { "name" } else { "string value" },
-                        column + 1
-                    )));
+                    return Err(TextError::JsonLocated {
+ message: format!(
+ "Illegal unquoted character ({}): has to be escaped using backslash to be included in {}",
+ char_desc(char::from(b)),
+ if name { "name" } else { "string value" }
+ ),
+ location: format!("[line: {line}, column: {}]", column + 1),
+ }
+ .into());
                 }
                 _ => {
                     let run_start = self.pos;
@@ -1123,16 +1135,13 @@ fn tojson(stack: &mut Stack) -> Result<()> {
             "failed with to convert to JSON.",
             Error::with_cause(
                 "Resulting JSON is too big.",
-                Error::new(format!(
-                    "Cannot write, maximum number of characters written :{}",
-                    options.max_size
-                )),
+                TextError::JsonWriteLimit(options.max_size).into(),
             ),
         )),
         Err(JsonError::TooDeep) => Err(fail_with_cause(
             "->JSON",
             "failed with to convert to JSON, the structure is too deep or it references itself.",
-            Error::new("StackOverflowError"),
+            ResourceError::StackOverflow.into(),
         )),
     }
 }

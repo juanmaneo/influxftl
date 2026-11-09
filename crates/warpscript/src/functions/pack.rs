@@ -15,7 +15,8 @@
 
 use super::Entry;
 use super::args::{fail, pop_list, pop_string};
-use crate::error::{Error, Result};
+use crate::error::Result;
+use crate::error::fault::{BoundsError, IllegalArgumentError};
 use crate::stack::Stack;
 use crate::value::Value;
 
@@ -147,10 +148,11 @@ fn parse_pack_format(name: &str, format: &str) -> Result<(Vec<PackField>, i32)> 
 /// The bits of the `vidx`-th value of `PACK` for `field`, before endianness handling.
 fn pack_value(values: &[Value], vidx: usize, kind: PackKind) -> Result<u64> {
     let Some(value) = values.get(vidx) else {
-        return Err(Error::new(format!(
-            "Index {vidx} out of bounds for length {}",
-            values.len()
-        )));
+        return Err(BoundsError::ArrayIndex {
+            index: vidx as i64,
+            length: values.len(),
+        }
+        .into());
     };
     let number = match value {
         Value::Boolean(b) => Value::Long(i64::from(*b)),
@@ -180,7 +182,7 @@ fn pack(stack: &mut Stack) -> Result<()> {
     let (fields, total) = parse_pack_format(NAME, &format)?;
     let capacity = total.wrapping_add(7) / 8;
     if capacity < 0 {
-        return Err(Error::new(format!("Negative initial size: {capacity}")));
+        return Err(IllegalArgumentError::NegativeInitialSize(i64::from(capacity)).into());
     }
     let mut out = Vec::with_capacity(capacity as usize);
     let mut nbits = 0usize;
@@ -229,7 +231,7 @@ fn pack(stack: &mut Stack) -> Result<()> {
 /// indices fail like `BitSet.get`.
 fn bit_at(data: &[u8], index: i32) -> Result<u64> {
     if index < 0 {
-        return Err(Error::new(format!("bitIndex < 0: {index}")));
+        return Err(BoundsError::NegativeBitIndex(i64::from(index)).into());
     }
     let byte = data.get((index / 8) as usize).copied().unwrap_or_default();
     Ok(u64::from((byte >> (7 - index % 8)) & 1))

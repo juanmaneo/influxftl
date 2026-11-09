@@ -199,7 +199,7 @@ pub(crate) mod test_objects {
             &self,
             _args: &crate::aggregators::AggregatorArgs,
         ) -> crate::error::Result<crate::aggregators::Aggregated> {
-            Err(crate::error::Error::new("test.failing failed."))
+            Err(crate::error::Error::usage("test.failing", "failed."))
         }
     }
 

@@ -34,6 +34,7 @@ use indexmap::{IndexMap, IndexSet};
 use super::Entry;
 use super::args::{compute_and_check_index, fail, fail_with_cause, pop_list, pop_long, pop_map};
 use super::gts_reduce::{java_hash_order, java_string_hash, table_size_for};
+use crate::error::collections::CollectionError;
 use crate::error::fault::BoundsError;
 use crate::error::{Error, Result};
 use crate::gts::{GeoTimeSerie, Gts};
@@ -178,7 +179,7 @@ fn vectorto(stack: &mut Stack) -> Result<()> {
 /// `MAP->`: push the key and value of every entry of a map, then twice the number of entries.
 fn mapto(stack: &mut Stack) -> Result<()> {
     let Value::Map(map) = stack.pop()? else {
-        return Err(Error::new("Invalid type, expected a map."));
+        return Err(CollectionError::MapExpected.into());
     };
     let entries: Vec<(Value, Value)> = map
         .borrow()
@@ -383,7 +384,7 @@ fn get_element(key: &Value, collection: &Value) -> Result<Value> {
     match collection {
         Value::List(list) => {
             let Value::Long(k) = key else {
-                return Err(Error::new("Getting on LIST requires a LONG."));
+                return Err(CollectionError::ListKeyNotLong.into());
             };
             let items = list.borrow();
             let idx = compute_and_check_index(*k as i32, items.len() as i32)?;
@@ -392,7 +393,7 @@ fn get_element(key: &Value, collection: &Value) -> Result<Value> {
         Value::Map(map) => Ok(map.borrow().get(key).cloned().unwrap_or(Value::Null)),
         Value::String(s) => {
             let Value::Long(k) = key else {
-                return Err(Error::new("Getting on STRING requires a LONG."));
+                return Err(CollectionError::StringKeyNotLong.into());
             };
             let units: Vec<u16> = s.encode_utf16().collect();
             let idx = compute_and_check_index(*k as i32, units.len() as i32)?;
@@ -401,13 +402,13 @@ fn get_element(key: &Value, collection: &Value) -> Result<Value> {
         }
         Value::Bytes(bytes) => {
             let Value::Long(k) = key else {
-                return Err(Error::new("Getting on BYTES requires a LONG."));
+                return Err(CollectionError::BytesKeyNotLong.into());
             };
             let idx = compute_and_check_index(*k as i32, bytes.len() as i32)?;
             let byte = bytes.get(idx as usize).copied().unwrap_or_default();
             Ok(Value::Long(i64::from(byte)))
         }
-        _ => Err(Error::new("Invalid OBJECT to GET on.")),
+        _ => Err(CollectionError::InvalidGetTarget.into()),
     }
 }
 
@@ -442,9 +443,7 @@ pub(super) fn nested_get(root: &List, indices: &[i64]) -> Result<Value> {
     for &index in indices {
         let next = {
             let Value::List(list) = &current else {
-                return Err(Error::new(
-                    "Tried to get an element at a nested path that does not exist in the input list.",
-                ));
+                return Err(CollectionError::NestedPathMissing.into());
             };
             let items = list.borrow();
             let idx = compute_and_check_index(index as i32, items.len() as i32)?;

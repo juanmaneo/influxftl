@@ -9,6 +9,7 @@ use std::rc::Rc;
 use super::Entry;
 use super::args::{fail, fail_with_cause};
 use super::runtime::macro_vars;
+use crate::error::fault::BoundsError;
 use crate::error::{Error, Result};
 use crate::macros::{Callable, Macro, Statement};
 use crate::stack::Stack;
@@ -150,7 +151,7 @@ fn register_number(value: i64) -> i64 {
 /// `BitSet.set` on the registers in use, which rejects negative indexes.
 fn mark_used(inuse: &mut BTreeSet<i64>, register: i64) -> Result<()> {
     if register < 0 {
-        return Err(Error::new(format!("bitIndex < 0: {register}")));
+        return Err(BoundsError::NegativeBitIndex(register).into());
     }
     inuse.insert(register);
     Ok(())

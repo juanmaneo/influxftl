@@ -10,14 +10,15 @@
 
 use crate::encoder::{DEFAULT_COMP_RATIO_THRESHOLD, encoder_to_wrapper, gts_to_wrapper};
 use crate::encoding::opb64_encode;
-use crate::error::{Error, Result};
+use crate::error::Result;
+use crate::error::platform::PlatformError;
 use crate::format::{java_double_to_string, snapshot_encode_readable, url_encode};
 use crate::macros::{Macro, Statement};
 use crate::thrift::serialize_wrapper;
 use crate::value::Value;
 
 /// Maximum nesting of elements before giving up (`SNAPSHOT.MAX_RECURSION_LEVEL`).
-const MAX_RECURSION_LEVEL: usize = 16;
+pub(crate) const MAX_RECURSION_LEVEL: usize = 16;
 
 /// WarpScript source that recreates `value`, followed by a space. Structures nested too deep
 /// are replaced by the comment `Macro.snapshot` emits in that case.
@@ -80,9 +81,7 @@ fn macro_snapshot_at(m: &Macro, hide_secure: bool, depth: usize) -> String {
 
 fn append(out: &mut String, value: &Value, depth: usize, readable: bool) -> Result<()> {
     if depth > MAX_RECURSION_LEVEL {
-        return Err(Error::new(format!(
-            "Recursive data structures exceeded {MAX_RECURSION_LEVEL} levels."
-        )));
+        return Err(PlatformError::RecursiveStructure.into());
     }
     match value {
         Value::Null => out.push_str("NULL "),

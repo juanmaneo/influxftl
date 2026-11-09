@@ -226,7 +226,7 @@ fn matrix_arithmetic(name: &str, op1: &Value, op2: &Value) -> Option<Result<Valu
 /// Java `long` division: `ArithmeticException` on a zero divisor, wrapping otherwise.
 fn long_div(a: i64, b: i64) -> Result<i64> {
     if b == 0 {
-        Err(Error::new("/ by zero"))
+        Err(Error::division_by_zero())
     } else {
         Ok(a.wrapping_div(b))
     }
@@ -280,7 +280,7 @@ fn modulo(stack: &mut Stack) -> Result<()> {
             stack.push(bd_value(remainder));
             Ok(())
         }
-        (Value::Long(_), Value::Long(0)) => Err(Error::new("/ by zero")),
+        (Value::Long(_), Value::Long(0)) => Err(Error::division_by_zero()),
         (a, b) => {
             stack.push(numeric(a, b, i64::wrapping_rem, |x, y| x % y));
             Ok(())
@@ -820,7 +820,7 @@ fn tolong(stack: &mut Stack) -> Result<()> {
 /// Java `Long.decode`: optional sign, then `0x`/`0X`/`#` for hex, leading `0` for octal, else
 /// decimal.
 fn long_decode(s: &str) -> Result<i64> {
-    let error = || Error::new(format!("For input string: \"{s}\""));
+    let error = || NumberFormatError::InvalidInput(s.to_owned());
     let (negative, body) = match s.strip_prefix('-') {
         Some(rest) => (true, rest),
         None => (false, s.strip_prefix('+').unwrap_or(s)),
@@ -836,7 +836,7 @@ fn long_decode(s: &str) -> Result<i64> {
             (10, body)
         };
     if digits.is_empty() {
-        return Err(error());
+        return Err(error().into());
     }
     let magnitude = i64::from_str_radix(digits, radix).map_err(|_| error())?;
     Ok(if negative { -magnitude } else { magnitude })

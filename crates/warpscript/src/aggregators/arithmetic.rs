@@ -7,6 +7,7 @@
 
 use super::single::{empty, single_value};
 use super::{Aggregated, Aggregator, AggregatorArgs, Named, Num, Roles};
+use crate::error::aggregator::AggregatorError;
 use crate::error::{Error, Result};
 use crate::format::java_double_to_string;
 use crate::functions::Entry;
@@ -175,7 +176,7 @@ impl Aggregator for Arithmetic {
 /// being a `LONG` or a `DOUBLE`.
 fn operand_builder(stack: &mut Stack, name: &'static str, op: Op) -> Result<()> {
     let Some(operand) = Num::of(&stack.pop()?) else {
-        return Err(Error::new(format!("Invalid parameter for {name}")));
+        return Err(AggregatorError::InvalidParameter(name.to_string()).into());
     };
     let operand = match op {
         Op::Pow | Op::Exp => Num::Double(operand.as_f64()),
@@ -232,7 +233,7 @@ fn replace_builder(stack: &mut Stack, name: &'static str) -> Result<()> {
         value,
         Value::Long(_) | Value::Double(_) | Value::Boolean(_) | Value::String(_)
     ) {
-        return Err(Error::new("Invalid value type."));
+        return Err(AggregatorError::InvalidValueType.into());
     }
     stack.push(Value::Function(Named::object(name, Replace { value })));
     Ok(())
@@ -346,9 +347,7 @@ impl Aggregator for ParseDouble {
 /// locale), and the languages without data use the root symbols.
 fn parsedouble_builder(stack: &mut Stack, name: &'static str) -> Result<()> {
     let Value::String(tag) = stack.pop()? else {
-        return Err(Error::new(format!(
-            "Invalid parameter type for {name}, expects a language tag (a string) on top of the stack."
-        )));
+        return Err(AggregatorError::LanguageTagExpected(name.to_string()).into());
     };
     let locale = if tag.contains('_') {
         Locale::ROOT

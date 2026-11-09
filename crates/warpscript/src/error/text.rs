@@ -75,6 +75,44 @@ pub enum TextError {
     /// A base64 text the decoder refuses.
     #[error(transparent)]
     Base64(#[from] base64::DecodeError),
+    /// A JSON text that cannot be parsed: Jackson's message, then where it stopped.
+    #[error("{message}\n at {location}")]
+    JsonLocated {
+        /// The message.
+        message: String,
+        /// The location in the text.
+        location: String,
+    },
+    /// A JSON text nested deeper than the limit.
+    #[error(
+        "Document nesting depth ({depth}) exceeds the maximum allowed ({max}, from `StreamReadConstraints.getMaxNestingDepth()`)"
+    )]
+    JsonNestingDepth {
+        /// The depth reached.
+        depth: usize,
+        /// The limit.
+        max: usize,
+    },
+    /// A JSON text longer than the limit.
+    #[error("Cannot write, maximum number of characters written :{0}")]
+    JsonWriteLimit(i64),
+    /// A template error with the line of the template it was found at.
+    #[error("{message} @[:{line}]")]
+    MustacheAt {
+        /// The message.
+        message: String,
+        /// The line.
+        line: u32,
+    },
+    /// A template that includes another one, which is not allowed.
+    #[error("Template inclusion is disabled.")]
+    InclusionDisabled,
+    /// A code in an `{{<extend}}` section that is not allowed there.
+    #[error("Illegal code in extend section: com.github.mustachejava.codes.{0}")]
+    IllegalExtendCode(&'static str),
+    /// A template substitution of a value that is not a string.
+    #[error("Invalid type for template substitution.")]
+    TemplateSubstitutionType,
     /// A character set that does not exist.
     #[error("{0}")]
     UnsupportedCharset(String),

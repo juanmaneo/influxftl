@@ -21,7 +21,9 @@ use super::args::{fail, fail_with_cause, pop_map};
 use super::collections::siphash24;
 use super::math::entropy_error;
 use crate::argon2;
-use crate::error::{Error, Result};
+use crate::error::Result;
+use crate::error::crypto::CryptoError;
+use crate::error::fault::{BoundsError, NumberFormatError};
 use crate::stack::Stack;
 use crate::value::Value;
 
@@ -249,7 +251,11 @@ const B58_ALPHABET: &[u8; 58] = b"123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmn
 /// base 58. Empty input fails like Java (`data[0]` is out of bounds).
 pub(crate) fn b58_encode(data: &[u8]) -> Result<String> {
     if data.is_empty() {
-        return Err(Error::new("Index 0 out of bounds for length 0"));
+        return Err(BoundsError::ArrayIndex {
+            index: 0,
+            length: 0,
+        }
+        .into());
     }
     let zeros = data.iter().take_while(|&&b| b == 0).count();
     // Repeated division of the big-endian number by 58 (`BigInteger.divide`).
@@ -279,9 +285,11 @@ fn b58_digit(unit: u16) -> Result<Option<u8>> {
         return Ok(None);
     }
     if unit >= 123 {
-        return Err(Error::new(format!(
-            "Index {unit} out of bounds for length 123"
-        )));
+        return Err(BoundsError::ArrayIndex {
+            index: i64::from(unit),
+            length: 123,
+        }
+        .into());
     }
     Ok(B58_ALPHABET
         .iter()
@@ -297,10 +305,11 @@ pub(crate) fn b58_decode(encoded: &str) -> Result<Vec<u8>> {
     let mut number: Vec<u8> = Vec::new();
     for (i, &unit) in units.iter().enumerate().skip(zeros) {
         let Some(digit) = b58_digit(unit)? else {
-            return Err(Error::new(format!(
-                "Invalid input '{}' at position {i}.",
-                String::from_utf16_lossy(&[unit])
-            )));
+            return Err(CryptoError::InvalidBase58Character {
+                character: String::from_utf16_lossy(&[unit]),
+                position: i,
+            }
+            .into());
         };
         let mut carry = u32::from(digit);
         for byte in number.iter_mut().rev() {
@@ -602,7 +611,11 @@ fn aesunwrap(stack: &mut Stack) -> Result<()> {
     };
     // `Arrays.copyOfRange(unwrapped, 8, unwrapped.length)` fails when there is no nonce.
     if unwrapped.len() < NONCE_LEN {
-        return Err(Error::new(format!("{NONCE_LEN} > {}", unwrapped.len())));
+        return Err(CryptoError::UnwrappedTooShort {
+            nonce: NONCE_LEN,
+            unwrapped: unwrapped.len(),
+        }
+        .into());
     }
     stack.push(Value::bytes(&unwrapped[NONCE_LEN..]));
     Ok(())
@@ -636,7 +649,7 @@ fn argon2_check_capability(
     };
     let limit: i64 = limit
         .parse()
-        .map_err(|_| Error::new(format!("For input string: \"{limit}\"")))?;
+        .map_err(|_| NumberFormatError::InvalidInput(limit.to_string()))?;
     if i64::from(value) > limit {
         return Err(fail(name, excess));
     }

@@ -4,7 +4,7 @@
 //! Warp 10 compatibility of the errors: the Java exception class a script reads in the `type`
 //! of `ERROR`. Nothing else in the crate names a Java class of an error.
 
-use super::fault::BoundsError;
+use super::fault::{BoundsError, ResourceError};
 use super::math::MathError;
 use super::{Class, Error};
 use crate::encoder::EncoderError;
@@ -29,6 +29,11 @@ pub fn exception_class(err: &Error) -> &'static str {
         | Error::Stack(_)
         | Error::Time(_)
         | Error::Series(_)
+        | Error::Aggregator(_)
+        | Error::Collection(_)
+        | Error::Crypto(_)
+        | Error::Geo(_)
+        | Error::Platform(_)
         | Error::Text(_)
         | Error::Format(_)
         | Error::Wrapped { .. }
@@ -41,7 +46,13 @@ pub fn exception_class(err: &Error) -> &'static str {
         Error::NumberFormat(_) => "java.lang.NumberFormatException",
         Error::Bounds(err) => bounds_class(err),
         Error::IllegalArgument(_) => "java.lang.IllegalArgumentException",
-        Error::ResourceExhausted(_) => "java.lang.OutOfMemoryError",
+        Error::ResourceExhausted(err) => match err {
+            ResourceError::StackOverflow => "java.lang.StackOverflowError",
+            ResourceError::ArrayTooLong | ResourceError::OutOfMemory => {
+                "java.lang.OutOfMemoryError"
+            }
+        },
+        Error::Io(_) => "java.io.IOException",
         Error::Immutable => "java.lang.UnsupportedOperationException",
         Error::Parse { .. } => "java.text.ParseException",
         Error::Return => "io.warp10.script.WarpScriptReturnException",
@@ -178,9 +189,9 @@ fn bounds_class(err: &BoundsError) -> &'static str {
     match err {
         BoundsError::NegativeSize(_) => "java.lang.NegativeArraySizeException",
         BoundsError::ArrayIndex { .. } => "java.lang.ArrayIndexOutOfBoundsException",
-        BoundsError::ListIndex { .. } | BoundsError::ListEnd(_) => {
-            "java.lang.IndexOutOfBoundsException"
-        }
+        BoundsError::ListIndex { .. }
+        | BoundsError::ListEnd(_)
+        | BoundsError::NegativeBitIndex(_) => "java.lang.IndexOutOfBoundsException",
         BoundsError::StringIndex { .. }
         | BoundsError::StringSlice { .. }
         | BoundsError::StringRange { .. } => "java.lang.StringIndexOutOfBoundsException",

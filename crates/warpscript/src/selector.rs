@@ -10,6 +10,7 @@
 
 use indexmap::IndexMap;
 
+use crate::error::series::SeriesError;
 use crate::error::{Error, Result};
 use crate::format::{url_decode, url_encode};
 use crate::functions::strings::CompiledPattern;
@@ -178,7 +179,7 @@ pub struct MetadataSelectorMatcher {
 impl MetadataSelectorMatcher {
     /// Compile a selector (`^([^{]+)\{([^}]*)\}(\{([^}]*)\})?$`).
     pub fn new(selector: &str) -> Result<MetadataSelectorMatcher> {
-        let invalid = || Error::new("invalid syntax for selector.");
+        let invalid = || SeriesError::InvalidSelector;
         let (class, rest) = selector.split_once('{').ok_or_else(invalid)?;
         let (labels, rest) = rest.split_once('}').ok_or_else(invalid)?;
         let attributes = match rest {
@@ -193,7 +194,7 @@ impl MetadataSelectorMatcher {
             }
         };
         if class.is_empty() {
-            return Err(invalid());
+            return Err(invalid().into());
         }
         // `=` and `~` (an empty regular expression) both select the empty class name.
         let class = url_decode(class)?;

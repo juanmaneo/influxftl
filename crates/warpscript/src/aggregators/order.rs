@@ -7,6 +7,7 @@
 use std::cmp::Ordering;
 
 use super::{Aggregated, Aggregator, AggregatorArgs, Named, Num, Roles, double_value};
+use crate::error::aggregator::AggregatorError;
 use crate::error::{Class, Error, Result};
 use crate::format::java_double_to_string;
 use crate::functions::Entry;
@@ -296,7 +297,7 @@ fn non_numeric_median<T: PartialEq>(sorted: &[T], kind: ValueKind) -> Error {
     if sorted[0] == sorted[n - 1] || n % 2 == 1 {
         double_cast(kind)
     } else {
-        Error::new("Unable to compute median on an even number of non numeric values.")
+        AggregatorError::EvenNonNumericMedian.into()
     }
 }
 
@@ -603,13 +604,11 @@ fn percentile_builder(stack: &mut Stack, name: &'static str, forbid_nulls: bool)
         top = stack.pop()?;
     }
     let Some(percentile) = top.as_f64() else {
-        return Err(Error::new(format!("Invalid parameter for {name}")));
+        return Err(AggregatorError::InvalidParameter(name.to_string()).into());
     };
     // A NaN passes (and stays NaN).
     if percentile < 0.0 || percentile > 100.0 {
-        return Err(Error::new(format!(
-            "Invalid percentile for {name}, MUST be between 0 and 100."
-        )));
+        return Err(AggregatorError::InvalidPercentile(name.to_string()).into());
     }
     stack.push(Value::Function(Named::object(
         name,

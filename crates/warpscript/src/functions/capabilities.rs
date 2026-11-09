@@ -14,6 +14,7 @@ use indexmap::IndexMap;
 use super::Entry;
 use super::args::fail;
 use crate::error::Result;
+use crate::error::platform::PlatformError;
 use crate::stack::{CAPABILITIES_PREFIX, Stack};
 use crate::value::Value;
 
@@ -111,7 +112,7 @@ fn capadd(stack: &mut Stack) -> Result<()> {
     let attributes = stack
         .token_resolver()
         .and_then(|resolver| resolver.token_attributes(&token))
-        .ok_or_else(|| crate::error::Error::new("invalid token."))?;
+        .ok_or(PlatformError::InvalidCapabilityToken)?;
     for (key, value) in attributes {
         if let Some(name) = key.strip_prefix(CAPABILITIES_PREFIX) {
             stack

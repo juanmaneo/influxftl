@@ -22,6 +22,31 @@ pub enum StackError {
     /// An access to more elements than the stack holds.
     #[error("Index out of bound.")]
     IndexOutOfBound,
+    /// A stack index at or above the depth.
+    #[error("Index out of bound, {index} >= {size}")]
+    IndexAboveStack {
+        /// The index.
+        index: i32,
+        /// The depth of the stack.
+        size: i32,
+    },
+    /// A negative stack index further below than the depth.
+    #[error("Index out of bound, {shifted} < -{size}")]
+    IndexBelowStack {
+        /// The index shifted by the depth.
+        shifted: i32,
+        /// The depth of the stack.
+        size: i32,
+    },
+    /// A count or index that is not a number.
+    #[error("Unexpected type, expecting a numerical value.")]
+    NotNumeric,
+    /// A value that is not a saved context.
+    #[error("Invalid stack context.")]
+    InvalidContext,
+    /// `LOAD` / `STORE` / `CSTORE` with a symbol that is not written out.
+    #[error("Encountered a LOAD/STORE or CSTORE operation with a non explicit symbol name.")]
+    NonExplicitSymbol,
     /// An access to a level the stack does not have.
     #[error("Invalid level.")]
     InvalidLevel,

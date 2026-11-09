@@ -9,6 +9,7 @@
 use std::cmp::Ordering;
 
 use super::{Aggregated, Aggregator, AggregatorArgs, Named, Num, Roles};
+use crate::error::aggregator::AggregatorError;
 use crate::error::{Error, Result};
 use crate::functions::Entry;
 use crate::gts::{NO_ELEVATION, NO_LOCATION};
@@ -120,7 +121,7 @@ fn combine(acc: Value, value: &Value, multiply: bool) -> Result<Value> {
                 Value::Double(_) => "doubles",
                 _ => "booleans",
             };
-            return Err(Error::new(format!("Cannot {verb} strings and {kind}.")));
+            return Err(AggregatorError::StringMix { verb, kind }.into());
         }
         (Value::Long(a), Value::Long(b)) => Value::Long(long(a, *b)),
         (Value::Long(a), Value::Double(b)) => Value::Double(double(a as f64, *b)),
@@ -211,9 +212,7 @@ impl Op {
             Kind::Mask => {
                 // The ticks hold the indices of the parameter collections.
                 if args.ticks.len() != 2 || args.ticks[0] == args.ticks[1] {
-                    return Err(Error::new(
-                        "op.mask can only be applied to pairs of Geo Time Series, the first one being boolean.",
-                    ));
+                    return Err(AggregatorError::MaskOperands.into());
                 }
                 let is_true = values[0] == Value::Boolean(true);
                 // The mask is negated when `flag` is set.

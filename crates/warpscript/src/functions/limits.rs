@@ -12,7 +12,8 @@
 
 use super::Entry;
 use super::args::{fail, pop_long};
-use crate::error::{Error, Result};
+use crate::error::Result;
+use crate::error::platform::PlatformError;
 use crate::stack::{Limits, Stack};
 use crate::value::Value;
 
@@ -54,7 +55,7 @@ pub(crate) fn pop_limit(
     let max = match stack.capability(capability) {
         Some(value) => value
             .parse::<i64>()
-            .map_err(|_| Error::new("Error parsing capability."))?,
+            .map_err(|_| PlatformError::CapabilityParse)?,
         None => hard,
     };
     if limit > max {
@@ -111,7 +112,7 @@ fn maxdepth(stack: &mut Stack) -> Result<()> {
         return Err(super::args::fail_with_cause(
             NAME,
             "failed.",
-            Error::new("The stack depth is over the requested maximum depth."),
+            PlatformError::DepthAboveMax.into(),
         ));
     }
     stack.limits.max_depth = limit;

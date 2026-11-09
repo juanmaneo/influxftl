@@ -25,7 +25,7 @@ use indexmap::IndexMap;
 use super::Entry;
 use super::args::{fail, pop_list, pop_macro};
 use super::math::entropy_error;
-use crate::error::fault::BoundsError;
+use crate::error::fault::{ArithmeticError, BoundsError};
 use crate::error::{Error, Result};
 use crate::jrandom::JavaRandom;
 use crate::macros::Macro;
@@ -548,7 +548,7 @@ fn compare_with(stack: &mut Stack, m: &Rc<Macro>, args: &[Value]) -> Result<i32>
             "was given a macro which doesn't return a LONG. This LONG must be within the bounds of a 32-bit integer.",
         ));
     };
-    i32::try_from(result).map_err(|_| Error::new("integer overflow"))
+    i32::try_from(result).map_err(|_| Error::from(ArithmeticError::IntegerOverflow))
 }
 
 /// The error `SORTWITH` raises when its comparator fails.

@@ -11,10 +11,15 @@
 //!
 //! The Java exception class names a script can read live in [`compat`] and nowhere else.
 
+pub mod aggregator;
+pub mod collections;
 pub mod compat;
+pub mod crypto;
 pub mod fault;
 pub mod format;
+pub mod geo;
 pub mod math;
+pub mod platform;
 pub mod series;
 pub mod stack;
 pub mod text;
@@ -23,11 +28,16 @@ pub mod time;
 use std::sync::Arc;
 use std::{fmt, io};
 
+use self::aggregator::AggregatorError;
+use self::collections::CollectionError;
+use self::crypto::CryptoError;
 use self::fault::{
     ArithmeticError, BoundsError, IllegalArgumentError, NumberFormatError, ResourceError,
 };
 use self::format::FormatError;
+use self::geo::GeoError;
 use self::math::MathError;
+use self::platform::PlatformError;
 use self::series::SeriesError;
 use self::stack::StackError;
 use self::text::TextError;
@@ -209,6 +219,24 @@ pub enum Error {
     /// A failure of a text or binary function.
     #[error(transparent)]
     Text(#[from] TextError),
+    /// A failure of an aggregator.
+    #[error(transparent)]
+    Aggregator(#[from] AggregatorError),
+    /// A failure of a collection function.
+    #[error(transparent)]
+    Collection(#[from] CollectionError),
+    /// A failure of a crypto function.
+    #[error(transparent)]
+    Crypto(#[from] CryptoError),
+    /// A failure of a geo function.
+    #[error(transparent)]
+    Geo(#[from] GeoError),
+    /// A failure of a platform function.
+    #[error(transparent)]
+    Platform(#[from] PlatformError),
+    /// An input or output failure.
+    #[error(transparent)]
+    Io(#[from] IoFailure),
     /// A failure of a Geo Time Series function.
     #[error(transparent)]
     Series(#[from] SeriesError),
@@ -346,6 +374,12 @@ impl Error {
             | Error::Stack(_)
             | Error::Time(_)
             | Error::Series(_)
+            | Error::Aggregator(_)
+            | Error::Collection(_)
+            | Error::Crypto(_)
+            | Error::Geo(_)
+            | Error::Platform(_)
+            | Error::Io(_)
             | Error::Text(_)
             | Error::Format(_)
             | Error::Parse { .. }

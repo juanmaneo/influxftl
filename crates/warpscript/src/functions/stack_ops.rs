@@ -8,6 +8,7 @@ use indexmap::{IndexMap, IndexSet};
 
 use super::Entry;
 use super::args::{fail, getn};
+use crate::error::collections::CollectionError;
 use crate::error::stack::StackError;
 use crate::error::{Error, Result};
 use crate::stack::Stack;
@@ -231,7 +232,7 @@ fn restore(stack: &mut Stack) -> Result<()> {
             stack.restore(&context);
             Ok(())
         }
-        _ => Err(Error::new("Invalid stack context.")),
+        _ => Err(StackError::InvalidContext.into()),
     }
 }
 
@@ -281,13 +282,13 @@ fn endmap(stack: &mut Stack) -> Result<()> {
 /// `TOMAP`: alternate keys and values.
 fn build_map(items: Vec<Value>) -> Result<IndexMap<Value, Value>> {
     if !items.len().is_multiple_of(2) {
-        return Err(Error::new("Odd number of elements, cannot create map."));
+        return Err(CollectionError::OddMapElements.into());
     }
     let mut map = IndexMap::with_capacity(items.len() / 2);
     let mut iter = items.into_iter();
     while let (Some(key), Some(value)) = (iter.next(), iter.next()) {
         if map.contains_key(&key) {
-            return Err(Error::new(format!("Duplicate map key '{key}'")));
+            return Err(CollectionError::DuplicateMapKey(key.to_string()).into());
         }
         map.insert(key, value);
     }

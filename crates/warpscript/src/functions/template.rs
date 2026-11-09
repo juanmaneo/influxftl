@@ -17,15 +17,14 @@ use std::fmt::Write as _;
 
 use super::Entry;
 use super::args::fail;
+use crate::error::fault::BoundsError;
+use crate::error::text::TextError;
 use crate::error::{Error, Result};
 use crate::stack::Stack;
 use crate::value::Value;
 
 /// The functions of this module.
 pub const FUNCTIONS: &[(&str, Entry)] = &[("TEMPLATE", Entry::Stack(template))];
-
-/// Message of the `RuntimeException` thrown by Warp 10's resolver for partials and parents.
-const INCLUSION_DISABLED: &str = "Template inclusion is disabled.";
 
 /// `TEMPLATE`: pops a `MAP` (the scope) and a `STRING` (the template) and pushes the
 /// rendered text. Only strings, numbers, booleans, lists and maps thereof may appear in the
@@ -71,7 +70,7 @@ fn check_types(scope: &Value) -> Result<()> {
                 pending.extend(map.keys().cloned());
                 pending.extend(map.values().cloned());
             }
-            _ => return Err(Error::new("Invalid type for template substitution.")),
+            _ => return Err(TextError::TemplateSubstitutionType.into()),
         }
     }
     Ok(())
@@ -138,7 +137,11 @@ struct Parser {
 
 /// A `MustacheException` carrying a template context (`message @[:line]`).
 fn mustache_error(message: &str, line: u32) -> Error {
-    Error::new(format!("{message} @[:{line}]"))
+    TextError::MustacheAt {
+        message: message.to_owned(),
+        line,
+    }
+    .into()
 }
 
 /// Java `String.trim()`.
@@ -408,7 +411,11 @@ impl Parser {
     fn unescaped_name(&mut self, variable: &str, em: &[char]) -> Result<String> {
         match em.get(1) {
             // `em.charAt(1)` on a one character delimiter.
-            None => Err(Error::new("Index 1 out of bounds for length 1")),
+            None => Err(BoundsError::StringIndex {
+                index: 1,
+                length: 1,
+            }
+            .into()),
             Some('}') => {
                 if self.read() != Some('}') {
                     return Err(mustache_error(
@@ -421,7 +428,12 @@ impl Parser {
             Some(_) => match variable.chars().next_back() {
                 Some(last) => Ok(variable[..variable.len() - last.len_utf8()].to_owned()),
                 // `"".substring(0, -1)`
-                None => Err(Error::new("Range [0, -1) out of bounds for length 0")),
+                None => Err(BoundsError::StringRange {
+                    start: 0,
+                    end: -1,
+                    length: 0,
+                }
+                .into()),
             },
         }
     }
@@ -432,19 +444,17 @@ impl Parser {
 fn init(codes: &[Code]) -> Result<()> {
     for code in codes {
         match &code.kind {
-            Kind::Partial => return Err(Error::new(INCLUSION_DISABLED)),
+            Kind::Partial => return Err(TextError::InclusionDisabled.into()),
             Kind::Extend { codes } => {
                 for code in codes {
                     if let Some(class) = code.kind.illegal_in_extend() {
-                        return Err(Error::new(format!(
-                            "Illegal code in extend section: com.github.mustachejava.codes.{class}"
-                        )));
+                        return Err(TextError::IllegalExtendCode(class).into());
                     }
                     if let Kind::Block { codes, .. } = &code.kind {
                         init(codes)?;
                     }
                 }
-                return Err(Error::new(INCLUSION_DISABLED));
+                return Err(TextError::InclusionDisabled.into());
             }
             Kind::Section { codes, .. } | Kind::Block { codes, .. } => init(codes)?,
             Kind::Write | Kind::Variable { .. } | Kind::Comment | Kind::Pragma => {}

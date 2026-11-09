@@ -19,6 +19,7 @@ use super::Entry;
 use super::args::{fail, fail_with_cause, pop_macro, pop_string};
 use super::misc::{ATTRIBUTE_INFOMODE, TIME_UNITS_PER_MS};
 use crate::encoding::opb64_encode;
+use crate::error::fault::ResourceError;
 use crate::error::stack::StackError;
 use crate::error::{Error, Result};
 use crate::macros::{Callable, Macro, StackFunction, Statement};
@@ -820,7 +821,7 @@ fn print_level(stack: &Stack, level: usize, value: &Value) -> Result<String> {
     );
     let rendered = if json {
         super::json::to_json(value, super::json::JsonOptions::default())
-            .map_err(|_| Error::new("StackOverflowError"))?
+            .map_err(|_| ResourceError::StackOverflow)?
     } else {
         let mut out = String::new();
         add_element(&mut out, value, false)?;
@@ -1240,11 +1241,7 @@ impl VarScan {
 
     /// Scan the statements of one macro.
     fn scan(&mut self, statements: &[Statement], only_store_and_popr: bool) -> Result<()> {
-        let abort = || {
-            Error::new(
-                "Encountered a LOAD/STORE or CSTORE operation with a non explicit symbol name.",
-            )
-        };
+        let abort = || StackError::NonExplicitSymbol.into();
         let register = |name: &str, prefix: &str| -> Option<Value> {
             name.strip_prefix(prefix)
                 .and_then(|digits| digits.parse::<i64>().ok())

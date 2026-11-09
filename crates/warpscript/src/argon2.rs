@@ -13,7 +13,9 @@
 //! Unlike most Argon2 libraries (which refuse salts shorter than 8 bytes or less than 8 KiB of
 //! memory), BouncyCastle accepts everything the specification allows, and so does this port.
 
-use crate::error::{Error, Result};
+use crate::error::Result;
+use crate::error::crypto::CryptoError;
+use crate::error::fault::ResourceError;
 
 /// `Argon2Parameters.ARGON2_d`: data-dependent addressing.
 pub const ARGON2_D: u32 = 0;
@@ -344,30 +346,34 @@ struct Generator<'a> {
 /// The errors carry the texts of the `IllegalStateException`s (and of the
 /// `NegativeArraySizeException` for a negative `out_len`) of the Java implementation.
 pub fn generate(params: &Params, password: &[u8], out_len: i64) -> Result<Vec<u8>> {
-    let out_len = usize::try_from(out_len).map_err(|_| Error::new(out_len.to_string()))?;
+    let out_len =
+        usize::try_from(out_len).map_err(|_| CryptoError::NegativeOutputLength(out_len))?;
     if params.lanes < MIN_PARALLELISM {
-        return Err(Error::new(format!(
-            "lanes must be greater than {MIN_PARALLELISM}"
-        )));
+        return Err(CryptoError::LanesTooFew {
+            min: MIN_PARALLELISM,
+        }
+        .into());
     }
     if params.lanes > MAX_PARALLELISM {
-        return Err(Error::new(format!(
-            "lanes must be less than {MAX_PARALLELISM}"
-        )));
+        return Err(CryptoError::LanesTooMany {
+            max: MAX_PARALLELISM,
+        }
+        .into());
     }
     if params.memory < 2 * params.lanes {
-        return Err(Error::new(format!(
-            "memory is less than: {0} expected {0}",
-            2 * params.lanes
-        )));
+        return Err(CryptoError::MemoryTooSmall {
+            min: 2 * params.lanes,
+        }
+        .into());
     }
     if params.iterations < MIN_ITERATIONS {
-        return Err(Error::new(format!(
-            "iterations is less than: {MIN_ITERATIONS}"
-        )));
+        return Err(CryptoError::IterationsTooFew {
+            min: MIN_ITERATIONS,
+        }
+        .into());
     }
     if out_len < MIN_OUTLEN {
-        return Err(Error::new(format!("output length less than {MIN_OUTLEN}")));
+        return Err(CryptoError::OutputTooShort { min: MIN_OUTLEN }.into());
     }
     let lanes = params.lanes as usize;
     let memory_blocks = (params.memory as usize).max(2 * SYNC_POINTS * lanes);
@@ -392,7 +398,7 @@ fn allocate(memory_blocks: usize) -> Result<Vec<Block>> {
     let mut memory: Vec<Block> = Vec::new();
     memory
         .try_reserve_exact(memory_blocks)
-        .map_err(|_| Error::new("Java heap space"))?;
+        .map_err(|_| ResourceError::OutOfMemory)?;
     memory.resize(memory_blocks, Block::ZERO);
     Ok(memory)
 }

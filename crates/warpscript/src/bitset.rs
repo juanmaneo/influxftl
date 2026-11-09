@@ -9,7 +9,8 @@
 
 use std::fmt;
 
-use crate::error::{Error, Result};
+use crate::error::Result;
+use crate::error::fault::BoundsError;
 
 /// A set of bits indexed from 0 (`java.util.BitSet`).
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Default)]
@@ -35,7 +36,7 @@ impl BitSet {
     /// (`IndexOutOfBoundsException`).
     pub fn get(&self, index: i32) -> Result<bool> {
         if index < 0 {
-            return Err(Error::new(format!("bitIndex < 0: {index}")));
+            return Err(BoundsError::NegativeBitIndex(i64::from(index)).into());
         }
         let index = index as usize;
         Ok(self

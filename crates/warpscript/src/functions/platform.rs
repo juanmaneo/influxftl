@@ -14,6 +14,7 @@ use indexmap::IndexMap;
 
 use super::Entry;
 use super::args::fail;
+use crate::error::platform::PlatformError;
 use crate::error::{Error, Result};
 use crate::stack::Stack;
 use crate::value::Value;
@@ -111,7 +112,7 @@ pub const FUNCTIONS: &[(&str, Entry)] = &[
 
 /// `Tokens.extractReadToken` / `extractWriteToken` of a token this runtime did not issue.
 fn invalid_token() -> Error {
-    Error::new("Invalid token.")
+    PlatformError::InvalidToken.into()
 }
 
 /// Set a boolean stack attribute.

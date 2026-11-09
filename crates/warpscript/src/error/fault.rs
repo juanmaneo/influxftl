@@ -127,6 +127,9 @@ pub enum BoundsError {
         /// The number of elements.
         length: usize,
     },
+    /// A bit index below zero.
+    #[error("bitIndex < 0: {0}")]
+    NegativeBitIndex(i64),
     /// An index outside of a list.
     #[error("Index {index} out of bounds for length {length}")]
     ListIndex {
@@ -174,6 +177,9 @@ pub enum IllegalArgumentError {
     /// A negative initial capacity.
     #[error("Illegal Capacity: {0}")]
     Capacity(i64),
+    /// A negative initial size for a buffer.
+    #[error("Negative initial size: {0}")]
+    NegativeInitialSize(i64),
     /// A time zone offset of a day or more.
     #[error("Millis out of range: {0}")]
     MillisOutOfRange(i32),
@@ -198,6 +204,9 @@ pub enum IllegalArgumentError {
 /// A limit of the machine a request exceeds.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum ResourceError {
+    /// Structures nested so deep that the stack of the machine overflows.
+    #[error("StackOverflowError")]
+    StackOverflow,
     /// An array longer than any array can be.
     #[error("Requested array size exceeds VM limit")]
     ArrayTooLong,

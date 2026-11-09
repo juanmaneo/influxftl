@@ -113,6 +113,24 @@ pub enum SeriesError {
     /// `QUANTIFY` of a series that is not numeric.
     #[error("Can only quantify numeric Geo Time Series.")]
     QuantifyNotNumeric,
+    /// A numerical operator given operands it does not accept.
+    #[error(
+        "{function} can only operate on 2 numerical values, or a numerical value and a list of numerical values, or a numerical value and a GTS of numerical values{}.",
+        if *reduces { ", or a list of numerical values" } else { "" }
+    )]
+    NumericalOperands {
+        /// The operator.
+        function: String,
+        /// Whether the operator also reduces a single list.
+        reduces: bool,
+    },
+    /// A selector that is not `class{labels}`.
+    #[error("invalid syntax for selector.")]
+    InvalidSelector,
+    /// A selector that is not `class{labels}`, as the selector functions report it (sic:
+    /// the message starts with a space).
+    #[error(" invalid syntax for selector.")]
+    InvalidSelectorSpaced,
     /// A conditional probability without a separator in the events.
     #[error("Separator not found, unable to isolate given events.")]
     SeparatorNotFound,

@@ -11,6 +11,7 @@ use super::Entry;
 use super::args::{fail, fail_with_cause};
 use super::gts::gts_or_list_try;
 use crate::error::fault::NumberFormatError;
+use crate::error::geo::GeoError;
 use crate::error::{Error, Result};
 use crate::geoxp::{
     delta_hhcode, from_geoxp_point, hhcode_bbox, hhcode_center, hhcode_to_string, to_geocell,
@@ -134,24 +135,20 @@ fn hh_and_res(value: &Value) -> Result<(i64, i32)> {
         Value::String(s) => {
             let len = s.encode_utf16().count();
             if len > 16 {
-                return Err(Error::new(
-                    "Hexadecimal HHCode string of must be of length <= 16",
-                ));
+                return Err(GeoError::HexHhcodeTooLong.into());
             }
             let padded = format!("{s}{}", "0".repeat(16 - len));
             Ok((parse_unsigned_hex(&padded)?, (len * 2) as i32))
         }
         Value::Bytes(bytes) => {
             if bytes.len() > 8 {
-                return Err(Error::new("Byte array HHCode must be of length <= 8"));
+                return Err(GeoError::BytesHhcodeTooLong.into());
             }
             let mut padded = [0u8; 8];
             padded[..bytes.len()].copy_from_slice(bytes);
             Ok((i64::from_be_bytes(padded), (bytes.len() * 4) as i32))
         }
-        _ => Err(Error::new(
-            "HHCode must be represented as a long, a string or a byte array.",
-        )),
+        _ => Err(GeoError::HhcodeType.into()),
     }
 }
 

@@ -11,6 +11,7 @@ use indexmap::IndexMap;
 use super::Entry;
 use super::args::{fail, pop_bool, pop_long, pop_macro, pop_string};
 use crate::error::compat::exception_class;
+use crate::error::platform::PlatformError;
 use crate::error::{Error, Result};
 use crate::geoxp::from_geoxp_point;
 use crate::gts::{NO_ELEVATION, NO_LOCATION};
@@ -611,7 +612,7 @@ fn not_supported_compiled(_stack: &mut Stack) -> Result<()> {
 
 fn msgfail(stack: &mut Stack) -> Result<()> {
     let top = stack.pop()?;
-    Err(Error::new(format!("MSGFAIL {top}")))
+    Err(PlatformError::Msgfail(top.to_string()).into())
 }
 
 fn assert(stack: &mut Stack) -> Result<()> {

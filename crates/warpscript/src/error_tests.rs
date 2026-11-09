@@ -1504,3 +1504,257 @@ fn series_failures_have_the_wording_of_warp10() {
         assert!(!error.is_runtime(), "{message}");
     }
 }
+
+#[test]
+fn remaining_domain_failures_have_the_wording_of_warp10() {
+    use super::error::aggregator::AggregatorError;
+    use super::error::collections::CollectionError;
+    use super::error::crypto::CryptoError;
+    use super::error::fault::{BoundsError, IllegalArgumentError, ResourceError};
+    use super::error::geo::GeoError;
+    use super::error::platform::PlatformError;
+    use super::error::series::SeriesError;
+    use super::error::stack::StackError;
+    use super::error::text::TextError;
+
+    let failures: Vec<(Error, String)> = vec![
+        (BoundsError::NegativeBitIndex(-1).into(), "bitIndex < 0: -1".to_owned()),
+        (
+            IllegalArgumentError::NegativeInitialSize(-5).into(),
+            "Negative initial size: -5".to_owned(),
+        ),
+        (ResourceError::StackOverflow.into(), "StackOverflowError".to_owned()),
+        (
+            StackError::IndexAboveStack { index: 5, size: 3 }.into(),
+            "Index out of bound, 5 >= 3".to_owned(),
+        ),
+        (
+            StackError::IndexBelowStack { shifted: -7, size: 3 }.into(),
+            "Index out of bound, -7 < -3".to_owned(),
+        ),
+        (
+            StackError::NotNumeric.into(),
+            "Unexpected type, expecting a numerical value.".to_owned(),
+        ),
+        (StackError::InvalidContext.into(), "Invalid stack context.".to_owned()),
+        (
+            StackError::NonExplicitSymbol.into(),
+            "Encountered a LOAD/STORE or CSTORE operation with a non explicit symbol name.".to_owned(),
+        ),
+        (
+            TextError::JsonLocated {
+                message: "Unexpected end-of-input".to_owned(),
+                location: "[line: 1, column: 2]".to_owned(),
+            }
+            .into(),
+            "Unexpected end-of-input\n at [line: 1, column: 2]".to_owned(),
+        ),
+        (
+            TextError::JsonNestingDepth { depth: 1001, max: 1000 }.into(),
+            "Document nesting depth (1001) exceeds the maximum allowed (1000, from `StreamReadConstraints.getMaxNestingDepth()`)".to_owned(),
+        ),
+        (
+            TextError::JsonWriteLimit(10).into(),
+            "Cannot write, maximum number of characters written :10".to_owned(),
+        ),
+        (
+            TextError::MustacheAt { message: "bad".to_owned(), line: 3 }.into(),
+            "bad @[:3]".to_owned(),
+        ),
+        (
+            TextError::InclusionDisabled.into(),
+            "Template inclusion is disabled.".to_owned(),
+        ),
+        (
+            TextError::IllegalExtendCode("PartialCode").into(),
+            "Illegal code in extend section: com.github.mustachejava.codes.PartialCode".to_owned(),
+        ),
+        (
+            TextError::TemplateSubstitutionType.into(),
+            "Invalid type for template substitution.".to_owned(),
+        ),
+        (
+            SeriesError::NumericalOperands { function: "ADDEXACT".to_owned(), reduces: false }.into(),
+            "ADDEXACT can only operate on 2 numerical values, or a numerical value and a list of numerical values, or a numerical value and a GTS of numerical values.".to_owned(),
+        ),
+        (
+            SeriesError::NumericalOperands { function: "MAX".to_owned(), reduces: true }.into(),
+            "MAX can only operate on 2 numerical values, or a numerical value and a list of numerical values, or a numerical value and a GTS of numerical values, or a list of numerical values.".to_owned(),
+        ),
+        (SeriesError::InvalidSelector.into(), "invalid syntax for selector.".to_owned()),
+        (
+            SeriesError::InvalidSelectorSpaced.into(),
+            " invalid syntax for selector.".to_owned(),
+        ),
+        (
+            CollectionError::MapExpected.into(),
+            "Invalid type, expected a map.".to_owned(),
+        ),
+        (
+            CollectionError::ListKeyNotLong.into(),
+            "Getting on LIST requires a LONG.".to_owned(),
+        ),
+        (
+            CollectionError::StringKeyNotLong.into(),
+            "Getting on STRING requires a LONG.".to_owned(),
+        ),
+        (
+            CollectionError::BytesKeyNotLong.into(),
+            "Getting on BYTES requires a LONG.".to_owned(),
+        ),
+        (
+            CollectionError::InvalidGetTarget.into(),
+            "Invalid OBJECT to GET on.".to_owned(),
+        ),
+        (
+            CollectionError::NestedPathMissing.into(),
+            "Tried to get an element at a nested path that does not exist in the input list.".to_owned(),
+        ),
+        (
+            CollectionError::OddMapElements.into(),
+            "Odd number of elements, cannot create map.".to_owned(),
+        ),
+        (
+            CollectionError::DuplicateMapKey("a".to_owned()).into(),
+            "Duplicate map key 'a'".to_owned(),
+        ),
+        (PlatformError::InvalidToken.into(), "Invalid token.".to_owned()),
+        (
+            PlatformError::InvalidCapabilityToken.into(),
+            "invalid token.".to_owned(),
+        ),
+        (
+            PlatformError::CapabilityParse.into(),
+            "Error parsing capability.".to_owned(),
+        ),
+        (
+            PlatformError::DepthAboveMax.into(),
+            "The stack depth is over the requested maximum depth.".to_owned(),
+        ),
+        (
+            PlatformError::NoSecureKey.into(),
+            "You need to set the secure key first.".to_owned(),
+        ),
+        (
+            PlatformError::NoSecureScriptKey.into(),
+            "Missing secure script encryption key.".to_owned(),
+        ),
+        (PlatformError::InvalidSecureKey.into(), "Invalid secure key.".to_owned()),
+        (
+            PlatformError::MacroConfigNotFound {
+                function: "MACROCONFIG".to_owned(),
+                key: "k".to_owned(),
+                attempts: " 'a' 'b'".to_owned(),
+            }
+            .into(),
+            "MACROCONFIG macro configuration 'k' not found, need to set one of [ 'a' 'b' ].".to_owned(),
+        ),
+        (
+            PlatformError::RecursiveStructure.into(),
+            "Recursive data structures exceeded 16 levels.".to_owned(),
+        ),
+        (
+            PlatformError::Msgfail("because".to_owned()).into(),
+            "MSGFAIL because".to_owned(),
+        ),
+        (
+            PlatformError::Entropy(getrandom::Error::UNSUPPORTED).into(),
+            format!(
+                "Unable to obtain random data from the operating system ({}).",
+                getrandom::Error::UNSUPPORTED
+            ),
+        ),
+        (
+            GeoError::HexHhcodeTooLong.into(),
+            "Hexadecimal HHCode string of must be of length <= 16".to_owned(),
+        ),
+        (
+            GeoError::BytesHhcodeTooLong.into(),
+            "Byte array HHCode must be of length <= 8".to_owned(),
+        ),
+        (
+            GeoError::HhcodeType.into(),
+            "HHCode must be represented as a long, a string or a byte array.".to_owned(),
+        ),
+        (CryptoError::NegativeOutputLength(-4).into(), "-4".to_owned()),
+        (
+            CryptoError::LanesTooFew { min: 1 }.into(),
+            "lanes must be greater than 1".to_owned(),
+        ),
+        (
+            CryptoError::LanesTooMany { max: 9 }.into(),
+            "lanes must be less than 9".to_owned(),
+        ),
+        (
+            CryptoError::MemoryTooSmall { min: 16 }.into(),
+            "memory is less than: 16 expected 16".to_owned(),
+        ),
+        (
+            CryptoError::IterationsTooFew { min: 1 }.into(),
+            "iterations is less than: 1".to_owned(),
+        ),
+        (
+            CryptoError::OutputTooShort { min: 4 }.into(),
+            "output length less than 4".to_owned(),
+        ),
+        (
+            CryptoError::InvalidBase58Character { character: "0".to_owned(), position: 2 }.into(),
+            "Invalid input '0' at position 2.".to_owned(),
+        ),
+        (
+            CryptoError::UnwrappedTooShort { nonce: 8, unwrapped: 3 }.into(),
+            "8 > 3".to_owned(),
+        ),
+        (
+            AggregatorError::InvalidParameter("mapper.add".to_owned()).into(),
+            "Invalid parameter for mapper.add".to_owned(),
+        ),
+        (AggregatorError::InvalidValueType.into(), "Invalid value type.".to_owned()),
+        (
+            AggregatorError::LanguageTagExpected("mapper.tolower".to_owned()).into(),
+            "Invalid parameter type for mapper.tolower, expects a language tag (a string) on top of the stack.".to_owned(),
+        ),
+        (
+            AggregatorError::StringMix { verb: "add", kind: "longs" }.into(),
+            "Cannot add strings and longs.".to_owned(),
+        ),
+        (
+            AggregatorError::EvenNonNumericMedian.into(),
+            "Unable to compute median on an even number of non numeric values.".to_owned(),
+        ),
+        (
+            AggregatorError::InvalidPercentile("mapper.percentile".to_owned()).into(),
+            "Invalid percentile for mapper.percentile, MUST be between 0 and 100.".to_owned(),
+        ),
+        (
+            AggregatorError::NothingRetained(3).into(),
+            "Index -1 out of bounds for length 3".to_owned(),
+        ),
+        (
+            AggregatorError::NotASeries("mapper.x".to_owned()).into(),
+            "mapper.x's resulting function can only be applied on a GTS.".to_owned(),
+        ),
+        (
+            AggregatorError::MaskOperands.into(),
+            "op.mask can only be applied to pairs of Geo Time Series, the first one being boolean.".to_owned(),
+        ),
+    ];
+    for (error, message) in failures {
+        assert_eq!(error.to_string(), message);
+    }
+    let io = Error::from(IoFailure::from(std::io::Error::new(
+        std::io::ErrorKind::BrokenPipe,
+        "pipe closed",
+    )));
+    assert_eq!(io.to_string(), "pipe closed");
+    assert_eq!(exception_class(&io), "java.io.IOException");
+    assert!(!io.is_runtime());
+    assert_eq!(
+        exception_class(&ResourceError::StackOverflow.into()),
+        "java.lang.StackOverflowError"
+    );
+    assert_eq!(
+        exception_class(&BoundsError::NegativeBitIndex(-1).into()),
+        "java.lang.IndexOutOfBoundsException"
+    );
+}
