@@ -116,7 +116,7 @@ fn join_builder(
     null_string: Option<&'static str>,
 ) -> Result<()> {
     let Value::String(separator) = stack.pop()? else {
-        return Err(Error::new(format!("{name} expects a STRING seperator.")));
+        return Err(Error::usage(name, "expects a STRING seperator."));
     };
     stack.push(Value::Function(Named::object(
         name,

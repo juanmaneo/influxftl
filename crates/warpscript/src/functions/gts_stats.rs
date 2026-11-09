@@ -211,7 +211,7 @@ fn median(values: &[f64]) -> Option<f64> {
 /// back to the standard deviation when it is `0`).
 fn zscore_gts(gts: &GeoTimeSerie, use_median: bool) -> Result<GeoTimeSerie> {
     let Values::Double(values) = &gts.values else {
-        return Err(Error::new("GTS must be of type Double."));
+        return Err(Error::usage("GTS", "must be of type Double."));
     };
     let values = values.clone();
     let (m, std) = if use_median {

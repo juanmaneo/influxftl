@@ -6,6 +6,7 @@
 
 use std::rc::Rc;
 
+use crate::error::stack::StackError;
 use crate::error::{Error, Result};
 use crate::macros::Macro;
 use crate::stack::Stack;
@@ -13,7 +14,7 @@ use crate::value::{List, Map, Value};
 
 /// An error whose message is `"<name> <message>"`, the usual WarpLib wording.
 pub fn fail(name: &str, message: &str) -> Error {
-    Error::new(format!("{name} {message}"))
+    Error::usage(name, message)
 }
 
 /// [`fail`] with a cause (`new WarpScriptException(getName() + " message", cause)`).
@@ -114,7 +115,7 @@ pub fn getn(stack: &mut Stack) -> Result<usize> {
         return Err(Error::new("Unexpected type, expecting a numerical value."));
     };
     if n < 0 || stack.depth() < n as usize {
-        return Err(Error::new("Index out of bound."));
+        return Err(StackError::IndexOutOfBound.into());
     }
     Ok(n as usize)
 }

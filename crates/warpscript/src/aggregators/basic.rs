@@ -423,7 +423,7 @@ impl Extreme {
         } else {
             "cannot determine min of numeric and non numeric values."
         };
-        let mismatch = || Error::new(format!("{} {message}", self.name));
+        let mismatch = || Error::usage(self.name, message.to_string());
         // `compareTo` outcome that makes `candidate` the new extremum.
         let better = if self.max {
             Ordering::Less

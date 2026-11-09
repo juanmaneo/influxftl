@@ -43,9 +43,10 @@ fn attribute_flag(stack: &mut Stack, name: &str, attribute: &str) -> Result<()> 
             stack.push(Value::Boolean(set));
         }
         _ => {
-            return Err(Error::new(format!(
-                "{name} invalid parameter, expected a BOOLEAN or NULL."
-            )));
+            return Err(Error::usage(
+                name,
+                "invalid parameter, expected a BOOLEAN or NULL.",
+            ));
         }
     }
     Ok(())
@@ -56,7 +57,7 @@ fn attribute_flag(stack: &mut Stack, name: &str, attribute: &str) -> Result<()> 
 fn metamatch(stack: &mut Stack) -> Result<()> {
     const NAME: &str = "METAMATCH";
     let Value::String(selector) = stack.pop()? else {
-        return Err(Error::new(format!("{NAME} expects a STRING selector.")));
+        return Err(Error::usage(NAME, "expects a STRING selector."));
     };
     let matcher = MetadataSelectorMatcher::new(&selector)?;
     let matches = |value: &Value| match value {
@@ -70,9 +71,10 @@ fn metamatch(stack: &mut Stack) -> Result<()> {
             let mut results = Vec::with_capacity(list.borrow().len());
             for element in list.borrow().iter() {
                 let Some(matched) = matches(element) else {
-                    return Err(Error::new(format!(
-                        "{NAME} can only be applied to a LIST containing GTS or ENCODER elements."
-                    )));
+                    return Err(Error::usage(
+                        NAME,
+                        "can only be applied to a LIST containing GTS or ENCODER elements.",
+                    ));
                 };
                 results.push(Value::Boolean(matched?));
             }
@@ -81,9 +83,10 @@ fn metamatch(stack: &mut Stack) -> Result<()> {
         other => match matches(other) {
             Some(matched) => Value::Boolean(matched?),
             None => {
-                return Err(Error::new(format!(
-                    "{NAME} operates on a GTS or ENCODER or a list thereof."
-                )));
+                return Err(Error::usage(
+                    NAME,
+                    "operates on a GTS or ENCODER or a list thereof.",
+                ));
             }
         },
     };
@@ -95,9 +98,7 @@ fn metamatch(stack: &mut Stack) -> Result<()> {
 fn parseselector(stack: &mut Stack) -> Result<()> {
     const NAME: &str = "PARSESELECTOR";
     let Value::String(selector) = stack.pop()? else {
-        return Err(Error::new(format!(
-            "{NAME} expects a String on top of the stack."
-        )));
+        return Err(Error::usage(NAME, "expects a String on top of the stack."));
     };
     let wrap = |cause: Error| Error::with_cause(format!("{NAME} could not parse input."), cause);
     let (class, labels) = match parse_selector(&selector) {
@@ -122,8 +123,9 @@ fn toselector(stack: &mut Stack) -> Result<()> {
     let selector = |value: &Value| match value {
         Value::Gts(gts) => Ok(Value::from(build_selector(&gts.borrow().metadata))),
         Value::Encoder(encoder) => Ok(Value::from(build_selector(&encoder.borrow().metadata))),
-        _ => Err(Error::new(
-            "TOSELECTOR expects a GeoTimeSeries, a GTSEncoder or a list thereof on top of the stack.",
+        _ => Err(Error::usage(
+            "TOSELECTOR",
+            "expects a GeoTimeSeries, a GTSEncoder or a list thereof on top of the stack.",
         )),
     };
     let result = match stack.pop()? {

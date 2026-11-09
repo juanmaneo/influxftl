@@ -178,10 +178,10 @@ impl Aggregator for Product {
                 }
                 Value::Null => continue,
                 _ => {
-                    return Err(Error::new(format!(
-                        "{} can only be applied to LONG or DOUBLE values.",
-                        self.name
-                    )));
+                    return Err(Error::usage(
+                        self.name,
+                        "can only be applied to LONG or DOUBLE values.",
+                    ));
                 }
             };
             exact.multiply(m, e);
@@ -243,10 +243,10 @@ impl Aggregator for DotProduct {
             return Ok(nothing(args));
         }
         if !values[0].is_number() {
-            return Err(Error::new(format!(
-                "{} can only be applied to LONG or DOUBLE values.",
-                self.name
-            )));
+            return Err(Error::usage(
+                self.name,
+                "can only be applied to LONG or DOUBLE values.",
+            ));
         }
         let index = tick_index(args, None)?;
         let mut dot = 0.0;
@@ -285,9 +285,10 @@ fn dot_product_builder(
     activation: Activation,
 ) -> Result<()> {
     let Value::List(list) = stack.pop()? else {
-        return Err(Error::new(format!(
-            "{name} expects an input vector (list of doubles) on top of the stack."
-        )));
+        return Err(Error::usage(
+            name,
+            "expects an input vector (list of doubles) on top of the stack.",
+        ));
     };
     let omega = list
         .borrow()

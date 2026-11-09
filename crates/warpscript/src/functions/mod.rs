@@ -65,7 +65,8 @@ use std::collections::HashMap;
 use std::rc::Rc;
 use std::sync::OnceLock;
 
-use crate::error::{Error, Result};
+use crate::error::Result;
+use crate::error::stack::StackError;
 use crate::macros::{BuilderFn, StackFn};
 use crate::stack::Stack;
 use crate::value::FunctionObject;
@@ -252,7 +253,7 @@ pub fn call(stack: &mut Stack, name: &str) -> Result<()> {
     match lookup(name) {
         Some((_, Entry::Stack(func))) => func(stack),
         Some((name, Entry::Builder(func))) => func(stack, name),
-        _ => Err(Error::new(format!("Unknown function '{name}'"))),
+        _ => Err(StackError::UnknownFunction(name.to_string()).into()),
     }
 }
 

@@ -165,10 +165,13 @@ impl LoopTimer {
 
     fn check(&self, name: &str) -> Result<()> {
         if self.max_ms > 0 && self.start.elapsed().as_millis() as i64 > self.max_ms {
-            return Err(Error::new(format!(
-                "{name} executed for too long (> {} ms). Consider raising the limit or using capabilities.",
-                self.max_ms
-            )));
+            return Err(Error::usage(
+                name,
+                format!(
+                    "executed for too long (> {} ms). Consider raising the limit or using capabilities.",
+                    self.max_ms
+                ),
+            ));
         }
         Ok(())
     }
@@ -595,15 +598,15 @@ fn error(stack: &mut Stack) -> Result<()> {
 }
 
 fn fail_fn(_stack: &mut Stack) -> Result<()> {
-    Err(Error::new("FAIL failed."))
+    Err(Error::usage("FAIL", "failed."))
 }
 
 fn not_supported_compile(_stack: &mut Stack) -> Result<()> {
-    Err(Error::new("COMPILE Not supported."))
+    Err(Error::usage("COMPILE", "Not supported."))
 }
 
 fn not_supported_compiled(_stack: &mut Stack) -> Result<()> {
-    Err(Error::new("COMPILED Not supported."))
+    Err(Error::usage("COMPILED", "Not supported."))
 }
 
 fn msgfail(stack: &mut Stack) -> Result<()> {
@@ -615,7 +618,7 @@ fn assert(stack: &mut Stack) -> Result<()> {
     if pop_bool(stack, "ASSERT", "expects a boolean on top of the stack.")? {
         Ok(())
     } else {
-        Err(Error::new("ASSERT failed."))
+        Err(Error::usage("ASSERT", "failed."))
     }
 }
 

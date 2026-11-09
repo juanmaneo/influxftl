@@ -8,6 +8,7 @@ use indexmap::{IndexMap, IndexSet};
 
 use super::Entry;
 use super::args::{fail, getn};
+use crate::error::stack::StackError;
 use crate::error::{Error, Result};
 use crate::stack::Stack;
 use crate::value::Value;
@@ -75,7 +76,7 @@ fn swap(stack: &mut Stack) -> Result<()> {
         return Err(Error::empty_stack());
     }
     if stack.depth() < 2 {
-        return Err(Error::new("Index out of bound."));
+        return Err(StackError::IndexOutOfBound.into());
     }
     let elements = stack.elements_mut();
     let len = elements.len();
@@ -102,7 +103,7 @@ fn rot(stack: &mut Stack) -> Result<()> {
         return Err(Error::empty_stack());
     }
     if stack.depth() < 3 {
-        return Err(Error::new("Index out of bound."));
+        return Err(StackError::IndexOutOfBound.into());
     }
     let elements = stack.elements_mut();
     let len = elements.len();
@@ -133,7 +134,7 @@ fn rolld(stack: &mut Stack) -> Result<()> {
 fn pick(stack: &mut Stack) -> Result<()> {
     let n = getn(stack)?;
     if n == 0 {
-        return Err(Error::new("Index out of bound."));
+        return Err(StackError::IndexOutOfBound.into());
     }
     let value = stack.elements()[stack.depth() - n].clone();
     stack.push(value);
@@ -150,7 +151,7 @@ fn reset(stack: &mut Stack) -> Result<()> {
     match stack.pop()? {
         Value::Long(l) => {
             if l < 0 {
-                return Err(Error::new("Index out of bound."));
+                return Err(StackError::IndexOutOfBound.into());
             }
             stack.reset(l as i32 as usize);
             Ok(())

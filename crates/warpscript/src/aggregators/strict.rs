@@ -175,19 +175,22 @@ fn strict_mapper_builder(stack: &mut Stack, name: &'static str) -> Result<()> {
     // `((Number) o).longValue()`, `Long.MIN_VALUE` moved one up.
     let bound = |value: Value| Num::of(&value).map(|n| n.long_value().max(i64::MIN + 1));
     let Some(max) = bound(stack.pop()?) else {
-        return Err(Error::new(format!(
-            "{name} expects a maximum (inclusive) number of values or a minimum timespan on top of the stack."
-        )));
+        return Err(Error::usage(
+            name,
+            "expects a maximum (inclusive) number of values or a minimum timespan on top of the stack.",
+        ));
     };
     let Some(min) = bound(stack.pop()?) else {
-        return Err(Error::new(format!(
-            "{name} expects a minimum (inclusive) number of values or a minimum timespan below the top of the stack."
-        )));
+        return Err(Error::usage(
+            name,
+            "expects a minimum (inclusive) number of values or a minimum timespan below the top of the stack.",
+        ));
     };
     if (min > 0 && max >= 0 || min < 0 && max <= 0) && min.abs() > max.abs() {
-        return Err(Error::new(format!(
-            "{name} expects abs(min) <= abs(max) when min and max both express a count or both express a duration"
-        )));
+        return Err(Error::usage(
+            name,
+            "expects abs(min) <= abs(max) when min and max both express a count or both express a duration",
+        ));
     }
     let bounds = Bounds { min, max };
     match stack.pop()? {
@@ -209,9 +212,10 @@ fn strict_mapper_builder(stack: &mut Stack, name: &'static str) -> Result<()> {
             ]))));
         }
         _ => {
-            return Err(Error::new(format!(
-                "{name} expects a mapper or a macro below the extrema defining the value count range or timespan."
-            )));
+            return Err(Error::usage(
+                name,
+                "expects a mapper or a macro below the extrema defining the value count range or timespan.",
+            ));
         }
     }
     Ok(())
@@ -275,9 +279,7 @@ fn strict_reducer_builder(stack: &mut Stack, name: &'static str) -> Result<()> {
             reducer
         }
         _ => {
-            return Err(Error::new(format!(
-                "{name} expects a reducer on top of the stack."
-            )));
+            return Err(Error::usage(name, "expects a reducer on top of the stack."));
         }
     };
     stack.push(Value::Function(Rc::new(StrictReducer { name, reducer })));

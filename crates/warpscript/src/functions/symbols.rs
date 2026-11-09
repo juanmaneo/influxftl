@@ -194,9 +194,10 @@ fn run_register(stack: &mut Stack, index: i64, dedicated: bool) -> Result<()> {
             } else {
                 "RUN".to_owned()
             };
-            Err(Error::new(format!(
-                "{name} expects register number {index} to contain a macro."
-            )))
+            Err(Error::usage(
+                name,
+                format!("expects register number {index} to contain a macro."),
+            ))
         }
     }
 }

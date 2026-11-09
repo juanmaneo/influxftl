@@ -38,10 +38,10 @@ impl Aggregator for MacroWrapper {
     /// The frameworks run [`MacroWrapper::wrapped`] themselves; without a stack there is
     /// nothing to run it on.
     fn apply(&self, _args: &AggregatorArgs) -> Result<Aggregated> {
-        Err(Error::new(format!(
-            "{} can only be applied by BUCKETIZE, MAP or REDUCE.",
-            self.name
-        )))
+        Err(Error::usage(
+            self.name,
+            "can only be applied by BUCKETIZE, MAP or REDUCE.",
+        ))
     }
 
     fn wrapped_macro(&self) -> Option<&Rc<Macro>> {
@@ -71,9 +71,7 @@ impl FunctionObject for MacroWrapper {
 /// `MACROMAPPER`: `macro MACROMAPPER` pushes the wrapper of the macro.
 fn wrapper_builder(stack: &mut Stack, name: &'static str) -> Result<()> {
     let Value::Macro(wrapped) = stack.pop()? else {
-        return Err(Error::new(format!(
-            "{name} expects a macro on top of the stack."
-        )));
+        return Err(Error::usage(name, "expects a macro on top of the stack."));
     };
     stack.push(Value::Function(Rc::new(MacroWrapper { name, wrapped })));
     Ok(())

@@ -14,6 +14,7 @@
 pub mod compat;
 pub mod fault;
 pub mod math;
+pub mod stack;
 
 use std::sync::Arc;
 use std::{fmt, io};
@@ -22,6 +23,7 @@ use self::fault::{
     ArithmeticError, BoundsError, IllegalArgumentError, NumberFormatError, ResourceError,
 };
 use self::math::MathError;
+use self::stack::StackError;
 use crate::encoder::EncoderError;
 use crate::finite::NotFinite;
 use crate::pickle::PickleError;
@@ -166,6 +168,19 @@ pub enum Error {
     /// A modification of a collection that was frozen (`IMMUTABLE`).
     #[error("UnsupportedOperationException")]
     Immutable,
+    /// A function given arguments it does not accept: `<function> <requirement>`, where the
+    /// requirement is Warp 10's wording of what the function expects. Rust code tells these
+    /// failures apart by function, never by the text of the requirement.
+    #[error("{function} {requirement}")]
+    Usage {
+        /// The WarpScript function (or mapper, filter, aggregator...) that refused.
+        function: String,
+        /// What it expects.
+        requirement: String,
+    },
+    /// A failure of the interpreter.
+    #[error(transparent)]
+    Stack(#[from] StackError),
     /// A failure of a Commons Math routine.
     #[error(transparent)]
     Math(#[from] MathError),
@@ -213,6 +228,14 @@ impl Error {
         Error::Legacy {
             message: message.into(),
             runtime: Some(class),
+        }
+    }
+
+    /// The failure of `function` given arguments it does not accept, because of `requirement`.
+    pub fn usage(function: impl AsRef<str>, requirement: impl Into<String>) -> Self {
+        Error::Usage {
+            function: function.as_ref().to_owned(),
+            requirement: requirement.into(),
         }
     }
 
@@ -267,6 +290,8 @@ impl Error {
             | Error::Continue
             | Error::Abort(_)
             | Error::Context { .. }
+            | Error::Usage { .. }
+            | Error::Stack(_)
             | Error::NotFinite(_) => false,
         }
     }

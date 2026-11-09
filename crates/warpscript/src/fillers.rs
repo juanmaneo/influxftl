@@ -187,27 +187,25 @@ fn value_builder(stack: &mut Stack, name: &'static str) -> Result<()> {
     let (location, elevation, value) = if let Value::List(list) = &top {
         let datapoint = list.borrow().clone();
         if datapoint.len() != 4 {
-            return Err(Error::new(format!(
-                "{name} expects a LIST of 4 parameters: latitude longitude elevation value"
-            )));
+            return Err(Error::usage(
+                name,
+                "expects a LIST of 4 parameters: latitude longitude elevation value",
+            ));
         }
         let Some(lat) = datapoint[0].as_f64() else {
-            return Err(Error::new(format!(
-                "{name} expects the latitude to be a NUMBER"
-            )));
+            return Err(Error::usage(name, "expects the latitude to be a NUMBER"));
         };
         let Some(lon) = datapoint[1].as_f64() else {
-            return Err(Error::new(format!(
-                "{name} expects the longitude to be a NUMBER"
-            )));
+            return Err(Error::usage(name, "expects the longitude to be a NUMBER"));
         };
         let elevation = match datapoint[2] {
             Value::Long(elevation) => elevation,
             Value::Double(d) if d.is_nan() => NO_ELEVATION,
             _ => {
-                return Err(Error::new(format!(
-                    "{name} expects the elevation to be a LONG or NAN"
-                )));
+                return Err(Error::usage(
+                    name,
+                    "expects the elevation to be a LONG or NAN",
+                ));
             }
         };
         let location = if lat.is_nan() || lon.is_nan() {
@@ -223,9 +221,10 @@ fn value_builder(stack: &mut Stack, name: &'static str) -> Result<()> {
         value,
         Value::Long(_) | Value::Double(_) | Value::Boolean(_) | Value::String(_) | Value::Bytes(_)
     ) {
-        return Err(Error::new(format!(
-            "{name} expects the value to be either a LONG, a DOUBLE, a BOOLEAN, a STRING or a BYTEARRAY"
-        )));
+        return Err(Error::usage(
+            name,
+            "expects the value to be either a LONG, a DOUBLE, a BOOLEAN, a STRING or a BYTEARRAY",
+        ));
     }
     push(
         stack,
@@ -251,35 +250,46 @@ fn lowess_builder(stack: &mut Stack, name: &'static str, robust: bool) -> Result
     let mut robustness = None;
     if robust {
         let Value::Long(r) = top else {
-            return Err(Error::new(format!(
-                "{name} expects a number of robustifying iterations (LONG), but instead got a {}",
-                top.type_name()
-            )));
+            return Err(Error::usage(
+                name,
+                format!(
+                    "expects a number of robustifying iterations (LONG), but instead got a {}",
+                    top.type_name()
+                ),
+            ));
         };
         robustness = Some(r as i32);
         top = stack.pop()?;
     }
     let Value::Long(bandwidth) = top else {
-        return Err(Error::new(format!(
-            "{name} expects a bandwidth as a number of data points (LONG), but instead got a {}",
-            top.type_name()
-        )));
+        return Err(Error::usage(
+            name,
+            format!(
+                "expects a bandwidth as a number of data points (LONG), but instead got a {}",
+                top.type_name()
+            ),
+        ));
     };
     if bandwidth <= 1 {
-        return Err(Error::new(format!(
-            "{name} expects a bandwidth > 1, instead got {bandwidth}"
-        )));
+        return Err(Error::usage(
+            name,
+            format!("expects a bandwidth > 1, instead got {bandwidth}"),
+        ));
     }
     if let Some(r) = robustness.filter(|r| *r <= 0) {
-        return Err(Error::new(format!(
-            "{name} expects a positive robustness, instead got {r}"
-        )));
+        return Err(Error::usage(
+            name,
+            format!("expects a positive robustness, instead got {r}"),
+        ));
     }
     if accuracy <= 0.0 {
-        return Err(Error::new(format!(
-            "{name} expects a positive accuracy, instead got {}",
-            java_double_to_string(accuracy)
-        )));
+        return Err(Error::usage(
+            name,
+            format!(
+                "expects a positive accuracy, instead got {}",
+                java_double_to_string(accuracy)
+            ),
+        ));
     }
     push(
         stack,
@@ -296,17 +306,19 @@ fn lowess_builder(stack: &mut Stack, name: &'static str, robust: bool) -> Result
 /// `MACROFILLER`: `macro pre post MACROFILLER`.
 fn macrofiller_builder(stack: &mut Stack, name: &'static str) -> Result<()> {
     let Value::Long(post) = stack.pop()? else {
-        return Err(Error::new(format!(
-            "{name} expects a 'post' window length on top of the stack."
-        )));
+        return Err(Error::usage(
+            name,
+            "expects a 'post' window length on top of the stack.",
+        ));
     };
     let Value::Long(pre) = stack.pop()? else {
-        return Err(Error::new(format!(
-            "{name} expects a 'pre' window length below the 'post' window length."
-        )));
+        return Err(Error::usage(
+            name,
+            "expects a 'pre' window length below the 'post' window length.",
+        ));
     };
     let Value::Macro(wrapped) = stack.pop()? else {
-        return Err(Error::new(format!("{name} operates on a MACRO.")));
+        return Err(Error::usage(name, "operates on a MACRO."));
     };
     push(
         stack,
@@ -905,9 +917,10 @@ fn numeric_points(name: &str, gts: &GeoTimeSerie) -> Result<Option<(Vec<f64>, Ve
 }
 
 fn type_error(name: &str, type_name: &str) -> Error {
-    Error::new(format!(
-        "{name} expects a GTS of type DOUBLE or LONG, but instead got a GTS of type {type_name}"
-    ))
+    Error::usage(
+        name,
+        format!("expects a GTS of type DOUBLE or LONG, but instead got a GTS of type {type_name}"),
+    )
 }
 
 /// `FillerInterpolate.compute`: linear interpolations of the values (from 2 datapoints), of

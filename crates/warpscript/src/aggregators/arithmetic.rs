@@ -142,9 +142,7 @@ impl Arithmetic {
 
 /// The error of the mappers of this module given a non numeric value.
 fn not_numeric(name: &str) -> Error {
-    Error::new(format!(
-        "{name} can only be applied to LONG or DOUBLE values."
-    ))
+    Error::usage(name, "can only be applied to LONG or DOUBLE values.")
 }
 
 impl Aggregator for Arithmetic {
@@ -286,20 +284,23 @@ impl Aggregator for Npdf {
 /// `MapperNPDF.Builder`: `mu sigma mapper.npdf`, `sigma` positive (a `NaN` passes).
 fn npdf_builder(stack: &mut Stack, name: &'static str) -> Result<()> {
     let Some(sigma) = Num::of(&stack.pop()?) else {
-        return Err(Error::new(format!(
-            "{name} expects a standard deviation (sigma) on top of the stack."
-        )));
+        return Err(Error::usage(
+            name,
+            "expects a standard deviation (sigma) on top of the stack.",
+        ));
     };
     let sigma = sigma.as_f64();
     if sigma <= 0.0 {
-        return Err(Error::new(format!(
-            "{name} expects a positive standard deviation (sigma) on top of the stack."
-        )));
+        return Err(Error::usage(
+            name,
+            "expects a positive standard deviation (sigma) on top of the stack.",
+        ));
     }
     let Some(mu) = Num::of(&stack.pop()?) else {
-        return Err(Error::new(format!(
-            "{name} expects a mean (mu) below the standard deviation."
-        )));
+        return Err(Error::usage(
+            name,
+            "expects a mean (mu) below the standard deviation.",
+        ));
     };
     let mu = mu.as_f64();
     stack.push(Value::Function(Named::object(

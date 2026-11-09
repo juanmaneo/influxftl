@@ -34,6 +34,7 @@ use super::math::entropy_error;
 use crate::bitset::BitSet;
 use crate::encoding::{hex_decode, hex_encode, opb64_decode, opb64_encode};
 use crate::error::fault::IllegalArgumentError;
+use crate::error::stack::StackError;
 use crate::error::{Error, Result};
 use crate::format::url_encode;
 use crate::stack::Stack;
@@ -257,7 +258,7 @@ fn join(stack: &mut Stack) -> Result<()> {
             )?;
             let n = n as i32;
             if n < 0 {
-                return Err(Error::new("Index out of bound."));
+                return Err(StackError::IndexOutOfBound.into());
             }
             let items = stack.popn(n as usize)?;
             let mut out = String::new();

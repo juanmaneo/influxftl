@@ -23,9 +23,11 @@ pub fn exception_class(err: &Error) -> &'static str {
             runtime: Some(class),
             ..
         } => class,
-        Error::Legacy { runtime: None, .. } | Error::Context { .. } | Error::NotFinite(_) => {
-            WARP_SCRIPT_EXCEPTION
-        }
+        Error::Legacy { runtime: None, .. }
+        | Error::Context { .. }
+        | Error::Usage { .. }
+        | Error::Stack(_)
+        | Error::NotFinite(_) => WARP_SCRIPT_EXCEPTION,
         Error::Thrift(err) => thrift_class(err),
         Error::Encoder(err) => encoder_class(err),
         Error::Math(err) => math_class(err),

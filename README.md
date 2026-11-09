@@ -188,7 +188,9 @@ before you consider work done.
 ### Coverage policy: 100 % of files, lines and regions
 
 - Measured with `cargo llvm-cov` (LLVM source-based coverage: regions, lines, functions).
-- Scope: every `.rs` file of `crates/*/src`. Test code is kept in dedicated files
+- Scope: every `.rs` file of `crates/*/src` that defines a function (a file that only declares
+  types, such as the enums of the typed errors whose `Display` is derived by `thiserror`,
+  holds no code the instrumentation can count). Test code is kept in dedicated files
   (`…/tests.rs`, `tests/` directories) which are excluded from the measurement, so that
   the `assert!` failure branches of the tests themselves do not pollute the figures.
   `xtask` is excluded as well: it is the tool that produces the gate.

@@ -14,6 +14,7 @@ use std::time::Instant;
 
 use indexmap::IndexMap;
 
+use crate::error::stack::StackError;
 use crate::error::{Error, Result};
 use crate::format;
 use crate::functions::{self, Entry};
@@ -86,13 +87,13 @@ pub const REVISION: &str = "3.5.0";
 /// Where the interactive functions (`PEEK`, `PSTACK`…) print (`ATTRIBUTE_INTERACTIVE_WRITER`).
 pub type InteractiveWriter = Rc<RefCell<dyn std::io::Write>>;
 
-const MACRO_START: &str = "<%";
+pub(crate) const MACRO_START: &str = "<%";
 const MACRO_END: &str = "%>";
-const COMMENT_START: &str = "/*";
+pub(crate) const COMMENT_START: &str = "/*";
 const COMMENT_END: &str = "*/";
-const MULTILINE_START: &str = "<'";
+pub(crate) const MULTILINE_START: &str = "<'";
 const MULTILINE_END: &str = "'>";
-const SECURE_SCRIPT_START: &str = "<S";
+pub(crate) const SECURE_SCRIPT_START: &str = "<S";
 const SECURE_SCRIPT_END: &str = "S>";
 
 /// Execution limits of a stack (`ATTRIBUTE_MAX_*`). Soft limits can be raised up to the hard
@@ -275,10 +276,10 @@ impl Stack {
     /// Fail when the stack holds more elements than the depth limit allows.
     pub fn check_depth(&self) -> Result<()> {
         if self.elements.len() > self.limits.max_depth {
-            return Err(Error::new(format!(
-                "Stack depth would exceed set limit of {}. Consider raising the limit or using capabilities.",
-                self.limits.max_depth
-            )));
+            return Err(StackError::DepthLimit {
+                max: self.limits.max_depth,
+            }
+            .into());
         }
         Ok(())
     }
@@ -294,7 +295,7 @@ impl Stack {
     /// Pop `n` values, bottom-most first (`popn`).
     pub fn popn(&mut self, n: usize) -> Result<Vec<Value>> {
         if self.depth() < n {
-            return Err(Error::new("Index out of bound."));
+            return Err(StackError::IndexOutOfBound.into());
         }
         let at = self.elements.len() - n;
         Ok(self.elements.split_off(at))
@@ -303,7 +304,7 @@ impl Stack {
     /// Drop the top `n` values (`dropn`).
     pub fn dropn(&mut self, n: usize) -> Result<()> {
         if self.depth() < n {
-            return Err(Error::new("Index out of bound."));
+            return Err(StackError::IndexOutOfBound.into());
         }
         let at = self.elements.len() - n;
         self.elements.truncate(at);
@@ -328,7 +329,7 @@ impl Stack {
     /// A reference to the element `level` positions below the top (0 is the top).
     pub fn get(&self, level: usize) -> Result<&Value> {
         if level >= self.depth() {
-            return Err(Error::new("Invalid level."));
+            return Err(StackError::InvalidLevel.into());
         }
         Ok(&self.elements[self.elements.len() - 1 - level])
     }
@@ -417,10 +418,10 @@ impl Stack {
     /// Bind `symbol` to `value` (fails when the symbol table is full).
     pub fn store(&mut self, symbol: &str, value: Value) -> Result<()> {
         if !self.symbols.contains_key(symbol) && self.symbols.len() >= self.limits.max_symbols {
-            return Err(Error::new(format!(
-                "Symbol table has reached its maximum number of entries: {}",
-                self.limits.max_symbols
-            )));
+            return Err(StackError::SymbolLimit {
+                max: self.limits.max_symbols,
+            }
+            .into());
         }
         self.symbols.insert(symbol.to_owned(), value);
         Ok(())
@@ -459,21 +460,18 @@ impl Stack {
         let slot = usize::try_from(index)
             .ok()
             .and_then(|i| self.registers.get_mut(i))
-            .ok_or_else(|| {
-                Error::new(format!(
-                    "Invalid register number, must be between 0 and {}",
-                    DEFAULT_REGISTERS - 1
-                ))
+            .ok_or(StackError::InvalidRegister {
+                max: DEFAULT_REGISTERS - 1,
             })?;
         *slot = value;
         Ok(())
     }
 
     fn invalid_register(&self) -> Error {
-        Error::new(format!(
-            "Invalid register number, must be between 0 and {}",
-            self.registers.len() - 1
-        ))
+        StackError::InvalidRegister {
+            max: self.registers.len() - 1,
+        }
+        .into()
     }
 
     /// The registers.
@@ -748,10 +746,11 @@ impl Stack {
     /// Fail when the operation limit is exceeded.
     pub fn check_ops(&self) -> Result<()> {
         if self.current_ops > self.limits.max_ops {
-            return Err(Error::new(format!(
-                "Operation count ({}) exceeded maximum of {}. Consider raising the limit or using capabilities.",
-                self.current_ops, self.limits.max_ops
-            )));
+            return Err(StackError::OperationLimit {
+                count: self.current_ops,
+                max: self.limits.max_ops,
+            }
+            .into());
         }
         Ok(())
     }
@@ -760,10 +759,10 @@ impl Stack {
     /// and releases it in a `finally`).
     fn recurse_in(&mut self) -> Result<()> {
         if self.rec_level + 1 > self.limits.max_recursion {
-            return Err(Error::new(format!(
-                "Maximum recursion level reached ({})",
-                self.rec_level + 1
-            )));
+            return Err(StackError::RecursionLimit {
+                level: self.rec_level + 1,
+            }
+            .into());
         }
         self.rec_level += 1;
         Ok(())
@@ -818,20 +817,16 @@ impl Stack {
     /// Fail when a multi-line construct is still open (`checkBalanced`).
     pub fn check_balanced(&self) -> Result<()> {
         if self.in_multiline {
-            return Err(Error::new(format!(
-                "Unbalanced {MULTILINE_START} construct."
-            )));
+            return Err(StackError::UnbalancedMultiline.into());
         }
         if self.in_comment {
-            return Err(Error::new(format!("Unbalanced {COMMENT_START} construct.")));
+            return Err(StackError::UnbalancedComment.into());
         }
         if self.secure_script.is_some() {
-            return Err(Error::new(format!(
-                "Unbalanced {SECURE_SCRIPT_START} construct."
-            )));
+            return Err(StackError::UnbalancedSecureScript.into());
         }
         if !self.macros.is_empty() {
-            return Err(Error::new(format!("Unbalanced {MACRO_START} construct.")));
+            return Err(StackError::UnbalancedMacro.into());
         }
         Ok(())
     }
@@ -927,7 +922,7 @@ impl Stack {
             // End of block comment (possibly reached just above).
             if line[*pos] == '*' && *pos + 1 < len && line[*pos + 1] == '/' {
                 if !self.in_comment {
-                    return Err(Error::new("Not inside a comment."));
+                    return Err(StackError::NotInComment.into());
                 }
                 if *pos + 2 == len || line[*pos + 2] == ' ' {
                     self.in_comment = false;
@@ -973,7 +968,7 @@ impl Stack {
                     }
                 }
                 let Some(string_end) = string_end else {
-                    return Err(Error::new("Cannot find end of string"));
+                    return Err(StackError::UnterminatedString.into());
                 };
                 *end = string_end;
                 let raw: String = line[*pos + 1..string_end].iter().collect();
@@ -1000,9 +995,7 @@ impl Stack {
             if stmt == MULTILINE_START {
                 let whole: String = line.iter().collect();
                 if whole.trim() != MULTILINE_START {
-                    return Err(Error::new(format!(
-                        "Can only start multiline strings by using {MULTILINE_START} on a line by itself."
-                    )));
+                    return Err(StackError::MultilineNotAlone.into());
                 }
                 self.in_multiline = true;
                 self.multiline.clear();
@@ -1020,14 +1013,14 @@ impl Stack {
     fn exec_statement(&mut self, stmt: &str) -> Result<()> {
         if stmt == SECURE_SCRIPT_END {
             let Some(script) = self.secure_script.take() else {
-                return Err(Error::new("Not inside a secure script definition."));
+                return Err(StackError::NotInSecureScript.into());
             };
             self.push(Value::from(script));
             return functions::call(self, "SECURE");
         }
         if stmt == SECURE_SCRIPT_START {
             if self.secure_script.is_some() {
-                return Err(Error::new("Already inside a secure script definition."));
+                return Err(StackError::AlreadyInSecureScript.into());
             }
             self.secure_script = Some(String::new());
             return Ok(());
@@ -1039,7 +1032,7 @@ impl Stack {
         }
         if stmt == MACRO_END {
             if self.macros.is_empty() || self.macros.len() == self.forced_macro {
-                return Err(Error::new("Not inside a macro definition."));
+                return Err(StackError::NotInMacro.into());
             }
             let statements = self.macros.pop().unwrap_or_default();
             let m = Macro::from_statements(statements);
@@ -1079,9 +1072,9 @@ impl Stack {
             let value = match self.symbols.get(symbol) {
                 Some(value) => value.clone(),
                 None if self.macros.len() > 1 => {
-                    return Err(Error::new("Early binding is not possible inside a macro."));
+                    return Err(StackError::EarlyBindingInMacro.into());
                 }
-                None => return Err(Error::new(format!("Unknown symbol '{symbol}'"))),
+                None => return Err(StackError::UnknownSymbol(symbol.to_string()).into()),
             };
             return self.emit_value(value);
         }
@@ -1089,7 +1082,7 @@ impl Stack {
             if self.macros.is_empty() {
                 let value = match self.symbols.get(symbol) {
                     Some(value) => value.clone(),
-                    None => return Err(Error::new(format!("Unknown symbol '{symbol}'"))),
+                    None => return Err(StackError::UnknownSymbol(symbol.to_string()).into()),
                 };
                 return self.push_checked(value);
             }
@@ -1156,9 +1149,7 @@ impl Stack {
     fn find_function(&self, name: &str) -> Result<Found> {
         if let Some(definition) = self.defined.get(name) {
             if !self.allow_redefined {
-                return Err(Error::new(format!(
-                    "Disallowed redefined function '{name}'."
-                )));
+                return Err(StackError::RedefinedFunction(name.to_string()).into());
             }
             return Ok(Found::Stack(match definition {
                 Some(body) => Callable::Defined {
@@ -1178,7 +1169,7 @@ impl Stack {
                 Ok(Found::Stack(Callable::Builder { name, func: *func }))
             }
             Some((name, Entry::Object(build))) => Ok(Found::Object(Value::Function(build(name)))),
-            None => Err(Error::new(format!("Unknown function '{name}'"))),
+            None => Err(StackError::UnknownFunction(name.to_string()).into()),
         }
     }
 
@@ -1188,8 +1179,8 @@ impl Stack {
         let symbol = self.rewrite_macro_symbol(symbol);
         match self.symbols.get(&*symbol) {
             Some(Value::Macro(m)) => Ok(Rc::clone(m)),
-            Some(_) => Err(Error::new(format!("'{symbol}' is not a macro."))),
-            None => Err(Error::new(format!("Unknown macro '{symbol}'"))),
+            Some(_) => Err(StackError::NotAMacro(symbol.to_string()).into()),
+            None => Err(StackError::UnknownMacro(symbol.to_string()).into()),
         }
     }
 
@@ -1227,7 +1218,7 @@ impl Stack {
                 && self.current_ops.is_multiple_of(16)
                 && Instant::now() > deadline
             {
-                result = Err(Error::new(DEADLINE_MESSAGE));
+                result = Err(StackError::Deadline.into());
                 break;
             }
             let outcome = match &m.statements[idx] {
@@ -1272,7 +1263,7 @@ impl Stack {
     /// (`macroOpen`, used by `EVAL` style helpers).
     pub fn macro_open(&mut self) -> Result<()> {
         if self.forced_macro != 0 {
-            return Err(Error::new("Already in a forced Macro."));
+            return Err(StackError::AlreadyForcedMacro.into());
         }
         self.macros.push(Vec::new());
         self.forced_macro = self.macros.len();
@@ -1286,9 +1277,7 @@ impl Stack {
         }
         self.check_balanced_inner()?;
         if self.macros.len() != self.forced_macro {
-            return Err(Error::new(
-                "Invalid level for closing forced Macro, check that all macros are correctly closed.",
-            ));
+            return Err(StackError::ForcedMacroLevel.into());
         }
         let statements = self.macros.pop().unwrap_or_default();
         self.forced_macro = 0;
@@ -1298,17 +1287,13 @@ impl Stack {
 
     fn check_balanced_inner(&self) -> Result<()> {
         if self.in_multiline {
-            return Err(Error::new(format!(
-                "Unbalanced {MULTILINE_START} construct."
-            )));
+            return Err(StackError::UnbalancedMultiline.into());
         }
         if self.in_comment {
-            return Err(Error::new(format!("Unbalanced {COMMENT_START} construct.")));
+            return Err(StackError::UnbalancedComment.into());
         }
         if self.secure_script.is_some() {
-            return Err(Error::new(format!(
-                "Unbalanced {SECURE_SCRIPT_START} construct."
-            )));
+            return Err(StackError::UnbalancedSecureScript.into());
         }
         Ok(())
     }

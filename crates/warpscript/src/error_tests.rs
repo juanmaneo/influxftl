@@ -885,3 +885,98 @@ fn classes_of_every_kind_of_unpickled_object() {
     );
     assert_eq!(compat::py_classes(&[]), "");
 }
+
+#[test]
+fn interpreter_failures_have_the_wording_of_warp10() {
+    use super::error::stack::StackError;
+
+    let failures = [
+        (
+            StackError::DepthLimit { max: 4 },
+            "Stack depth would exceed set limit of 4. Consider raising the limit or using capabilities.",
+        ),
+        (StackError::IndexOutOfBound, "Index out of bound."),
+        (StackError::InvalidLevel, "Invalid level."),
+        (
+            StackError::SymbolLimit { max: 3 },
+            "Symbol table has reached its maximum number of entries: 3",
+        ),
+        (
+            StackError::InvalidRegister { max: 255 },
+            "Invalid register number, must be between 0 and 255",
+        ),
+        (
+            StackError::OperationLimit { count: 11, max: 10 },
+            "Operation count (11) exceeded maximum of 10. Consider raising the limit or using capabilities.",
+        ),
+        (
+            StackError::RecursionLimit { level: 5 },
+            "Maximum recursion level reached (5)",
+        ),
+        (StackError::Deadline, "Execution time limit reached."),
+        (StackError::UnbalancedMultiline, "Unbalanced <' construct."),
+        (StackError::UnbalancedComment, "Unbalanced /* construct."),
+        (
+            StackError::UnbalancedSecureScript,
+            "Unbalanced <S construct.",
+        ),
+        (StackError::UnbalancedMacro, "Unbalanced <% construct."),
+        (StackError::NotInComment, "Not inside a comment."),
+        (StackError::UnterminatedString, "Cannot find end of string"),
+        (
+            StackError::MultilineNotAlone,
+            "Can only start multiline strings by using <' on a line by itself.",
+        ),
+        (
+            StackError::NotInSecureScript,
+            "Not inside a secure script definition.",
+        ),
+        (
+            StackError::AlreadyInSecureScript,
+            "Already inside a secure script definition.",
+        ),
+        (StackError::NotInMacro, "Not inside a macro definition."),
+        (
+            StackError::EarlyBindingInMacro,
+            "Early binding is not possible inside a macro.",
+        ),
+        (
+            StackError::UnknownSymbol("s".to_owned()),
+            "Unknown symbol 's'",
+        ),
+        (
+            StackError::RedefinedFunction("f".to_owned()),
+            "Disallowed redefined function 'f'.",
+        ),
+        (
+            StackError::UnknownFunction("f".to_owned()),
+            "Unknown function 'f'",
+        ),
+        (StackError::NotAMacro("m".to_owned()), "'m' is not a macro."),
+        (
+            StackError::UnknownMacro("m".to_owned()),
+            "Unknown macro 'm'",
+        ),
+        (StackError::AlreadyForcedMacro, "Already in a forced Macro."),
+        (
+            StackError::ForcedMacroLevel,
+            "Invalid level for closing forced Macro, check that all macros are correctly closed.",
+        ),
+    ];
+    for (failure, message) in failures {
+        let error = Error::from(failure);
+        assert_eq!(error.to_string(), message);
+        assert_eq!(
+            exception_class(&error),
+            "io.warp10.script.WarpScriptException"
+        );
+        assert!(!error.is_runtime(), "{message}");
+    }
+    let usage = Error::usage("ABS", "expects a number.");
+    assert_eq!(usage.to_string(), "ABS expects a number.");
+    assert_eq!(
+        exception_class(&usage),
+        "io.warp10.script.WarpScriptException"
+    );
+    assert!(!usage.is_runtime());
+}

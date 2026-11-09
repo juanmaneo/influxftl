@@ -107,7 +107,7 @@ impl Callable {
             Callable::Native { func, .. } => func(stack),
             Callable::Builder { name, func } => func(stack, name),
             Callable::Defined { body, .. } => stack.exec_macro(body),
-            Callable::Undefined { name } => Err(Error::new(format!("{name} is undefined."))),
+            Callable::Undefined { name } => Err(Error::usage(name, "is undefined.")),
             Callable::Object(object) => object.apply(stack),
         }
     }

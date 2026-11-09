@@ -204,9 +204,10 @@ fn partition_fn(stack: &mut Stack, name: &str, strict: bool) -> Result<()> {
             Value::List(list) => {
                 for item in list.borrow().iter() {
                     let Value::Gts(gts) = item else {
-                        return Err(Error::new(format!(
-                            "{name} expects a list of Geo Time Series as first parameter."
-                        )));
+                        return Err(Error::usage(
+                            name,
+                            "expects a list of Geo Time Series as first parameter.",
+                        ));
                     };
                     series.push(gts.clone());
                 }
@@ -444,18 +445,14 @@ fn reduce_class(
 /// each class to its results.
 fn reduce(stack: &mut Stack, name: &str, flatten: bool) -> Result<()> {
     let Value::List(params) = stack.pop()? else {
-        return Err(Error::new(format!("{name} expects a list as input.")));
+        return Err(Error::usage(name, "expects a list as input."));
     };
     let params = params.borrow().clone();
     let size = params.len();
     if size < 3 {
-        return Err(Error::new(format!("{name} expects at least 3 parameters.")));
+        return Err(Error::usage(name, "expects at least 3 parameters."));
     }
-    let not_series = || {
-        Error::new(format!(
-            "{name} expects lists of Geo Time Series as first parameter."
-        ))
-    };
+    let not_series = || Error::usage(name, "expects lists of Geo Time Series as first parameter.");
     // All but the last two parameters must be lists, even when the last is the override.
     let mut lists = Vec::with_capacity(size - 2);
     for param in &params[..size - 2] {
@@ -476,27 +473,36 @@ fn reduce(stack: &mut Stack, name: &str, flatten: bool) -> Result<()> {
         Value::List(list) => Some(list.borrow().clone()),
         Value::Set(set) => Some(set.borrow().iter().cloned().collect()),
         _ => {
-            return Err(Error::new(format!(
-                "{name} expects a list of label names or null as parameter number {}.",
-                labels_index + 1
-            )));
+            return Err(Error::usage(
+                name,
+                format!(
+                    "expects a list of label names or null as parameter number {}.",
+                    labels_index + 1
+                ),
+            ));
         }
     };
     if bylabels
         .as_ref()
         .is_some_and(|labels| labels.iter().any(|l| !matches!(l, Value::String(_))))
     {
-        return Err(Error::new(format!(
-            "{name} expects a list of label names as parameter number {}.",
-            labels_index + 1
-        )));
+        return Err(Error::usage(
+            name,
+            format!(
+                "expects a list of label names as parameter number {}.",
+                labels_index + 1
+            ),
+        ));
     }
     let reducer_value = &params[reducer_index];
     let Some(reducer) = aggregator_of(reducer_value).filter(|a| a.roles().reducer) else {
-        return Err(Error::new(format!(
-            "{name} expects a function as parameter number {}.",
-            reducer_index + 1
-        )));
+        return Err(Error::usage(
+            name,
+            format!(
+                "expects a function as parameter number {}.",
+                reducer_index + 1
+            ),
+        ));
     };
     let mut series = Vec::new();
     for list in &lists[..labels_index] {

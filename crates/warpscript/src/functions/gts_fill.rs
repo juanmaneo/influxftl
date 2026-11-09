@@ -240,7 +240,10 @@ fn univariate_role(roles: Roles<'_>, force: bool) -> Option<Role<'_>> {
 }
 
 fn role_error() -> Error {
-    Error::new("FILL expects parameter filler to be a filler, but instead got a FILLER")
+    Error::usage(
+        "FILL",
+        "expects parameter filler to be a filler, but instead got a FILLER",
+    )
 }
 
 /// The univariate fill of a series or of each series of a list.
@@ -650,11 +653,7 @@ fn fill_each(
     name: &str,
     f: impl Fn(&GeoTimeSerie) -> GeoTimeSerie,
 ) -> Result<()> {
-    let not_series = || {
-        Error::new(format!(
-            "{name} expects a LIST or a Geo Time Series as input."
-        ))
-    };
+    let not_series = || Error::usage(name, "expects a LIST or a Geo Time Series as input.");
     match stack.pop()? {
         Value::Gts(gts) => {
             let filled = f(&gts.borrow());
@@ -727,8 +726,9 @@ fn fillvalue(stack: &mut Stack) -> Result<()> {
     let params = match stack.pop()? {
         Value::List(list) if list.borrow().len() == 4 => list.borrow().clone(),
         _ => {
-            return Err(Error::new(
-                "FILLVALUE expects a LIST of 4 parameters: latitude longitude elevation value.",
+            return Err(Error::usage(
+                "FILLVALUE",
+                "expects a LIST of 4 parameters: latitude longitude elevation value.",
             ));
         }
     };
@@ -883,20 +883,23 @@ fn add_fills(filled: &mut GeoTimeSerie, fills: Vec<(i64, Option<usize>)>) {
 /// `FILLTICKS`: `gts|[gts…] [ lat lon elev value [ ticks ] ] FILLTICKS`.
 fn fillticks(stack: &mut Stack) -> Result<()> {
     let Value::List(list) = stack.pop()? else {
-        return Err(Error::new(
-            "FILLTICKS expects a list of 5 parameters (lat, lon, elevation, value, ticks).",
+        return Err(Error::usage(
+            "FILLTICKS",
+            "expects a list of 5 parameters (lat, lon, elevation, value, ticks).",
         ));
     };
     let params = list.borrow().clone();
     if params.len() != 5 {
-        return Err(Error::new(
-            "FILLTICKS expects 5 parameters (lat, lon, elevation, value, ticks).",
+        return Err(Error::usage(
+            "FILLTICKS",
+            "expects 5 parameters (lat, lon, elevation, value, ticks).",
         ));
     }
     let (location, elevation) = geo_params(&params)?;
     let not_ticks = || {
-        Error::new(
-            "FILLTICKS expects a list of ticks as the fifth parameter of its parameter list.",
+        Error::usage(
+            "FILLTICKS",
+            "expects a list of ticks as the fifth parameter of its parameter list.",
         )
     };
     let Value::List(ticks) = &params[4] else {

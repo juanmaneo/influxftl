@@ -190,8 +190,9 @@ impl Aggregator for PolyFunc {
             0 => (NO_LOCATION, NO_ELEVATION),
             1 => (args.locations[0], args.elevations[0]),
             _ => {
-                return Err(Error::new(
-                    "POLYFUNC can only be applied to a single value.",
+                return Err(Error::usage(
+                    "POLYFUNC",
+                    "can only be applied to a single value.",
                 ));
             }
         };

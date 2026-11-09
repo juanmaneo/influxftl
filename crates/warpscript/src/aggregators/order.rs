@@ -142,10 +142,10 @@ impl Aggregator for Median {
         let values = args.values;
         let nulls = values.iter().filter(|v| v.is_null()).count();
         if nulls != 0 && self.forbid_nulls {
-            return Err(Error::new(format!(
-                "{} cannot compute median of null values.",
-                self.name
-            )));
+            return Err(Error::usage(
+                self.name,
+                "cannot compute median of null values.",
+            ));
         }
         let indices = sorted_indices(values, self.name)?;
         let n = values.len() - nulls;
@@ -503,10 +503,10 @@ impl Aggregator for Percentile {
         let values = args.values;
         let nulls = values.iter().filter(|v| v.is_null()).count();
         if nulls != 0 && self.forbid_nulls {
-            return Err(Error::new(format!(
-                "{} cannot compute percentile of null values.",
-                self.name
-            )));
+            return Err(Error::usage(
+                self.name,
+                "cannot compute percentile of null values.",
+            ));
         }
         if nulls == values.len() {
             return Ok(Aggregated {
@@ -558,7 +558,7 @@ impl Aggregator for Percentile {
                     8 => (p + 1.0) / 3.0,
                     9 => p / 4.0 + 3.0 / 8.0,
                     _ => {
-                        return Err(Error::new(format!("{} given invalid type.", self.name)));
+                        return Err(Error::usage(self.name, "given invalid type."));
                     }
                 };
                 let j = (pn + m).floor() as i64;
@@ -586,16 +586,18 @@ fn percentile_builder(stack: &mut Stack, name: &'static str, forbid_nulls: bool)
         let lower = s.to_lowercase();
         let units: Vec<u16> = lower.encode_utf16().collect();
         if units.len() != 5 || !lower.starts_with("type") {
-            return Err(Error::new(format!(
-                "{name} expect percentile type to be 'typeX' where 0<X<10."
-            )));
+            return Err(Error::usage(
+                name,
+                "expect percentile type to be 'typeX' where 0<X<10.",
+            ));
         }
         // `charAt(4) - '0'`
         let digit = i32::from(units[4]) - i32::from(b'0');
         if !(1..=9).contains(&digit) {
-            return Err(Error::new(format!(
-                "{name} expect percentile type to be 'typeX' where X is a integer and 0<X<10."
-            )));
+            return Err(Error::usage(
+                name,
+                "expect percentile type to be 'typeX' where X is a integer and 0<X<10.",
+            ));
         }
         kind = digit as u8;
         top = stack.pop()?;

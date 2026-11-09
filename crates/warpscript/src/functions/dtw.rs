@@ -54,9 +54,10 @@ fn measure(distance: Distance, v1: &Series, i1: usize, v2: &Series, i2: usize) -
     };
     let degrees = |name: &str| -> Result<(f64, f64, f64, f64)> {
         if v1.len() != 2 {
-            return Err(Error::new(format!(
-                "{name} distance must be given two dimensions: lat, lon."
-            )));
+            return Err(Error::usage(
+                name,
+                "distance must be given two dimensions: lat, lon.",
+            ));
         }
         Ok((
             v1[0][i1].to_radians(),

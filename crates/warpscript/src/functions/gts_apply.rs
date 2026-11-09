@@ -75,17 +75,18 @@ fn series_collections(params: &[Value], not_series: impl Fn() -> Error) -> Resul
 /// (`PFILTER`).
 fn filter(stack: &mut Stack, name: &str, flatten: bool) -> Result<()> {
     let Value::List(params) = stack.pop()? else {
-        return Err(Error::new(format!("{name} expects a list as input.")));
+        return Err(Error::usage(name, "expects a list as input."));
     };
     let params = params.borrow().clone();
     let size = params.len();
     if size < 3 {
-        return Err(Error::new(format!("{name} expects at least 3 parameters.")));
+        return Err(Error::usage(name, "expects at least 3 parameters."));
     }
     let not_series = || {
-        Error::new(format!(
-            "{name} expects lists of Geo Time Series as first parameters."
-        ))
+        Error::usage(
+            name,
+            "expects lists of Geo Time Series as first parameters.",
+        )
     };
     if params[..size - 2]
         .iter()
@@ -96,20 +97,23 @@ fn filter(stack: &mut Stack, name: &str, flatten: bool) -> Result<()> {
     let bylabels = label_names(
         &params[size - 2],
         || {
-            Error::new(format!(
-                "{name} expects a list of label names or null as penultimate parameter."
-            ))
+            Error::usage(
+                name,
+                "expects a list of label names or null as penultimate parameter.",
+            )
         },
         || {
-            Error::new(format!(
-                "{name} expects a list of label names as penultimate parameter."
-            ))
+            Error::usage(
+                name,
+                "expects a list of label names as penultimate parameter.",
+            )
         },
     )?;
     let Some(function) = crate::filters::filter_of(&params[size - 1]) else {
-        return Err(Error::new(format!(
-            "{name} expects a filter function as last parameter."
-        )));
+        return Err(Error::usage(
+            name,
+            "expects a filter function as last parameter.",
+        ));
     };
     let collections = series_collections(&params[..size - 2], not_series)?;
     let classes = partition_collections(&collections, bylabels.as_deref());
@@ -270,24 +274,22 @@ struct Params {
 
 /// Parse `[ [ series ]+ labels|NULL op (validator) ]`, the operation being at `opidx`.
 fn parse(params: &[Value], opidx: usize, name: &str) -> Result<Params> {
-    let labels_error = || {
-        Error::new(format!(
-            "{name} expects a list of label names under the operation."
-        ))
-    };
+    let labels_error = || Error::usage(name, "expects a list of label names under the operation.");
     let labelsidx = opidx
         .checked_sub(1)
         .filter(|&i| i >= 1)
         .ok_or_else(labels_error)?;
     let bylabels = label_names(&params[labelsidx], labels_error, || {
-        Error::new(format!(
-            "{name} expects a list of label names as penultimate parameter."
-        ))
+        Error::usage(
+            name,
+            "expects a list of label names as penultimate parameter.",
+        )
     })?;
     let collections = series_collections(&params[..labelsidx], || {
-        Error::new(format!(
-            "{name} expects lists of Geo Time Series as first parameters."
-        ))
+        Error::usage(
+            name,
+            "expects lists of Geo Time Series as first parameters.",
+        )
     })?;
     let validator = match params.get(opidx + 1) {
         Some(Value::Macro(m)) => Some(m.clone()),
@@ -304,20 +306,21 @@ fn parse(params: &[Value], opidx: usize, name: &str) -> Result<Params> {
 /// the map of the labels of each class to its results.
 fn apply(stack: &mut Stack, name: &str, flatten: bool) -> Result<()> {
     let Value::List(params) = stack.pop()? else {
-        return Err(Error::new(format!("{name} expects a list as input.")));
+        return Err(Error::usage(name, "expects a list as input."));
     };
     let params = params.borrow().clone();
     if params.len() < 3 {
-        return Err(Error::new(format!("{name} expects at least 3 parameters.")));
+        return Err(Error::usage(name, "expects at least 3 parameters."));
     }
     let Some((opidx, op)) = params
         .iter()
         .enumerate()
         .find_map(|(i, p)| aggregator_of(p).filter(|a| a.nary()).map(|a| (i, a)))
     else {
-        return Err(Error::new(format!(
-            "{name} expects an operation in the parameter list."
-        )));
+        return Err(Error::usage(
+            name,
+            "expects an operation in the parameter list.",
+        ));
     };
     let Params {
         collections,

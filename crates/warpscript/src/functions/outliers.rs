@@ -29,7 +29,7 @@ pub const FUNCTIONS: &[(&str, Entry)] = &[
 fn double_values(gts: &GeoTimeSerie) -> Result<&[f64]> {
     match &gts.values {
         Values::Double(values) => Ok(values),
-        _ => Err(Error::new("GTS must be of type Double.")),
+        _ => Err(Error::usage("GTS", "must be of type Double.")),
     }
 }
 

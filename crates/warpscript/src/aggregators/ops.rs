@@ -160,9 +160,10 @@ fn breaks_order(name: &str, kind: Kind, a: &Value, b: &Value) -> Result<bool> {
             &Ordering::Equal,
         ),
         _ => {
-            return Err(Error::new(format!(
-                "{name} can only be applied to Geo Time Series of the same type."
-            )));
+            return Err(Error::usage(
+                name,
+                "can only be applied to Geo Time Series of the same type.",
+            ));
         }
     })
 }
@@ -196,10 +197,10 @@ impl Op {
                     return Ok(Value::Null);
                 }
                 let (Some(x), Some(y)) = (Num::of(a), Num::of(b)) else {
-                    return Err(Error::new(format!(
-                        "{} can only be applied to LONG or DOUBLE values.",
-                        self.name
-                    )));
+                    return Err(Error::usage(
+                        self.name,
+                        "can only be applied to LONG or DOUBLE values.",
+                    ));
                 };
                 Ok(match (self.kind, x, y) {
                     (Kind::Sub, Num::Long(x), Num::Long(y)) => Value::Long(x.wrapping_sub(y)),

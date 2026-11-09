@@ -75,9 +75,7 @@ fn compile(source: &str, name: &str) -> Result<CompiledPattern> {
 /// `MapperRegExpMatch.Builder`: `'regexp' mapper.regexp.match`.
 fn match_builder(stack: &mut Stack, name: &'static str) -> Result<()> {
     let Value::String(source) = stack.pop()? else {
-        return Err(Error::new(format!(
-            "{name} expects a regular expression STRING."
-        )));
+        return Err(Error::usage(name, "expects a regular expression STRING."));
     };
     let pattern = compile(&source, name)?;
     stack.push(Value::Function(Named::object(
@@ -130,12 +128,10 @@ impl Aggregator for RegExpReplace {
 /// `MapperRegExpReplace.Builder`: `'regexp' 'replacement' mapper.regexp.replace`.
 fn replace_builder(stack: &mut Stack, name: &'static str) -> Result<()> {
     let Value::String(replacement) = stack.pop()? else {
-        return Err(Error::new(format!("{name} expects a replacement STRING.")));
+        return Err(Error::usage(name, "expects a replacement STRING."));
     };
     let Value::String(source) = stack.pop()? else {
-        return Err(Error::new(format!(
-            "{name} expects a regular expression STRING."
-        )));
+        return Err(Error::usage(name, "expects a regular expression STRING."));
     };
     compile(&source, name)?;
     stack.push(Value::Function(Named::object(

@@ -333,9 +333,10 @@ fn variance_builder(
     standard_deviation: bool,
 ) -> Result<()> {
     let Value::Boolean(use_bessel) = stack.pop()? else {
-        return Err(Error::new(format!(
-            "{name} expects a boolean parameter to determine whether or not to apply Bessel's correction."
-        )));
+        return Err(Error::usage(
+            name,
+            "expects a boolean parameter to determine whether or not to apply Bessel's correction.",
+        ));
     };
     let variance = Variance {
         use_bessel,
@@ -442,9 +443,10 @@ fn circular_mean_builder(stack: &mut Stack, name: &'static str, forbid_nulls: bo
     let top = stack.pop()?;
     let period = top.as_f64().filter(|p| p.is_finite() && *p > 0.0);
     let Some(period) = period else {
-        return Err(Error::new(format!(
-            "{name} expects a finite, strictly positive, numeric 'period' parameter."
-        )));
+        return Err(Error::usage(
+            name,
+            "expects a finite, strictly positive, numeric 'period' parameter.",
+        ));
     };
     stack.push(Value::Function(Named::object(
         name,

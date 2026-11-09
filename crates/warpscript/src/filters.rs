@@ -358,9 +358,7 @@ fn bysize_builder(stack: &mut Stack, name: &'static str) -> Result<()> {
     let max = stack.pop()?;
     let min = stack.pop()?;
     let (Value::Long(min), Value::Long(max)) = (min, max) else {
-        return Err(Error::new(format!(
-            "{name} expects two LONG objects as arguments."
-        )));
+        return Err(Error::usage(name, "expects two LONG objects as arguments."));
     };
     push(
         stack,
@@ -540,7 +538,7 @@ fn any_builder(
     match threshold {
         Value::Long(_) | Value::Double(_) | Value::String(_) => {}
         Value::Boolean(_) if boolean => {}
-        _ => return Err(Error::new(format!("{name} threshold type is invalid."))),
+        _ => return Err(Error::usage(name, "threshold type is invalid.")),
     }
     push(
         stack,
@@ -582,10 +580,10 @@ impl Filter for MacroFilter {
         ));
         stack.exec_macro(&self.wrapped)?;
         let Value::List(result) = stack.pop()? else {
-            return Err(Error::new(format!(
-                "{} macro should return a list of Geo Time Series onto the stack.",
-                self.name
-            )));
+            return Err(Error::usage(
+                self.name,
+                "macro should return a list of Geo Time Series onto the stack.",
+            ));
         };
         let retained = result.borrow().clone();
         Ok(retained)
@@ -600,9 +598,7 @@ impl Filter for MacroFilter {
 /// `MACROFILTER`: `macro MACROFILTER`.
 fn macrofilter_builder(stack: &mut Stack, name: &'static str) -> Result<()> {
     let Value::Macro(wrapped) = stack.pop()? else {
-        return Err(Error::new(format!(
-            "{name} expects a macro on top of the stack."
-        )));
+        return Err(Error::usage(name, "expects a macro on top of the stack."));
     };
     push(stack, name, MacroFilter { name, wrapped });
     Ok(())
@@ -635,7 +631,7 @@ impl Filter for BySelector {
 /// `FilterBySelector.Builder`: `'selector' filter.byselector`.
 fn byselector_builder(stack: &mut Stack, name: &'static str) -> Result<()> {
     let Value::String(source) = stack.pop()? else {
-        return Err(Error::new(format!("{name} expects a STRING selector")));
+        return Err(Error::usage(name, "expects a STRING selector"));
     };
     let matcher = MetadataSelectorMatcher::new(&source)?;
     push(
@@ -680,7 +676,7 @@ impl Filter for ByMetadata {
 
 /// `FilterByMetadata.Builder`: `[ series ] filter.bymetadata`.
 fn bymetadata_builder(stack: &mut Stack, name: &'static str) -> Result<()> {
-    let invalid = || Error::new(format!("{name} expects a list of GTS on top of the stack."));
+    let invalid = || Error::usage(name, "expects a list of GTS on top of the stack.");
     let Value::List(list) = stack.pop()? else {
         return Err(invalid());
     };
@@ -869,19 +865,22 @@ fn set(gts: &mut GeoTimeSerie, tick: i64, value: i64) {
 /// `LatencyFilter.Builder`: `min max [ options ] filter.latencies`.
 fn latencies_builder(stack: &mut Stack, name: &'static str) -> Result<()> {
     let Value::List(options) = stack.pop()? else {
-        return Err(Error::new(format!(
-            "{name} expects a list of options on top of the stack."
-        )));
+        return Err(Error::usage(
+            name,
+            "expects a list of options on top of the stack.",
+        ));
     };
     let Value::Long(max) = stack.pop()? else {
-        return Err(Error::new(format!(
-            "{name} expects a maximum latency under the list of options."
-        )));
+        return Err(Error::usage(
+            name,
+            "expects a maximum latency under the list of options.",
+        ));
     };
     let Value::Long(min) = stack.pop()? else {
-        return Err(Error::new(format!(
-            "{name} expects a minimum latency under the list of options."
-        )));
+        return Err(Error::usage(
+            name,
+            "expects a minimum latency under the list of options.",
+        ));
     };
     let options = options.borrow().iter().map(ToString::to_string).collect();
     push(stack, name, Latencies { min, max, options });

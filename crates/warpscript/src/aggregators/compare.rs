@@ -244,32 +244,34 @@ fn compare_builder(
     if matches!(reference, Value::Boolean(_))
         && !matches!(comparison, Comparison::Eq | Comparison::Ne)
     {
-        return Err(Error::new(format!("{name} cannot compare with a BOOLEAN.")));
+        return Err(Error::usage(name, "cannot compare with a BOOLEAN."));
     }
     let test = match (compared, &reference) {
         (Compared::Tick, Value::Long(l)) => Test::Tick(*l),
         (Compared::HhCode, Value::Long(l)) => Test::HhCode(*l),
         (Compared::Elev, Value::Long(l)) => Test::Elevation(*l),
         (Compared::Tick | Compared::HhCode | Compared::Elev, _) => {
-            return Err(Error::new(format!("{name} can only compare with a LONG.")));
+            return Err(Error::usage(name, "can only compare with a LONG."));
         }
         (Compared::Lat, Value::Long(l)) => Test::Latitude(*l as f64),
         (Compared::Lat, Value::Double(d)) => Test::Latitude(*d),
         (Compared::Lon, Value::Long(l)) => Test::Longitude(*l as f64),
         (Compared::Lon, Value::Double(d)) => Test::Longitude(*d),
         (Compared::Lat | Compared::Lon, _) => {
-            return Err(Error::new(format!(
-                "{name} can only compare with a DOUBLE or a LONG."
-            )));
+            return Err(Error::usage(
+                name,
+                "can only compare with a DOUBLE or a LONG.",
+            ));
         }
         (Compared::Value, Value::Long(l)) => Test::Long(*l),
         (Compared::Value, Value::Double(d)) => Test::Double(*d),
         (Compared::Value, Value::String(s)) => Test::String(s.clone()),
         (Compared::Value, Value::Boolean(b)) => Test::Boolean(*b),
         (Compared::Value, _) => {
-            return Err(Error::new(format!(
-                "{name} can only compare with a STRING, a DOUBLE, a LONG or a BOOLEAN."
-            )));
+            return Err(Error::usage(
+                name,
+                "can only compare with a STRING, a DOUBLE, a LONG or a BOOLEAN.",
+            ));
         }
     };
     stack.push(Value::Function(Named::object(

@@ -97,16 +97,16 @@ impl Argminmax {
                 .get(i)
                 .ok_or_else(|| Error::index_out_of_bounds(i as i64, args.labels.len()))?;
             if !labels.contains_key(&self.label) {
-                return Err(Error::new(format!(
-                    "{} expects all labels to contain label '{}'.",
-                    self.name, self.label
-                )));
+                return Err(Error::usage(
+                    self.name,
+                    format!("expects all labels to contain label '{}'.", self.label),
+                ));
             }
             let Some(number) = Num::of(value) else {
-                return Err(Error::new(format!(
-                    "{} can only operate on numerical values.",
-                    self.name
-                )));
+                return Err(Error::usage(
+                    self.name,
+                    "can only operate on numerical values.",
+                ));
             };
             let number = match number {
                 Num::Long(l) if is_double => Num::Double(l as f64),
@@ -171,14 +171,16 @@ impl Aggregator for Argminmax {
 /// `Argminmax.Builder`: `'label' count reducer.argmax` (the count an `int`).
 fn argminmax_builder(stack: &mut Stack, name: &'static str, argmin: bool) -> Result<()> {
     let Value::Long(count) = stack.pop()? else {
-        return Err(Error::new(format!(
-            "{name} expects an integer number of maxima to report (use 0 to report them all)."
-        )));
+        return Err(Error::usage(
+            name,
+            "expects an integer number of maxima to report (use 0 to report them all).",
+        ));
     };
     let Value::String(label) = stack.pop()? else {
-        return Err(Error::new(format!(
-            "{name} expects the name of the label to report on the second level of the stack."
-        )));
+        return Err(Error::usage(
+            name,
+            "expects the name of the label to report on the second level of the stack.",
+        ));
     };
     stack.push(Value::Function(Named::object(
         name,
@@ -218,10 +220,7 @@ impl Aggregator for ShannonEntropy {
                     sum += *l as f64;
                 }
                 _ => {
-                    return Err(Error::new(format!(
-                        "{} can only operate on long values.",
-                        self.name
-                    )));
+                    return Err(Error::usage(self.name, "can only operate on long values."));
                 }
             }
         }

@@ -202,20 +202,20 @@ impl Aggregator for Smoother {
 /// `MapperKernel`: `step width name` pushes the smoother; the width (an `int`) must be odd.
 fn kernel_builder(stack: &mut Stack, name: &'static str, kernel: Kernel) -> Result<()> {
     let Value::Long(width) = stack.pop()? else {
-        return Err(Error::new(format!(
-            "{name} expects a window width in ticks on top of the stack."
-        )));
+        return Err(Error::usage(
+            name,
+            "expects a window width in ticks on top of the stack.",
+        ));
     };
     let width = width as i32;
     if width % 2 == 0 {
-        return Err(Error::new(format!(
-            "{name} window width MUST be odd (we count ticks, not intervals)."
-        )));
+        return Err(Error::usage(
+            name,
+            "window width MUST be odd (we count ticks, not intervals).",
+        ));
     }
     let Value::Long(step) = stack.pop()? else {
-        return Err(Error::new(format!(
-            "{name} expects a step length as a LONG."
-        )));
+        return Err(Error::usage(name, "expects a step length as a LONG."));
     };
     // `new double[1 + (width >>> 1)]`
     let count = 1i32.wrapping_add((width as u32 >> 1) as i32);

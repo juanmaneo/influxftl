@@ -234,11 +234,32 @@ fn walk(dir: &Path, root: &Path, out: &mut BTreeSet<String>) -> Result<(), crate
                 continue;
             }
             walk(&path, root, out)?;
-        } else if is_product_source(&path) {
+        } else if is_product_source(&path) && declares_functions(&path)? {
             out.insert(relativise(&path, root));
         }
     }
     Ok(())
+}
+
+/// `true` when the source file at `path` defines at least one function. A file that only
+/// declares types (the enums of the typed errors, whose `Display` is derived) has no code the
+/// instrumentation could count, so `llvm-cov` does not list it and it cannot be uncovered.
+fn declares_functions(path: &Path) -> Result<bool, crate::Error> {
+    Ok(source_declares_functions(&std::fs::read_to_string(path)?))
+}
+
+/// `true` when `source` has a line that starts a function (`fn`, possibly preceded by `pub`,
+/// `const`, `async` or `unsafe`) outside of comments and attributes.
+pub fn source_declares_functions(source: &str) -> bool {
+    source
+        .lines()
+        .map(str::trim_start)
+        .filter(|line| !line.starts_with("//") && !line.starts_with("#["))
+        .any(|line| {
+            line.split_whitespace().find(|word| {
+                !(word.starts_with("pub") || matches!(*word, "const" | "async" | "unsafe"))
+            }) == Some("fn")
+        })
 }
 
 /// `true` for `.rs` files that are neither test modules nor Kani proof modules (`proofs.rs`,

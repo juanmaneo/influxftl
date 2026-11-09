@@ -19,6 +19,7 @@ use super::Entry;
 use super::args::{fail, fail_with_cause, pop_macro, pop_string};
 use super::misc::{ATTRIBUTE_INFOMODE, TIME_UNITS_PER_MS};
 use crate::encoding::opb64_encode;
+use crate::error::stack::StackError;
 use crate::error::{Error, Result};
 use crate::macros::{Callable, Macro, StackFunction, Statement};
 use crate::snapshot::add_element;
@@ -862,7 +863,7 @@ fn peekn(stack: &mut Stack) -> Result<()> {
     // The top was just peeked: it is there.
     let level = stack.pop().unwrap_or(Value::Null);
     let level = super::args::int_value(&level).unwrap_or_default();
-    let level = usize::try_from(level).map_err(|_| Error::new("Invalid level."))?;
+    let level = usize::try_from(level).map_err(|_| StackError::InvalidLevel)?;
     print_levels(stack, std::iter::once(level))
 }
 

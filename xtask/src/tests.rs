@@ -270,6 +270,24 @@ fn product_source_detection_follows_the_convention() {
 }
 
 #[test]
+fn files_without_functions_have_nothing_to_cover() {
+    assert!(coverage::source_declares_functions("fn main() {}\n"));
+    assert!(coverage::source_declares_functions(
+        "impl X {\n    pub fn new() -> X {\n        X\n    }\n}\n"
+    ));
+    assert!(coverage::source_declares_functions(
+        "pub(crate) const fn id(x: u8) -> u8 { x }\n"
+    ));
+    assert!(!coverage::source_declares_functions(
+        "//! fn in a comment\n#[derive(Debug)]\npub enum E {\n    #[error(\"fn x\")]\n    A,\n}\n"
+    ));
+    assert!(!coverage::source_declares_functions(""));
+    assert!(!coverage::source_declares_functions(
+        "let fn_pointer = 1;\n"
+    ));
+}
+
+#[test]
 fn expected_source_files_walks_the_real_workspace() {
     let root = super::workspace_root();
     let files = coverage::expected_source_files(&root).unwrap();

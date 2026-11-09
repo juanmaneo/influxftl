@@ -90,9 +90,7 @@ pub(super) fn single_value<'a>(args: &'a AggregatorArgs, name: &str) -> Result<O
     match args.values {
         [] => Ok(None),
         [value] => Ok(Some(value)),
-        _ => Err(Error::new(format!(
-            "{name} can only be applied to a single value."
-        ))),
+        _ => Err(Error::usage(name, "can only be applied to a single value.")),
     }
 }
 
@@ -157,10 +155,7 @@ fn single(name: &'static str, kind: Kind) -> std::rc::Rc<dyn FunctionObject> {
 impl Single {
     /// The error of the arithmetic mappers given a non numeric value.
     fn not_numeric(&self) -> Error {
-        Error::new(format!(
-            "{} can only be applied to LONG or DOUBLE values.",
-            self.name
-        ))
+        Error::usage(self.name, "can only be applied to LONG or DOUBLE values.")
     }
 
     /// The value as a double for the arithmetic mappers.
@@ -395,9 +390,10 @@ fn date_time_builder(stack: &mut Stack, name: &'static str, field: Field) -> Res
         Value::Long(l) => TimeZone::for_offset_millis(l as i32)?,
         Value::Double(d) => TimeZone::for_offset_millis(d as i32)?,
         _ => {
-            return Err(Error::new(format!(
-                "{name} expects a STRING timezone or a NUMBER millisecond offset."
-            )));
+            return Err(Error::usage(
+                name,
+                "expects a STRING timezone or a NUMBER millisecond offset.",
+            ));
         }
     };
     stack.push(Value::Function(Named::object(
