@@ -8,11 +8,12 @@
 //! bits cleared. The Java sets are hash sets, but every iteration over them is either
 //! followed by a sort or does not depend on the order, so ordered sets behave the same.
 
+use std::cmp::Ordering;
 use std::collections::{BTreeSet, VecDeque};
 
 use crate::error::Result;
 use crate::error::fault::BoundsError;
-use crate::geoxp::delta_hhcode;
+use crate::geoxp::{build_hhcode, delta_hhcode, stable_split_hhcode};
 
 /// The HHCode bits a cell of each resolution keeps (index `r` for resolution `2 * (r + 1)`).
 const PREFIX_MASK: [i64; 16] = {
@@ -252,6 +253,119 @@ impl Coverage {
             let mut resolution = resolution;
             while self.optimize_cell(hhcode, resolution, self.auto_thresholds) {
                 resolution -= 2;
+            }
+        }
+    }
+
+    /// `addCell(resolution, lat, lon)`: add the cell of `resolution` holding the point at
+    /// the `lat` / `lon` units, wrapped to the `0..2^32` range.
+    pub fn add_cell_at(&mut self, resolution: i32, lat: i64, lon: i64) {
+        let span = 1i64 << MAX_RESOLUTION;
+        self.add_cell(
+            resolution,
+            build_hhcode(lat.rem_euclid(span), lon.rem_euclid(span)),
+        );
+    }
+
+    /// `HHCodeHelper.coverPolyline(nodes, resolution, false)`: the cells of `resolution`
+    /// (even, 2 to 30) a polyline through the HHCodes `nodes` goes through. A single node
+    /// covers nothing.
+    ///
+    /// # Errors
+    ///
+    /// [`BoundsError::ListIndex`] without any node, as the Java reads the first one.
+    pub fn cover_polyline(nodes: &[i64], resolution: u32) -> Result<Coverage> {
+        if nodes.is_empty() {
+            return Err(BoundsError::ListIndex {
+                index: 0,
+                length: 0,
+            }
+            .into());
+        }
+        let vertices: Vec<(i64, i64)> = nodes
+            .iter()
+            .map(|node| stable_split_hhcode(*node, MAX_RESOLUTION))
+            .collect();
+        let mut coverage = Coverage::new();
+        for (from, to) in vertices.iter().zip(vertices.iter().skip(1)) {
+            coverage.cover_line(*from, *to, resolution);
+        }
+        Ok(coverage)
+    }
+
+    /// `HHCodeHelper.coverLine`: add the cells of `resolution` a line between 2 `(lat, lon)`
+    /// points goes through, from the western one to the eastern one: each cell is followed
+    /// by the one the line enters when it leaves it, through its north (or south) or east
+    /// side, or through their corner.
+    fn cover_line(&mut self, from: (i64, i64), to: (i64, i64), resolution: u32) {
+        let ((from_lat, from_lon), (to_lat, to_lon)) = if from.1 > to.1 {
+            (to, from)
+        } else {
+            (from, to)
+        };
+        let north = to_lat - from_lat;
+        let dlat = north.abs();
+        let dlon = to_lon - from_lon;
+        let offset = 1i64 << (32 - resolution);
+        let offset_mask = offset - 1;
+        let prefix_mask = !offset_mask;
+        let resolution = resolution as i32;
+
+        if north == 0 {
+            let mut lon = from_lon;
+            while lon & prefix_mask < to_lon {
+                self.add_cell_at(resolution, from_lat, lon);
+                lon += offset;
+            }
+        } else if dlon == 0 {
+            let mut lat = from_lat;
+            if north > 0 {
+                while lat & prefix_mask < to_lat {
+                    self.add_cell(resolution, build_hhcode(lat, from_lon));
+                    lat += offset;
+                }
+            } else {
+                while lat | offset_mask > to_lat {
+                    self.add_cell(resolution, build_hhcode(lat, from_lon));
+                    lat -= offset;
+                }
+            }
+        } else {
+            let (mut lat, mut lon) = (from_lat, from_lon);
+            loop {
+                self.add_cell_at(resolution, lat, lon);
+                // Distances to the corner of the cell the line is heading to.
+                let lat_offset = if north > 0 {
+                    (lat | offset_mask) + 1 - lat
+                } else {
+                    lat - (lat & prefix_mask) + 1
+                };
+                let lon_offset = (lon | offset_mask) + 1 - lon;
+                let lat_cross = lat_offset * dlon;
+                let lon_cross = lon_offset * dlat;
+                let next_lat = if north > 0 {
+                    (lat | offset_mask) + 1
+                } else {
+                    (lat & prefix_mask) - 1
+                };
+                // Whether the line leaves the cell through its east side (the slope to the
+                // corner is steeper than the line), its north / south side, or the corner.
+                (lat, lon) = match lat_cross.cmp(&lon_cross) {
+                    Ordering::Greater => (
+                        lat + north.signum() * (lon_cross / dlon),
+                        (lon | offset_mask) + 1,
+                    ),
+                    Ordering::Less => (next_lat, lon + lat_cross / dlat),
+                    Ordering::Equal => (next_lat, (lon | offset_mask) + 1),
+                };
+                let inside = if north > 0 {
+                    lat & prefix_mask < to_lat
+                } else {
+                    lat | offset_mask > to_lat
+                };
+                if !(inside && lon & prefix_mask < to_lon) {
+                    break;
+                }
             }
         }
     }

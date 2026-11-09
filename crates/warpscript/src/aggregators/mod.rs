@@ -14,6 +14,11 @@ mod basic_tests;
 pub mod compare;
 #[cfg(test)]
 mod compare_tests;
+pub mod geo;
+#[cfg(test)]
+mod geo_tests;
+#[cfg(test)]
+mod geo_window_tests;
 pub mod join;
 #[cfg(test)]
 mod join_tests;

@@ -150,6 +150,7 @@ const TABLES: &[&[(&str, Entry)]] = &[
     crate::aggregators::join::FUNCTIONS,
     crate::aggregators::single::FUNCTIONS,
     crate::aggregators::arithmetic::FUNCTIONS,
+    crate::aggregators::geo::FUNCTIONS,
     crate::aggregators::compare::FUNCTIONS,
     crate::aggregators::product::FUNCTIONS,
     crate::aggregators::motion::FUNCTIONS,
@@ -287,6 +288,10 @@ mod encoders_tests;
 mod functional_tests;
 #[cfg(test)]
 mod geo_tests;
+#[cfg(test)]
+mod geocover_errors_tests;
+#[cfg(test)]
+mod geocover_tests;
 #[cfg(test)]
 mod geoops_errors_tests;
 #[cfg(test)]

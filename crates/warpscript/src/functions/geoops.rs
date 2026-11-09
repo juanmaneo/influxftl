@@ -3,13 +3,15 @@
 
 //! Operations on `GEOSHAPE`s: `GEO.UNION`, `GEO.INTERSECTION`, `GEO.DIFFERENCE`,
 //! `GEO.INTERSECTS`, `GEO.WITHIN`, `GEO.OPTIMIZE`, `GEO.NORMALIZE`, `GEOSHIFT`,
-//! `GEO.REGEXP`, `GEOSPLIT` and `BBOX`.
+//! `GEO.REGEXP`, `GEOSPLIT`, `BBOX`, `GEO.COVER` and `GEO.COVER.RL`.
 
+use std::collections::BTreeSet;
 use std::rc::Rc;
 
 use super::Entry;
 use super::args::fail;
-use super::gts::gts_or_list;
+use super::gts::{decoded, element_or_list, gts_or_list};
+use crate::coverage::Coverage;
 use crate::error::{Error, Result};
 use crate::geoshape::GeoShape;
 use crate::geoxp::from_geoxp_point;
@@ -36,6 +38,11 @@ pub const FUNCTIONS: &[(&str, Entry)] = &[
     ("GEO.REGEXP", Entry::Stack(georegexp)),
     ("GEOSPLIT", Entry::Stack(geosplit)),
     ("BBOX", Entry::Stack(bbox)),
+    ("GEO.COVER", Entry::Stack(|s| cover(s, "GEO.COVER", false))),
+    (
+        "GEO.COVER.RL",
+        Entry::Stack(|s| cover(s, "GEO.COVER.RL", true)),
+    ),
 ];
 
 /// A `GEOSHAPE` stack object.
@@ -304,4 +311,69 @@ fn bounding_box(gts: &GeoTimeSerie) -> Value {
 /// `BBOX`: the bounding box of the locations of a series or of each series of a list.
 fn bbox(stack: &mut Stack) -> Result<()> {
     gts_or_list(stack, "BBOX", |gts| bounding_box(&gts.borrow()))
+}
+
+/// The locations of a series or an encoder, in storage order or, for a polyline, in tick
+/// order (a series is then sorted in place, an encoder decoded to a sorted series).
+fn cover_locations(name: &str, element: &Value, polyline: bool) -> Result<Vec<i64>> {
+    match element {
+        Value::Gts(gts) if polyline => {
+            let mut gts = gts.borrow_mut();
+            gts.sort(false);
+            Ok(locations(&gts).collect())
+        }
+        Value::Gts(gts) => Ok(locations(&gts.borrow()).collect()),
+        Value::Encoder(encoder) if polyline => {
+            let mut gts = encoder.borrow().decoder().decode()?;
+            gts.sort(false);
+            Ok(locations(&gts).collect())
+        }
+        Value::Encoder(encoder) => Ok(decoded(&encoder.borrow())?
+            .into_iter()
+            .map(|(_, location, ..)| location)
+            .filter(|location| *location != NO_LOCATION)
+            .collect()),
+        _ => Err(fail(
+            name,
+            // The Java message has a no-break space between "Series" and "or".
+            "can only operate on Geo Time Series\u{a0}or GTS Encoders.",
+        )),
+    }
+}
+
+/// `GEO.COVER` and `GEO.COVER.RL`: the shape of the cells of a resolution (even, 2 to 30)
+/// holding the locations of a series or an encoder, or of each of a list; with `polyline`
+/// (rhumb lines), the cells the line through the locations, in tick order, goes through.
+fn cover(stack: &mut Stack, name: &str, polyline: bool) -> Result<()> {
+    let resolution = match stack.pop()? {
+        Value::Long(resolution) if (2..=30).contains(&resolution) && resolution % 2 == 0 => {
+            resolution as u32
+        }
+        _ => {
+            return Err(fail(
+                name,
+                "expects a resolution (even number from 2 to 30).",
+            ));
+        }
+    };
+    // The leading bits of an HHCode a cell of this resolution keeps, and its resolution.
+    let mask = (u64::MAX >> (64 - 2 * resolution)) << (64 - 2 * resolution);
+    let prefix = u64::from(resolution >> 1) << 60;
+    element_or_list(stack, |element| {
+        let locations = cover_locations(name, element, polyline)?;
+        let cells: BTreeSet<i64> = if polyline {
+            Coverage::cover_polyline(&locations, resolution)?
+                .to_geocells(resolution as i32)
+                .into_iter()
+                .collect()
+        } else {
+            locations
+                .into_iter()
+                .map(|location| (((location as u64 & mask) >> 4) | prefix) as i64)
+                .collect()
+        };
+        Ok(shape_value(GeoShape::from_cells(
+            cells.into_iter().collect(),
+        )))
+    })
 }
