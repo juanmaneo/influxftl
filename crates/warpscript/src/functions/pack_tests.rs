@@ -1,13 +1,11 @@
 // Copyright 2026 The influxftl Authors. Licensed under the Apache License, Version 2.0.
 
-#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
-
 use crate::encoding::hex_decode;
 use crate::tests::{assert_fails, assert_top, top};
 use crate::value::Value;
 
 fn bytes(hex: &str) -> Value {
-    Value::bytes(hex_decode(hex).unwrap())
+    Value::bytes(hex_decode(hex).expect("hex_decode should succeed"))
 }
 
 /// `PACK` the values of `list` (a WarpScript list literal) with `format`.

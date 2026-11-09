@@ -1,7 +1,5 @@
 // Copyright 2026 The influxftl Authors. Licensed under the Apache License, Version 2.0.
 
-#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
-
 //! Tests of the Argon2 port against BouncyCastle 1.78.1 (`Argon2BytesGenerator`) and of the
 //! embedded BLAKE2b against RFC 7693.
 
@@ -117,13 +115,13 @@ fn argon2_matches_bouncycastle() {
         ),
     ];
     for (params, size, expected) in &cases {
-        let out = generate(params, b"password", *size).unwrap();
+        let out = generate(params, b"password", *size).expect("generate should succeed");
         assert_eq!(hex_encode(&out), *expected, "{params:?}");
     }
     // Memory below 8 blocks is raised to 8 and an empty salt is the same as none.
     let tiny = params(ARGON2_I, 1, 2, 1, Some(b""));
     assert_eq!(
-        hex_encode(&generate(&tiny, b"password", 64).unwrap()),
+        hex_encode(&generate(&tiny, b"password", 64).expect("generate should succeed")),
         "caeb0932a019d47800a32fd9ff74389e0379281c6ae175643e4a7718b15f7f5b2dcf702a6fe95f217b1fbaf016b041a6cca8e29730f004afcbd68728cdc66bb5"
     );
     assert_eq!(
@@ -140,22 +138,35 @@ fn argon2_version_10_differs() {
         ..v13.clone()
     };
     assert_ne!(
-        generate(&v13, b"password", 32).unwrap(),
-        generate(&v10, b"password", 32).unwrap()
+        generate(&v13, b"password", 32).expect("generate should succeed"),
+        generate(&v10, b"password", 32).expect("generate should succeed")
     );
     // Passwords and salts matter, outputs have the requested size.
     assert_ne!(
-        generate(&v13, b"password", 32).unwrap(),
-        generate(&v13, b"Password", 32).unwrap()
+        generate(&v13, b"password", 32).expect("generate should succeed"),
+        generate(&v13, b"Password", 32).expect("generate should succeed")
     );
-    assert_eq!(generate(&v13, b"password", 65).unwrap().len(), 65);
-    assert_eq!(generate(&v13, b"password", 96).unwrap().len(), 96);
+    assert_eq!(
+        generate(&v13, b"password", 65)
+            .expect("generate should succeed")
+            .len(),
+        65
+    );
+    assert_eq!(
+        generate(&v13, b"password", 96)
+            .expect("generate should succeed")
+            .len(),
+        96
+    );
 }
 
 #[test]
 fn argon2_rejects_invalid_parameters_like_bouncycastle() {
-    let err =
-        |params: &Params, size: i64| generate(params, b"password", size).unwrap_err().message();
+    let err = |params: &Params, size: i64| {
+        generate(params, b"password", size)
+            .expect_err("generate should fail")
+            .message()
+    };
     let ok = params(ARGON2_ID, 3, 32, 1, SALT);
     assert_eq!(err(&ok, 3), "output length less than 4");
     assert_eq!(err(&ok, 0), "output length less than 4");

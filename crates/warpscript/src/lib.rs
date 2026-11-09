@@ -11,8 +11,9 @@
 //! use warpscript::{Stack, Value};
 //!
 //! let mut stack = Stack::new();
-//! stack.exec("42 'answer' STORE [ $answer $answer ] DROP $answer").unwrap();
-//! assert_eq!(stack.pop().unwrap(), Value::Long(42));
+//! stack.exec("42 'answer' STORE [ $answer $answer ] DROP $answer")?;
+//! assert_eq!(stack.pop()?, Value::Long(42));
+//! # Ok::<(), warpscript::Error>(())
 //! ```
 
 pub mod aggregators;

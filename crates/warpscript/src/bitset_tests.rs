@@ -1,7 +1,5 @@
 // Copyright 2026 The influxftl Authors. Licensed under the Apache License, Version 2.0.
 
-#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
-
 use super::bitset::BitSet;
 
 #[test]
@@ -16,19 +14,22 @@ fn from_bytes_trims_trailing_zero_bytes() {
 fn get_length_cardinality() {
     // Reference values from java.util.BitSet.valueOf(new byte[]{0x05, 0x00, (byte) 0x80}).
     let set = BitSet::from_bytes(&[0x05, 0x00, 0x80]);
-    assert!(set.get(0).unwrap());
-    assert!(!set.get(1).unwrap());
-    assert!(set.get(2).unwrap());
-    assert!(set.get(23).unwrap());
-    assert!(!set.get(100).unwrap());
-    assert_eq!(set.get(-1).unwrap_err().to_string(), "bitIndex < 0: -1");
+    assert!(set.get(0).expect("get should succeed"));
+    assert!(!set.get(1).expect("get should succeed"));
+    assert!(set.get(2).expect("get should succeed"));
+    assert!(set.get(23).expect("get should succeed"));
+    assert!(!set.get(100).expect("get should succeed"));
+    assert_eq!(
+        set.get(-1).expect_err("get should fail").to_string(),
+        "bitIndex < 0: -1"
+    );
     assert_eq!(set.length(), 24);
     assert_eq!(set.cardinality(), 3);
 
     let empty = BitSet::default();
     assert_eq!(empty.length(), 0);
     assert_eq!(empty.cardinality(), 0);
-    assert!(!empty.get(0).unwrap());
+    assert!(!empty.get(0).expect("get should succeed"));
 
     let big = BitSet::from_bytes(&[0, 0, 0, 0, 0, 0, 0, 0, 1]);
     assert_eq!(big.length(), 65);

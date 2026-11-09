@@ -1,7 +1,5 @@
 // Copyright 2026 The influxftl Authors. Licensed under the Apache License, Version 2.0.
 
-#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
-
 use std::collections::BTreeSet;
 use std::os::unix::process::ExitStatusExt;
 use std::path::{Path, PathBuf};
@@ -61,7 +59,11 @@ fn parses_every_command_name() {
         ("help", Command_::Help),
         ("-h", Command_::Help),
     ] {
-        assert_eq!(Command_::parse(name).unwrap(), expected, "{name}");
+        assert_eq!(
+            Command_::parse(name).expect("parse should succeed"),
+            expected,
+            "{name}"
+        );
     }
     assert!(matches!(Command_::parse("bogus"), Err(Error::Usage(_))));
 }
@@ -69,9 +71,10 @@ fn parses_every_command_name() {
 #[test]
 fn run_rejects_missing_or_extra_arguments() {
     let mut runner = fake();
-    let err = super::run(&[], &mut runner).unwrap_err();
+    let err = super::run(&[], &mut runner).expect_err("run should fail");
     assert!(err.to_string().contains("missing command"));
-    let err = super::run(&["check".into(), "extra".into()], &mut runner).unwrap_err();
+    let err =
+        super::run(&["check".into(), "extra".into()], &mut runner).expect_err("run should fail");
     assert!(err.to_string().contains("unexpected arguments"));
     assert_eq!(runner.calls, Vec::<String>::new());
 }
@@ -79,13 +82,13 @@ fn run_rejects_missing_or_extra_arguments() {
 #[test]
 fn simple_commands_spawn_the_expected_tools() {
     let mut runner = fake();
-    super::run(&["check".into()], &mut runner).unwrap();
-    super::run(&["fmt".into()], &mut runner).unwrap();
-    super::run(&["clippy".into()], &mut runner).unwrap();
-    super::run(&["test".into()], &mut runner).unwrap();
-    super::run(&["audit".into()], &mut runner).unwrap();
-    super::run(&["proof".into()], &mut runner).unwrap();
-    super::run(&["help".into()], &mut runner).unwrap();
+    super::run(&["check".into()], &mut runner).expect("run should succeed");
+    super::run(&["fmt".into()], &mut runner).expect("run should succeed");
+    super::run(&["clippy".into()], &mut runner).expect("run should succeed");
+    super::run(&["test".into()], &mut runner).expect("run should succeed");
+    super::run(&["audit".into()], &mut runner).expect("run should succeed");
+    super::run(&["proof".into()], &mut runner).expect("run should succeed");
+    super::run(&["help".into()], &mut runner).expect("run should succeed");
     assert_eq!(
         runner.calls,
         vec![
@@ -106,7 +109,7 @@ fn dev_check_stops_at_the_first_failing_gate() {
         calls: Vec::new(),
         fail_on: Some("fmt".to_owned()),
     };
-    let err = super::run(&["dev-check".into()], &mut runner).unwrap_err();
+    let err = super::run(&["dev-check".into()], &mut runner).expect_err("run should fail");
     assert!(err.to_string().contains("cargo fmt --all --check"), "{err}");
     // security-audit (2 calls) + check + fmt
     assert_eq!(runner.calls.len(), 4);
@@ -117,7 +120,9 @@ fn dev_check_stops_at_the_first_failing_gate() {
 fn error_display_covers_every_variant() {
     let io = Error::from(std::io::Error::other("disk"));
     assert!(io.to_string().contains("disk"));
-    let json = Error::from(serde_json::from_str::<serde_json::Value>("{").unwrap_err());
+    let json = Error::from(
+        serde_json::from_str::<serde_json::Value>("{").expect_err("the call should fail"),
+    );
     assert!(json.to_string().contains("invalid coverage export"));
     assert!(
         Error::Coverage("x".into())
@@ -215,7 +220,7 @@ fn coverage_gate_detects_partial_and_missing_files() {
     .iter()
     .map(|s| (*s).to_owned())
     .collect();
-    let report = coverage::evaluate(EXPORT, root, &expected).unwrap();
+    let report = coverage::evaluate(EXPORT, root, &expected).expect("evaluate should succeed");
     assert_eq!(report.files.len(), 2);
     assert_eq!(report.missing, vec!["crates/a/src/never.rs".to_owned()]);
     assert!(!report.is_complete());
@@ -237,11 +242,13 @@ fn coverage_gate_detects_partial_and_missing_files() {
 fn coverage_gate_passes_when_everything_is_complete() {
     let export = r#"{"data":[{"files":[{"filename":"/ws/crates/a/src/lib.rs","summary":{"lines":{"count":1,"covered":1},"regions":{"count":1,"covered":1},"functions":{"count":1,"covered":1}}}]}]}"#;
     let expected: BTreeSet<String> = ["crates/a/src/lib.rs".to_owned()].into_iter().collect();
-    let report = coverage::evaluate(export, Path::new("/ws"), &expected).unwrap();
+    let report =
+        coverage::evaluate(export, Path::new("/ws"), &expected).expect("evaluate should succeed");
     assert!(report.is_complete());
     assert_eq!(report.failures().len(), 0);
     assert!(coverage::evaluate("{", Path::new("/ws"), &expected).is_err());
-    let empty = coverage::evaluate("{}", Path::new("/ws"), &BTreeSet::new()).unwrap();
+    let empty = coverage::evaluate("{}", Path::new("/ws"), &BTreeSet::new())
+        .expect("evaluate should succeed");
     assert!(empty.is_complete());
 }
 
@@ -290,14 +297,16 @@ fn files_without_functions_have_nothing_to_cover() {
 #[test]
 fn expected_source_files_walks_the_real_workspace() {
     let root = super::workspace_root();
-    let files = coverage::expected_source_files(&root).unwrap();
+    let files =
+        coverage::expected_source_files(&root).expect("expected_source_files should succeed");
     assert!(files.contains("crates/warpscript/src/lib.rs"), "{files:?}");
     assert!(
         files
             .iter()
             .all(|f| !f.ends_with("/tests.rs") && !f.contains("/tests/"))
     );
-    let none = coverage::expected_source_files(Path::new("/nonexistent-root")).unwrap();
+    let none = coverage::expected_source_files(Path::new("/nonexistent-root"))
+        .expect("expected_source_files should succeed");
     assert!(none.is_empty());
 }
 

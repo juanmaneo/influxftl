@@ -1,7 +1,5 @@
 // Copyright 2026 The influxftl Authors. Licensed under the Apache License, Version 2.0.
 
-#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
-
 //! Tests of the regular expression mappers. The expected values were checked against
 //! Warp 10 3.5.0 (`warp10io/warp10:3.5.0-alpine`).
 
@@ -42,11 +40,13 @@ fn matches() {
         "{message}"
     );
     let matcher = RegExpMatch {
-        pattern: CompiledPattern::compile("a").unwrap(),
+        pattern: CompiledPattern::compile("a").expect("compile should succeed"),
     };
     assert_eq!(matcher.roles(), Roles::MAPPER);
     assert_eq!(
-        Window::of(&[]).apply(&matcher).unwrap(),
+        Window::of(&[])
+            .apply(&matcher)
+            .expect("apply should succeed"),
         Aggregated {
             tick: 100,
             ..Aggregated::none()
@@ -58,7 +58,7 @@ fn matches() {
     );
     // The backtracking limit of the engine is reported as an error.
     let catastrophic = RegExpMatch {
-        pattern: CompiledPattern::compile("(a|a)*\\1b").unwrap(),
+        pattern: CompiledPattern::compile("(a|a)*\\1b").expect("compile should succeed"),
     };
     assert!(
         Window::of(&[Value::string("a".repeat(46))])
@@ -109,7 +109,9 @@ fn replacements() {
     };
     assert_eq!(replace.roles(), Roles::MAPPER);
     assert_eq!(
-        Window::of(&[]).apply(&replace).unwrap(),
+        Window::of(&[])
+            .apply(&replace)
+            .expect("apply should succeed"),
         Aggregated {
             tick: 0,
             ..Aggregated::none()

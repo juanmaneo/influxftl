@@ -1,7 +1,5 @@
 // Copyright 2026 The influxftl Authors. Licensed under the Apache License, Version 2.0.
 
-#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
-
 use std::rc::Rc;
 
 use super::strings::{
@@ -16,7 +14,7 @@ use crate::tests::{assert_fails, assert_stack, assert_top, exec, top};
 use crate::value::{FunctionObject, Value};
 
 fn bytes(hex: &str) -> Value {
-    Value::bytes(hex_decode(hex).unwrap())
+    Value::bytes(hex_decode(hex).expect("hex_decode should succeed"))
 }
 
 fn strings(items: &[&str]) -> Value {
@@ -262,7 +260,9 @@ fn urldecode() {
         "URLDecoder: Illegal hex characters in escape (%) pattern - not a hexadecimal digit: \"\u{e9}\" = 233",
     );
     assert_eq!(
-        java_url_decode("%4\u{1f600}").unwrap_err().to_string(),
+        java_url_decode("%4\u{1f600}")
+            .expect_err("java_url_decode should fail")
+            .to_string(),
         "URLDecoder: Illegal hex characters in escape (%) pattern - not a hexadecimal digit: \"\u{1f600}\" = 55357"
     );
     assert_fails("1 URLDECODE", "URLDECODE operates on a String.");
@@ -298,7 +298,7 @@ fn uuid() {
     let mut stack = Stack::new();
     assert_eq!(
         push_uuid(&mut stack, Err(getrandom::Error::UNSUPPORTED))
-            .unwrap_err()
+            .expect_err("the value should fail")
             .to_string(),
         format!(
             "Unable to obtain random data from the operating system ({}).",
@@ -408,7 +408,9 @@ fn base64_decoding() {
     assert_fails("'YQ\u{1f600}=' B64->", "Unrecognized character: 0xd83d");
     // Guava reports the first invalid character in reading order, whatever the crate found.
     assert_eq!(
-        base64_decode("Y-J\u{e9}", false).unwrap_err().to_string(),
+        base64_decode("Y-J\u{e9}", false)
+            .expect_err("base64_decode should fail")
+            .to_string(),
         "Unrecognized character: -"
     );
     assert_eq!(
@@ -486,8 +488,10 @@ fn charset_encoding() {
         ("UTF-16LE", "6100e900ac203dd800de"),
     ] {
         assert_eq!(
-            Charset::for_name(name).unwrap().encode(sample),
-            hex_decode(hex).unwrap(),
+            Charset::for_name(name)
+                .expect("for_name should succeed")
+                .encode(sample),
+            hex_decode(hex).expect("hex_decode should succeed"),
             "{name}"
         );
     }
@@ -532,7 +536,7 @@ fn charset_decoding() {
         ("", ""),
     ] {
         assert_eq!(
-            decode_utf8_java(&hex_decode(hex).unwrap()),
+            decode_utf8_java(&hex_decode(hex).expect("hex_decode should succeed")),
             expected,
             "{hex}"
         );
@@ -564,7 +568,7 @@ fn charset_decoding() {
         ),
         ("", "", "", ""),
     ] {
-        let data = hex_decode(hex).unwrap();
+        let data = hex_decode(hex).expect("hex_decode should succeed");
         assert_eq!(Charset::Utf16.decode(&data), utf16, "UTF-16 {hex}");
         assert_eq!(Charset::Utf16Be.decode(&data), be, "UTF-16BE {hex}");
         assert_eq!(Charset::Utf16Le.decode(&data), le, "UTF-16LE {hex}");
@@ -662,12 +666,22 @@ fn matcher_objects() {
         "'a(b)c' MATCHER 'm' STORE 'abc' $m MATCH 'xyz' $m MATCH",
         &[strings(&["abc", "b"]), strings(&[])],
     );
-    let compiled = CompiledPattern::compile("x+").unwrap();
+    let compiled = CompiledPattern::compile("x+").expect("compile should succeed");
     assert_eq!(compiled.name(), "x+");
     assert_eq!(compiled.source(), "x+");
     assert!(compiled.as_any().is_some());
-    assert_eq!(compiled.full_match("xx").unwrap(), vec![Value::from("xx")]);
-    assert_eq!(compiled.full_match("xy").unwrap(), Vec::<Value>::new());
+    assert_eq!(
+        compiled
+            .full_match("xx")
+            .expect("full_match should succeed"),
+        vec![Value::from("xx")]
+    );
+    assert_eq!(
+        compiled
+            .full_match("xy")
+            .expect("full_match should succeed"),
+        Vec::<Value>::new()
+    );
     assert_fails("1 MATCHER", "MATCHER expects a STRING.");
     assert_fails("'(' MATCHER", "Parsing error at position 1");
     assert_fails("MATCHER", "Empty stack.");
@@ -724,14 +738,14 @@ fn replace_all() {
     ] {
         assert_eq!(
             regex_replace("abc", "(?<x>b)", replacement, true)
-                .unwrap_err()
+                .expect_err("the value should fail")
                 .to_string(),
             message,
             "{replacement}"
         );
         assert_eq!(
             regex_replace("abc", "(?<x>b)", replacement, false)
-                .unwrap_err()
+                .expect_err("the value should fail")
                 .to_string(),
             message,
             "{replacement}"
@@ -871,7 +885,7 @@ fn bitsets() {
             opb64_encode(&[0x05, 0x00, 0x80])
         )
     );
-    assert_eq!(exec(&snapshot).pop().unwrap(), set);
+    assert_eq!(exec(&snapshot).pop().expect("pop should succeed"), set);
     assert_fails(
         "'050080' HEX-> BYTESTOBITS 'x' BITGET",
         "BITGET expects a bit index on top of the stack.",
@@ -1141,7 +1155,7 @@ fn empty_stack() {
     ] {
         assert_eq!(
             crate::functions::call(&mut stack, name)
-                .unwrap_err()
+                .expect_err("the value should fail")
                 .to_string(),
             "Empty stack.",
             "{name}"

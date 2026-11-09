@@ -1,7 +1,5 @@
 // Copyright 2026 The influxftl Authors. Licensed under the Apache License, Version 2.0.
 
-#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
-
 use std::rc::Rc;
 
 use indexmap::IndexMap;
@@ -22,8 +20,11 @@ fn constants() {
     // function itself is still registered.
     assert_top("NaN", f64::NAN);
     let mut stack = Stack::new();
-    crate::functions::call(&mut stack, "NaN").unwrap();
-    assert_eq!(stack.pop().unwrap(), Value::Double(f64::NAN));
+    crate::functions::call(&mut stack, "NaN").expect("call should succeed");
+    assert_eq!(
+        stack.pop().expect("pop should succeed"),
+        Value::Double(f64::NAN)
+    );
     assert_top("PI", std::f64::consts::PI);
     assert_top("pi", std::f64::consts::PI);
     assert_top("E", std::f64::consts::E);
@@ -59,9 +60,11 @@ fn info_and_attributes() {
     assert_fails("1 INFO", "INFO expects an info map on top of the stack.");
     let mut stack = Stack::with_limits(Limits::unlimited());
     stack.set_attribute(ATTRIBUTE_INFOMODE, Some(Value::from(true)));
-    stack.exec("{ } INFO 'not reached'").unwrap();
+    stack
+        .exec("{ } INFO 'not reached'")
+        .expect("exec should succeed");
     assert_eq!(stack.depth(), 1);
-    assert_eq!(stack.pop().unwrap().to_string(), "{}");
+    assert_eq!(stack.pop().expect("pop should succeed").to_string(), "{}");
     // A map nested too deep cannot be snapshot: the error is reported.
     let Value::Map(doc) = crate::tests::top("{ 'name' 'doc' }") else {
         panic!("not a map");
@@ -72,7 +75,7 @@ fn info_and_attributes() {
     }
     doc.borrow_mut().insert(Value::from("deep"), nested);
     stack.push(Value::Map(doc));
-    let err = stack.exec("INFO").unwrap_err();
+    let err = stack.exec("INFO").expect_err("exec should fail");
     assert!(
         err.to_string()
             .contains("Recursive data structures exceeded 16 levels."),
@@ -81,8 +84,11 @@ fn info_and_attributes() {
     assert!(stack.attribute(ATTRIBUTE_IN_XEVAL).is_none());
     // The xeval attribute is left alone when it was already set.
     stack.set_attribute(ATTRIBUTE_IN_XEVAL, Some(Value::from(true)));
-    stack.exec("{ 'a' 1 } INFO").unwrap();
-    assert_eq!(stack.pop().unwrap().to_string(), "{a=1}");
+    stack.exec("{ 'a' 1 } INFO").expect("exec should succeed");
+    assert_eq!(
+        stack.pop().expect("pop should succeed").to_string(),
+        "{a=1}"
+    );
     assert_eq!(
         stack.attribute(ATTRIBUTE_IN_XEVAL),
         Some(&Value::from(true))
@@ -117,12 +123,14 @@ fn macro_config() {
     ]));
     // Only macros loaded by name (from a repository) are named; emulate that through the API.
     let define = |stack: &mut Stack, name: &str, source: &str| {
-        stack.exec(source).unwrap();
-        let Value::Macro(m) = stack.pop().unwrap() else {
+        stack.exec(source).expect("exec should succeed");
+        let Value::Macro(m) = stack.pop().expect("pop should succeed") else {
             panic!("not a macro");
         };
         m.set_name_recursive(name);
-        stack.store(name, Value::Macro(m)).unwrap();
+        stack
+            .store(name, Value::Macro(m))
+            .expect("store should succeed");
     };
     define(
         &mut stack,
@@ -137,23 +145,26 @@ fn macro_config() {
     );
     define(&mut stack, "bad", "<% 1 MACROCONFIG %>");
     define(&mut stack, "empty", "<% MACROCONFIGDEFAULT %>");
-    let err = stack.exec("@empty").unwrap_err();
+    let err = stack.exec("@empty").expect_err("exec should fail");
     assert!(err.to_string().contains("Empty stack."), "{err}");
-    stack.exec("@a/b/c").unwrap();
-    assert_eq!(stack.pop().unwrap(), Value::from("v2"));
-    assert_eq!(stack.pop().unwrap(), Value::from("v1"));
-    let err = stack.exec("@a/b").unwrap_err();
+    stack.exec("@a/b/c").expect("exec should succeed");
+    assert_eq!(stack.pop().expect("pop should succeed"), Value::from("v2"));
+    assert_eq!(stack.pop().expect("pop should succeed"), Value::from("v1"));
+    let err = stack.exec("@a/b").expect_err("exec should fail");
     assert!(
         err.to_string().contains(
             "MACROCONFIG macro configuration 'k3' not found, need to set one of [ 'k3@a/b' 'k3@a' ]."
         ),
         "{err}"
     );
-    stack.exec("@a").unwrap();
-    assert_eq!(stack.pop().unwrap(), Value::from("v2"));
-    assert_eq!(stack.pop().unwrap(), Value::Null);
-    assert_eq!(stack.pop().unwrap(), Value::from("dflt"));
-    let err = stack.exec("@bad").unwrap_err();
+    stack.exec("@a").expect("exec should succeed");
+    assert_eq!(stack.pop().expect("pop should succeed"), Value::from("v2"));
+    assert_eq!(stack.pop().expect("pop should succeed"), Value::Null);
+    assert_eq!(
+        stack.pop().expect("pop should succeed"),
+        Value::from("dflt")
+    );
+    let err = stack.exec("@bad").expect_err("exec should fail");
     assert!(
         err.to_string()
             .contains("MACROCONFIG expects a macro configuration key name."),
@@ -214,23 +225,26 @@ fn secure_and_unsecure() {
     assert_fails("UNSECURE", "Empty stack.");
     assert_fails("EVALSECURE", "Empty stack.");
     let mut stack = secure_stack();
-    run(&mut stack, "'k' SECUREKEY '1 2' SECURE").unwrap();
-    assert_eq!(stack.pop().unwrap(), Value::from("k|1 2"));
-    let err = run(&mut stack, "'fail' SECURE").unwrap_err();
+    run(&mut stack, "'k' SECUREKEY '1 2' SECURE").expect("run should succeed");
+    assert_eq!(
+        stack.pop().expect("pop should succeed"),
+        Value::from("k|1 2")
+    );
+    let err = run(&mut stack, "'fail' SECURE").expect_err("run should fail");
     assert!(
         err.to_string().contains("Unable to secure script."),
         "{err}"
     );
-    run(&mut stack, "'k|1 2' UNSECURE").unwrap();
-    assert_eq!(stack.pop().unwrap(), Value::from("1 2"));
-    let err = run(&mut stack, "'other|1 2' UNSECURE").unwrap_err();
+    run(&mut stack, "'k|1 2' UNSECURE").expect("run should succeed");
+    assert_eq!(stack.pop().expect("pop should succeed"), Value::from("1 2"));
+    let err = run(&mut stack, "'other|1 2' UNSECURE").expect_err("run should fail");
     assert!(err.to_string().contains("Invalid secure key."), "{err}");
-    let err = run(&mut stack, "1 UNSECURE").unwrap_err();
+    let err = run(&mut stack, "1 UNSECURE").expect_err("run should fail");
     assert!(
         err.to_string().contains("UNSECURE operates on a string."),
         "{err}"
     );
-    let err = run(&mut stack, "'garbage' UNSECURE").unwrap_err();
+    let err = run(&mut stack, "'garbage' UNSECURE").expect_err("run should fail");
     assert!(
         err.to_string().contains("Unable to unsecure script."),
         "{err}"
@@ -250,17 +264,17 @@ fn evalsecure() {
     );
     assert_fails("'x' EVALSECURE", "Missing secure script encryption key.");
     let mut stack = secure_stack();
-    run(&mut stack, "'k|1 2' EVALSECURE").unwrap();
+    run(&mut stack, "'k|1 2' EVALSECURE").expect("run should succeed");
     assert_eq!(stack.elements(), &[Value::Long(1), Value::Long(2)]);
     assert!(!stack.in_secure_macro());
     assert!(stack.allow_redefined());
     // Errors clear the stack so that nothing leaks.
-    let err = run(&mut stack, "'k|3 DROP DROP DROP DROP' EVALSECURE").unwrap_err();
+    let err = run(&mut stack, "'k|3 DROP DROP DROP DROP' EVALSECURE").expect_err("run should fail");
     assert!(err.to_string().contains("Empty stack."), "{err}");
     assert_eq!(stack.depth(), 0);
     // Redefined functions are disabled while the secure script runs.
-    run(&mut stack, "<% 42 %> 'DUP' DEF").unwrap();
-    let err = run(&mut stack, "'k|1 DUP' EVALSECURE").unwrap_err();
+    run(&mut stack, "<% 42 %> 'DUP' DEF").expect("run should succeed");
+    let err = run(&mut stack, "'k|1 DUP' EVALSECURE").expect_err("run should fail");
     assert!(
         err.to_string()
             .contains("Disallowed redefined function 'DUP'."),
@@ -270,7 +284,7 @@ fn evalsecure() {
         &mut stack,
         "CLEARDEFS NULL 'DUP' DEF 1 2 'k|1 RETURN 2' EVALSECURE 3",
     )
-    .unwrap();
+    .expect("the value should succeed");
     assert_eq!(
         stack.elements(),
         &[
@@ -281,19 +295,20 @@ fn evalsecure() {
         ]
     );
     stack.clear();
-    run(&mut stack, "<% 'k|1 2 NRETURN 2' EVALSECURE 9 %> EVAL 3").unwrap();
+    run(&mut stack, "<% 'k|1 2 NRETURN 2' EVALSECURE 9 %> EVAL 3").expect("run should succeed");
     assert_eq!(stack.elements(), &[Value::Long(1), Value::Long(3)]);
     stack.clear();
-    run(&mut stack, "1 'k|STOP' EVALSECURE 2").unwrap();
+    run(&mut stack, "1 'k|STOP' EVALSECURE 2").expect("run should succeed");
     assert_eq!(stack.elements(), &[Value::Long(1)]);
     stack.clear();
     // Like `execMulti`, only STOP / RETURN cross the secure script boundary as signals: a
     // BREAK becomes a plain error (and the stack is cleared).
-    let err = run(&mut stack, "[ 1 2 ] <% 'k|BREAK' EVALSECURE %> FOREACH").unwrap_err();
+    let err =
+        run(&mut stack, "[ 1 2 ] <% 'k|BREAK' EVALSECURE %> FOREACH").expect_err("run should fail");
     assert!(err.to_string().contains("Exception at BREAK"), "{err}");
     assert_eq!(stack.depth(), 0);
     // Secure scripts run in secure mode: errors are not wrapped with statement details.
-    let err = run(&mut stack, "'k|<%25 DROP %25> EVAL' EVALSECURE").unwrap_err();
+    let err = run(&mut stack, "'k|<%25 DROP %25> EVAL' EVALSECURE").expect_err("run should fail");
     assert_eq!(
         err.to_string(),
         "Line #1 (Exception at ''k|<%25 DROP %25> EVAL' =>EVALSECURE<=' in section [TOP] (Line #1 (Exception at '<% DROP %> =>EVAL<=' in section [TOP] (Empty stack.))))"

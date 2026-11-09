@@ -1,7 +1,5 @@
 // Copyright 2026 The influxftl Authors. Licensed under the Apache License, Version 2.0.
 
-#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
-
 //! Tests of the single datapoint mappers. The expected values were checked against Warp 10
 //! 3.5.0 (`warp10io/warp10:3.5.0-alpine`).
 
@@ -69,7 +67,7 @@ fn empty_and_larger_windows() {
         .chain(singles.iter().map(|s| s as &dyn Aggregator))
     {
         assert_eq!(
-            Window::of(&[]).apply(mapper).unwrap(),
+            Window::of(&[]).apply(mapper).expect("apply should succeed"),
             Aggregated {
                 tick: 0,
                 ..Aggregated::none()
@@ -119,7 +117,7 @@ fn arithmetic_mappers() {
     assert!(
         mapped(Kind::Ceil, Value::Double(-0.5))
             .as_f64()
-            .unwrap()
+            .expect("the value should succeed")
             .is_sign_negative()
     );
     assert_top(
@@ -244,7 +242,7 @@ fn conversion_mappers() {
     assert!(
         mapped(Kind::ToDouble, Value::string("NaN"))
             .as_f64()
-            .unwrap()
+            .expect("the value should succeed")
             .is_nan()
     );
     for (value, expected) in [
@@ -338,7 +336,9 @@ fn registration() {
         };
         assert_top(&format!("{parameter} {name} SNAPSHOT"), snapshot);
         let roles = crate::tests::top(&format!("{parameter} {name}"));
-        let roles = super::aggregator_of(&roles).unwrap().roles();
+        let roles = super::aggregator_of(&roles)
+            .expect("aggregator_of should succeed")
+            .roles();
         assert!(
             roles.mapper && !roles.bucketizer && !roles.reducer,
             "{name}"
@@ -432,7 +432,7 @@ fn date_time_builders() {
             &format!("(Millis out of range: {millis})"),
         );
     }
-    let err = TimeZone::for_offset_millis(i32::MIN).unwrap_err();
+    let err = TimeZone::for_offset_millis(i32::MIN).expect_err("for_offset_millis should fail");
     assert_eq!(
         crate::error::compat::exception_class(&err),
         "java.lang.IllegalArgumentException"
@@ -471,7 +471,7 @@ fn date_time_out_of_range() {
         assert!(
             mapper
                 .apply(&args)
-                .unwrap_err()
+                .expect_err("the value should fail")
                 .to_string()
                 .contains("out of range"),
         );

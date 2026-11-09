@@ -1,11 +1,6 @@
 // Copyright 2026 The influxftl Authors. Licensed under the Apache License, Version 2.0.
 
-#![allow(
-    clippy::unwrap_used,
-    clippy::expect_used,
-    clippy::panic,
-    clippy::float_cmp
-)]
+#![allow(clippy::float_cmp)]
 
 //! Reference sequences below were produced with OpenJDK 27 (`java.util.Random`).
 

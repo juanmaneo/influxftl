@@ -1,11 +1,6 @@
 // Copyright 2026 The influxftl Authors. Licensed under the Apache License, Version 2.0.
 
-#![allow(
-    clippy::unwrap_used,
-    clippy::expect_used,
-    clippy::panic,
-    clippy::unreadable_literal
-)]
+#![allow(clippy::unreadable_literal)]
 
 //! Bit-exact checks of [`polynomial_fit`] against Commons Math 3.6.1's
 //! `PolynomialCurveFitter` (the expectations were produced by the Java library).

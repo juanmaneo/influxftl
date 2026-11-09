@@ -1,7 +1,5 @@
 // Copyright 2026 The influxftl Authors. Licensed under the Apache License, Version 2.0.
 
-#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
-
 use crate::functions::symbols::ATTRIBUTE_IN_XEVAL;
 use crate::stack::Stack;
 use crate::tests::{assert_fails, assert_stack, assert_top, exec};
@@ -79,13 +77,15 @@ fn missing_arguments() {
 fn symbol_table_limit() {
     let mut stack = Stack::new();
     stack.limits.max_symbols = 1;
-    let err = stack.exec("1 2 [ 'a' 'b' ] STORE").unwrap_err();
+    let err = stack
+        .exec("1 2 [ 'a' 'b' ] STORE")
+        .expect_err("exec should fail");
     assert!(
         err.to_string()
             .contains("Symbol table has reached its maximum number of entries: 1"),
         "{err}"
     );
-    let err = stack.exec("2 'b' CSTORE").unwrap_err();
+    let err = stack.exec("2 'b' CSTORE").expect_err("exec should fail");
     assert!(
         err.to_string()
             .contains("Symbol table has reached its maximum number of entries: 1"),
@@ -150,7 +150,7 @@ fn run_and_eval() {
     assert_eq!(stack.attribute(ATTRIBUTE_IN_XEVAL), None);
     let mut stack = exec("");
     stack.set_attribute(ATTRIBUTE_IN_XEVAL, Some(Value::from(true)));
-    stack.exec("'1' XEVAL").unwrap();
+    stack.exec("'1' XEVAL").expect("exec should succeed");
     assert_eq!(
         stack.attribute(ATTRIBUTE_IN_XEVAL),
         Some(&Value::from(true))

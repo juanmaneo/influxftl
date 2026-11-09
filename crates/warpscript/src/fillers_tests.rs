@@ -1,7 +1,5 @@
 // Copyright 2026 The influxftl Authors. Licensed under the Apache License, Version 2.0.
 
-#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
-
 //! Tests of the fillers that `functions::gts_fill_tests` (generated from the answers of
 //! Warp 10 3.5.0) cannot express: the runaway fills of macro fillers, which Warp 10 stops at
 //! its default limits.

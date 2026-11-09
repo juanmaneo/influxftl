@@ -1,11 +1,6 @@
 // Copyright 2026 The influxftl Authors. Licensed under the Apache License, Version 2.0.
 
-#![allow(
-    clippy::unwrap_used,
-    clippy::expect_used,
-    clippy::panic,
-    clippy::float_cmp
-)]
+#![allow(clippy::float_cmp)]
 
 //! Tests of the Commons Math interpolators (expected values computed with Commons Math 3.6.1).
 
@@ -18,7 +13,7 @@ const X: [f64; 6] = [10.0, 20.0, 40.0, 70.0, 75.0, 90.0];
 const Y: [f64; 6] = [1.0, 2.0, 4.0, 1.0, 2.0, 3.0];
 
 fn message<T: std::fmt::Debug>(result: crate::error::Result<T>) -> String {
-    result.unwrap_err().to_string()
+    result.expect_err("result should fail").to_string()
 }
 
 #[test]
@@ -53,14 +48,14 @@ fn too_few_points() {
 
 #[test]
 fn functions() {
-    let f = linear(&X, &Y).unwrap();
+    let f = linear(&X, &Y).expect("linear should succeed");
     assert!(f.is_valid_point(10.0) && f.is_valid_point(90.0) && !f.is_valid_point(9.0));
     assert!(!f.is_valid_point(91.0));
     assert_eq!(f.value(15.0), 1.5);
     assert_eq!(f.value(40.0), 4.0);
     assert_eq!(f.value(90.0), 3.0);
     // The values of Warp 10's `filler.spline`.
-    let s = spline(&X, &Y).unwrap();
+    let s = spline(&X, &Y).expect("spline should succeed");
     assert_eq!(s.value(30.0), 3.419_282_511_210_762_5);
     assert_eq!(s.value(72.0), 1.373_470_852_017_937_3);
     // Akima with equal slopes on both sides of a point (zero weights).
@@ -68,9 +63,10 @@ fn functions() {
         &[0.0, 1.0, 2.0, 3.0, 4.0, 5.0],
         &[0.0, 1.0, 2.0, 3.0, 4.0, 5.0],
     )
-    .unwrap();
+    .expect("the value should succeed");
     assert_eq!(a.value(2.5), 2.5);
-    let n = divided_difference(&[0.0, 1.0, 2.0], &[1.0, 2.0, 5.0]).unwrap();
+    let n = divided_difference(&[0.0, 1.0, 2.0], &[1.0, 2.0, 5.0])
+        .expect("divided_difference should succeed");
     assert_eq!(n.value(3.0), 10.0);
 }
 
@@ -97,11 +93,12 @@ fn loess_smoothing() {
     );
     // Up to two points are returned as they are.
     assert_eq!(
-        loess_smooth(&[0.0, 1.0], &[3.0, 5.0], 1.0, 0, 1e-12).unwrap(),
+        loess_smooth(&[0.0, 1.0], &[3.0, 5.0], 1.0, 0, 1e-12).expect("loess_smooth should succeed"),
         vec![3.0, 5.0]
     );
     // Points on a line: no residual, the robustness iterations stop at once.
-    let line = loess_smooth(&X, &[2.0, 4.0, 8.0, 14.0, 15.0, 18.0], 1.0, 3, 1e-12).unwrap();
+    let line = loess_smooth(&X, &[2.0, 4.0, 8.0, 14.0, 15.0, 18.0], 1.0, 3, 1e-12)
+        .expect("loess_smooth should succeed");
     for (smoothed, y) in line.iter().zip([2.0, 4.0, 8.0, 14.0, 15.0, 18.0]) {
         assert!((smoothed - y).abs() < 1e-12, "{line:?}");
     }
@@ -113,9 +110,9 @@ fn loess_smoothing() {
         2,
         1e-12,
     )
-    .unwrap();
+    .expect("the value should succeed");
     assert!((robust[3] - 3.0).abs() < 1.0, "{robust:?}");
     // Below the accuracy, the local regressions are flat: weighted means.
-    let flat = loess_smooth(&X, &Y, 1.0, 0, 1e9).unwrap();
+    let flat = loess_smooth(&X, &Y, 1.0, 0, 1e9).expect("loess_smooth should succeed");
     assert!(flat.iter().all(|v| (1.0..4.0).contains(v)), "{flat:?}");
 }

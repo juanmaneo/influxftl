@@ -1,7 +1,5 @@
 // Copyright 2026 The influxftl Authors. Licensed under the Apache License, Version 2.0.
 
-#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
-
 //! Error paths of `SMARTPARSE`: the numbers its groups capture that Java's
 //! `Double.parseDouble` / `Long.parseLong` reject, and the other ways a call can fail.
 
@@ -13,7 +11,10 @@ const GTS: &str = "NEWGTS 'in' RENAME 10 NaN NaN NaN 'b=2.5' ADDVALUE";
 /// The message of the error `script` fails with.
 fn error_of(script: &str) -> String {
     let mut stack = test_stack();
-    stack.exec_checked(script).unwrap_err().to_string()
+    stack
+        .exec_checked(script)
+        .expect_err("exec_checked should fail")
+        .to_string()
 }
 
 #[test]

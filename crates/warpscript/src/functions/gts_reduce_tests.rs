@@ -1,7 +1,5 @@
 // Copyright 2026 The influxftl Authors. Licensed under the Apache License, Version 2.0.
 
-#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
-
 //! Tests of `PARTITION`, `REDUCE` and the macro wrappers. The expected values were checked
 //! against Warp 10 3.5.0 (`warp10io/warp10:3.5.0-alpine`); labels and attributes are listed
 //! in insertion order (DIVERGENCES §18).
@@ -299,7 +297,8 @@ fn reduce_errors() {
     assert_top("[ [] [] reducer.sum ] PREDUCE ->JSON", "{}");
     // A wrapper applied outside of the frameworks has no stack to run on.
     let wrapper = crate::tests::top("<% 1 %> MACROREDUCER");
-    let aggregator = crate::aggregators::aggregator_of(&wrapper).unwrap();
+    let aggregator =
+        crate::aggregators::aggregator_of(&wrapper).expect("aggregator_of should succeed");
     assert_eq!(aggregator.roles(), crate::aggregators::Roles::ALL);
     let names = ["g".to_owned()];
     let labels = [indexmap::IndexMap::new()];
@@ -314,7 +313,7 @@ fn reduce_errors() {
             values: &[crate::value::Value::Long(1)],
             window: None,
         })
-        .unwrap_err();
+        .expect_err("the value should fail");
     assert_eq!(
         err.to_string(),
         "MACROREDUCER can only be applied by BUCKETIZE, MAP or REDUCE."

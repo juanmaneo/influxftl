@@ -1,7 +1,5 @@
 // Copyright 2026 The influxftl Authors. Licensed under the Apache License, Version 2.0.
 
-#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
-
 //! Oracle-checked tests of the platform functions.
 //! The expectations are the answers of Warp 10 3.5.0 to the same scripts:
 //! the JSON stack (top first) or the error message (in its JDK 11+ form).
@@ -23,7 +21,7 @@ fn stack_json(script: &str) -> Result<String, String> {
     stack
         .exec_checked(&format!("{script} DEPTH ->LIST REVERSE ->JSON"))
         .map_err(|err| err.to_string())?;
-    match stack.pop().unwrap() {
+    match stack.pop().expect("pop should succeed") {
         Value::String(json) => Ok(json.to_string()),
         other => panic!("not a string: {other:?}"),
     }
@@ -179,7 +177,7 @@ fn platform_with_capabilities() {
         }
         stack
             .exec_checked(&format!("{script} DEPTH ->LIST REVERSE ->JSON"))
-            .map(|()| stack.pop().unwrap().to_string())
+            .map(|()| stack.pop().expect("pop should succeed").to_string())
             .map_err(|err| err.to_string())
     };
     let manager = [("manager", "")];
@@ -188,34 +186,42 @@ fn platform_with_capabilities() {
     let runner = |value: &'static str| [("runner.reschedule.min.period", value)];
     assert!(
         run(&manager, "UPDATEON UPDATEOFF")
-            .unwrap_err()
+            .expect_err("the value should fail")
             .contains("Empty stack.")
     );
     assert!(
         run(&[], "1 DUMP")
-            .unwrap_err()
+            .expect_err("the value should fail")
             .contains("DUMP missing token.")
     );
-    assert!(run(&[], "'x' DUMP").unwrap_err().contains("Invalid token."));
-    assert!(run(&wf, "WF.ADDREPO").unwrap_err().contains("Empty stack."));
+    assert!(
+        run(&[], "'x' DUMP")
+            .expect_err("run should fail")
+            .contains("Invalid token.")
+    );
+    assert!(
+        run(&wf, "WF.ADDREPO")
+            .expect_err("run should fail")
+            .contains("Empty stack.")
+    );
     assert!(
         run(&wf, "WF.SETREPOS")
-            .unwrap_err()
+            .expect_err("the value should fail")
             .contains("Empty stack.")
     );
     assert!(
         run(&runner("1000"), "RUNNERIN")
-            .unwrap_err()
+            .expect_err("the value should fail")
             .contains("Empty stack.")
     );
     assert!(
         run(&config, "SETMACROCONFIG")
-            .unwrap_err()
+            .expect_err("the value should fail")
             .contains("Empty stack.")
     );
     assert!(
         run(&config, "'a@m' SETMACROCONFIG")
-            .unwrap_err()
+            .expect_err("the value should fail")
             .contains("Empty stack.")
     );
     let long = format!("{}@x", "a".repeat(46));
@@ -224,11 +230,11 @@ fn platform_with_capabilities() {
             &[("setmacroconfig", "(a|a)*\\1b@x")],
             &format!("'v' '{long}' SETMACROCONFIG")
         )
-        .unwrap_err()
+        .expect_err("the value should fail")
         .contains("Max limit for backtracking")
     );
     assert_eq!(
-        run(&manager, "'maintenance' UPDATEOFF METAON 'x' DELETEOFF").unwrap(),
+        run(&manager, "'maintenance' UPDATEOFF METAON 'x' DELETEOFF").expect("run should succeed"),
         "[]"
     );
     assert_eq!(
@@ -236,75 +242,85 @@ fn platform_with_capabilities() {
             &wf,
             "'https://a' WF.ADDREPO 'https://b' WF.ADDREPO WF.GETREPOS"
         )
-        .unwrap(),
+        .expect("the value should succeed"),
         r#"[["https://a","https://b"]]"#
     );
     assert_eq!(
-        run(&wf, "[ 'u' ] WF.SETREPOS WF.GETREPOS").unwrap(),
+        run(&wf, "[ 'u' ] WF.SETREPOS WF.GETREPOS").expect("run should succeed"),
         r#"[["u"]]"#
     );
     assert_eq!(
-        run(&wf, "[ 'u' ] WF.SETREPOS NULL WF.SETREPOS WF.GETREPOS").unwrap(),
+        run(&wf, "[ 'u' ] WF.SETREPOS NULL WF.SETREPOS WF.GETREPOS").expect("run should succeed"),
         "[[]]"
     );
     assert!(
         run(&wf, "[ 1 ] WF.SETREPOS")
-            .unwrap_err()
+            .expect_err("the value should fail")
             .contains("expects a list of repository URLs")
     );
     assert!(
         run(&wf, "1 WF.SETREPOS")
-            .unwrap_err()
+            .expect_err("the value should fail")
             .contains("expects a list of repository URLs")
     );
     assert!(
         run(&wf, "1 WF.ADDREPO")
-            .unwrap_err()
+            .expect_err("the value should fail")
             .contains("expects a repository URL")
     );
     assert_eq!(
-        run(&[("wfset", "")], "'u' WF.ADDREPO WF.GETREPOS").unwrap(),
+        run(&[("wfset", "")], "'u' WF.ADDREPO WF.GETREPOS").expect("run should succeed"),
         "[[]]"
     );
     assert!(
         run(&runner("x"), "1 RUNNERIN")
-            .unwrap_err()
+            .expect_err("the value should fail")
             .contains("'x' is not a valid LONG")
     );
     assert!(
         run(&runner("0"), "1 RUNNERIN")
-            .unwrap_err()
+            .expect_err("the value should fail")
             .contains("strictly greater than 0 ms")
     );
     assert!(
         run(&runner("1000"), "'x' RUNNERIN")
-            .unwrap_err()
+            .expect_err("the value should fail")
             .contains("expects a LONG period")
     );
     assert!(
         run(&runner("1000"), "'x' RUNNERAT")
-            .unwrap_err()
+            .expect_err("the value should fail")
             .contains("expects a LONG timestamp")
     );
-    assert!(run(&runner("1000"), "1 s RUNNERIN").unwrap().contains("[]"));
+    assert!(
+        run(&runner("1000"), "1 s RUNNERIN")
+            .expect("run should succeed")
+            .contains("[]")
+    );
     assert!(
         run(&runner("1000"), "1 ms RUNNERIN")
-            .unwrap_err()
+            .expect_err("the value should fail")
             .contains("cannot set period below 1000 ms")
     );
     assert!(
         run(&runner("1000"), "NOW RUNNERAT")
-            .unwrap_err()
+            .expect_err("the value should fail")
             .contains("cannot schedule a task before now + 1000 ms")
     );
-    assert_eq!(run(&runner("1000"), "NOW 1 h + RUNNERAT").unwrap(), "[]");
-    assert_eq!(run(&config, "'v' 'a@m' SETMACROCONFIG").unwrap(), "[]");
+    assert_eq!(
+        run(&runner("1000"), "NOW 1 h + RUNNERAT").expect("run should succeed"),
+        "[]"
+    );
+    assert_eq!(
+        run(&config, "'v' 'a@m' SETMACROCONFIG").expect("run should succeed"),
+        "[]"
+    );
     assert_eq!(
         run(
             &config,
             "'v' 'a@m' SETMACROCONFIG NULL 'a@m' SETMACROCONFIG"
         )
-        .unwrap(),
+        .expect("the value should succeed"),
         "[]"
     );
     let mut stack = test_stack();
@@ -313,29 +329,31 @@ fn platform_with_capabilities() {
         .insert("setmacroconfig".to_owned(), ".*".to_owned());
     stack
         .exec_checked("'v' 'a@m' SETMACROCONFIG 2 'b@m' SETMACROCONFIG")
-        .unwrap();
+        .expect("the value should succeed");
     assert_eq!(stack.config_mut().get("a@m").map(String::as_str), Some("v"));
     assert_eq!(stack.config_mut().get("b@m").map(String::as_str), Some("2"));
-    stack.exec_checked("NULL 'a@m' SETMACROCONFIG").unwrap();
+    stack
+        .exec_checked("NULL 'a@m' SETMACROCONFIG")
+        .expect("exec_checked should succeed");
     assert_eq!(stack.config_mut().get("a@m"), None);
     assert!(
         run(&config, "'v' 'b@m' SETMACROCONFIG")
-            .unwrap_err()
+            .expect_err("the value should fail")
             .contains("not modifiable")
     );
     assert!(
         run(&config, "'v' 'am' SETMACROCONFIG")
-            .unwrap_err()
+            .expect_err("the value should fail")
             .contains("name@scope")
     );
     assert!(
         run(&config, "'v' 1 SETMACROCONFIG")
-            .unwrap_err()
+            .expect_err("the value should fail")
             .contains("to be a STRING")
     );
     assert!(run(&[("setmacroconfig", "[")], "'v' 'a@m' SETMACROCONFIG").is_err());
     assert_eq!(
-        run(&[], "'x' RUNNERNONCE 'y' RUNNERPATH").unwrap(),
+        run(&[], "'x' RUNNERNONCE 'y' RUNNERPATH").expect("run should succeed"),
         "[null,null]"
     );
 }

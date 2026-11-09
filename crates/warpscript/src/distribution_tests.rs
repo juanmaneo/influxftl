@@ -1,11 +1,6 @@
 // Copyright 2026 The influxftl Authors. Licensed under the Apache License, Version 2.0.
 
-#![allow(
-    clippy::unwrap_used,
-    clippy::expect_used,
-    clippy::panic,
-    clippy::unreadable_literal
-)]
+#![allow(clippy::unreadable_literal)]
 
 use crate::distribution::TDistribution;
 
@@ -22,7 +17,7 @@ fn quantiles_match_commons_math() {
     ] {
         let actual = TDistribution::new(df)
             .inverse_cumulative_probability(p)
-            .unwrap();
+            .expect("the value should succeed");
         assert_eq!(actual.to_bits(), f64::to_bits(expected), "{df} {p}");
     }
     assert_eq!(TDistribution::new(5.0).cumulative_probability(0.0), 0.5);

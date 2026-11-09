@@ -1,7 +1,5 @@
 // Copyright 2026 The influxftl Authors. Licensed under the Apache License, Version 2.0.
 
-#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
-
 //! Oracle-checked tests of `->PICKLE` and `PICKLE->`.
 //! The expectations are the answers of Warp 10 3.5.0 to the same scripts:
 //! the JSON stack (top first) or the error message (in its JDK 11+ form).
@@ -23,7 +21,7 @@ fn stack_json(script: &str) -> Result<String, String> {
     stack
         .exec_checked(&format!("{script} DEPTH ->LIST REVERSE ->JSON"))
         .map_err(|err| err.to_string())?;
-    match stack.pop().unwrap() {
+    match stack.pop().expect("pop should succeed") {
         Value::String(json) => Ok(json.to_string()),
         other => panic!("not a string: {other:?}"),
     }
@@ -4718,9 +4716,9 @@ fn with_big_stack(test: fn()) {
     std::thread::Builder::new()
         .stack_size(256 << 20)
         .spawn(test)
-        .unwrap()
+        .expect("the value should succeed")
         .join()
-        .unwrap();
+        .expect("the value should succeed");
 }
 
 #[test]
@@ -4729,28 +4727,29 @@ fn nesting_limit() {
         let nested = |depth: usize| {
             format!("[ 1 ] 'L' STORE 1 {depth} <% DROP [ $L ] 'L' STORE %> FOR $L ->PICKLE ->HEX")
         };
-        let ok = stack_json(&nested(998)).unwrap();
+        let ok = stack_json(&nested(998)).expect("stack_json should succeed");
         assert!(ok.starts_with(r#"["80025d71"#), "{ok}");
         for inner in ["NEWGTS", "( 'a' )", "{ 'a' 1 }"] {
             let script =
                 format!("[ {inner} ] 'L' STORE 1 998 <% DROP [ $L ] 'L' STORE %> FOR $L ->PICKLE");
-            let err = stack_json(&script).unwrap_err();
+            let err = stack_json(&script).expect_err("stack_json should fail");
             assert!(
                 err.contains("recursion too deep in Pickler.save (>1000)"),
                 "{err}"
             );
         }
         for depth in [999, 1000] {
-            let err = stack_json(&nested(depth)).unwrap_err();
+            let err = stack_json(&nested(depth)).expect_err("stack_json should fail");
             assert!(
                 err.contains("recursion too deep in Pickler.save (>1000)"),
                 "{err}"
             );
         }
         // A self-containing list as a dict key: hashing it overflows the Java stack.
-        let err = stack_json("'80027d5d71006800614b0173' HEX-> PICKLE->").unwrap_err();
+        let err = stack_json("'80027d5d71006800614b0173' HEX-> PICKLE->")
+            .expect_err("stack_json should fail");
         assert!(err.contains("StackOverflowError"), "{err}");
-        let err = stack_json("[ ] DUP DUP +! ->PICKLE").unwrap_err();
+        let err = stack_json("[ ] DUP DUP +! ->PICKLE").expect_err("stack_json should fail");
         assert!(err.contains("StackOverflowError"), "{err}");
     });
 }
@@ -4778,7 +4777,9 @@ fn unpickle_depth_limit() {
             pickle(b"\x8f(}K\x01", b"s\x90."),
         ];
         for (i, case) in cases.iter().enumerate() {
-            let err = crate::unpickle::loads(case).unwrap_err().to_string();
+            let err = crate::unpickle::loads(case)
+                .expect_err("loads should fail")
+                .to_string();
             assert!(err.contains("StackOverflowError"), "case {i}: {err}");
         }
     });

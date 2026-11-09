@@ -1,7 +1,5 @@
 // Copyright 2026 The influxftl Authors. Licensed under the Apache License, Version 2.0.
 
-#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
-
 //! Tests of `ASREGS`.
 
 use std::rc::Rc;
@@ -161,8 +159,8 @@ fn nested_macros_are_rewritten() {
     *outer.name.borrow_mut() = Some("outer".to_owned());
     let mut stack = test_stack();
     stack.push(Value::Macro(Rc::new(outer)));
-    stack.exec("ASREGS").unwrap();
-    let Value::Macro(result) = stack.pop().unwrap() else {
+    stack.exec("ASREGS").expect("exec should succeed");
+    let Value::Macro(result) = stack.pop().expect("pop should succeed") else {
         panic!("macro expected");
     };
     assert_eq!(result.name().as_deref(), Some("outer"));
@@ -217,7 +215,10 @@ fn unresolvable_accesses_abort() {
     let outer = Macro::from_statements(vec![Statement::Push(inner)]);
     let mut stack = test_stack();
     stack.push(Value::Macro(Rc::new(outer)));
-    let err = stack.exec("ASREGS").unwrap_err().to_string();
+    let err = stack
+        .exec("ASREGS")
+        .expect_err("exec should fail")
+        .to_string();
     assert!(
         err.contains("ASREGS cannot operate on a secure Macro."),
         "{err}"

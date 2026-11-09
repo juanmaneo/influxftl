@@ -1,7 +1,5 @@
 // Copyright 2026 The influxftl Authors. Licensed under the Apache License, Version 2.0.
 
-#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
-
 //! Tests of `MAXDEPTH`, `MAXOPS`, `MAXLOOP`, `MAXBUCKETS`, `MAXGEOCELLS`, `MAXPIXELS`,
 //! `MAXRECURSION`, `MAXSYMBOLS`, `LIMIT`, `MAXGTS`, `MAXJSON` and `OPS`.
 
@@ -48,7 +46,7 @@ fn limits_are_set_with_the_limits_capability() {
         let mut stack = stack_with(Limits::default(), &[("limits", "")]);
         let err = stack
             .exec_checked(&format!("{} {name}", 1i64 << 40))
-            .unwrap_err()
+            .expect_err("the value should fail")
             .to_string();
         assert!(
             err.contains(&format!("{name} cannot extend limit past ")),
@@ -63,7 +61,7 @@ fn limits_require_a_capability() {
         let mut stack = stack_with(Limits::default(), &[]);
         let err = stack
             .exec_checked(&format!("5 {name}"))
-            .unwrap_err()
+            .expect_err("the value should fail")
             .to_string();
         assert!(
             err.contains(&format!("{name} missing capability '{cap}' or 'limits'.")),
@@ -71,11 +69,13 @@ fn limits_require_a_capability() {
         );
         // The limit's own capability caps the value.
         let mut stack = stack_with(Limits::default(), &[(cap, "2000")]);
-        stack.exec_checked(&format!("2000 {name}")).unwrap();
+        stack
+            .exec_checked(&format!("2000 {name}"))
+            .expect("exec_checked should succeed");
         assert_eq!(read(&stack.limits), 2000, "{name}");
         let err = stack
             .exec_checked(&format!("2001 {name}"))
-            .unwrap_err()
+            .expect_err("the value should fail")
             .to_string();
         assert!(
             err.contains(&format!("{name} cannot extend limit past 2000")),
@@ -84,7 +84,7 @@ fn limits_require_a_capability() {
         let mut stack = stack_with(Limits::default(), &[(cap, "many")]);
         let err = stack
             .exec_checked(&format!("5 {name}"))
-            .unwrap_err()
+            .expect_err("the value should fail")
             .to_string();
         assert!(err.contains("Error parsing capability."), "{err}");
         let expects = if *name == "LIMIT" {
@@ -137,6 +137,8 @@ fn ops_counts_operations() {
     assert_top("1 2 OPS", 3);
     let mut stack = exec("1 2 3");
     stack.set_ops(42);
-    stack.exec_checked("OPS").unwrap();
-    assert_eq!(stack.pop().unwrap(), Value::Long(43));
+    stack
+        .exec_checked("OPS")
+        .expect("exec_checked should succeed");
+    assert_eq!(stack.pop().expect("pop should succeed"), Value::Long(43));
 }

@@ -1,7 +1,5 @@
 // Copyright 2026 The influxftl Authors. Licensed under the Apache License, Version 2.0.
 
-#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
-
 //! Tests of the time transforms of Geo Time Series. The expected values were checked against
 //! Warp 10 3.5.0 (`warp10io/warp10:3.5.0-alpine`).
 
@@ -57,8 +55,12 @@ fn bucketized() -> GeoTimeSerie {
 fn run_with(gts: GeoTimeSerie, script: &str) -> Vec<Value> {
     let mut stack = test_stack();
     stack.push(Value::Gts(gts.shared()));
-    stack.exec_checked("'b' STORE").unwrap();
-    stack.exec_checked(script).unwrap();
+    stack
+        .exec_checked("'b' STORE")
+        .expect("exec_checked should succeed");
+    stack
+        .exec_checked(script)
+        .expect("exec_checked should succeed");
     stack.elements().to_vec()
 }
 
@@ -128,7 +130,9 @@ fn timescale_multiplies_ticks() {
     );
     let mut stack = test_stack();
     stack.push(Value::Gts(bucketized().shared()));
-    let error = stack.exec_checked("2 TIMESCALE").unwrap_err();
+    let error = stack
+        .exec_checked("2 TIMESCALE")
+        .expect_err("exec_checked should fail");
     assert!(
         error
             .to_string()
@@ -398,8 +402,13 @@ fn timesplit_cuts_at_quiet_periods() {
     );
     assert_top("NEWGTS 5 1 's' TIMESPLIT SIZE", 1);
     let mut stack = exec(&format!("{GAPS} 'g' STORE $g 5 1 'l' TIMESPLIT 0 GET $g"));
-    let original = stack.pop().unwrap();
-    assert!(!stack.pop().unwrap().same_object(&original));
+    let original = stack.pop().expect("pop should succeed");
+    assert!(
+        !stack
+            .pop()
+            .expect("pop should succeed")
+            .same_object(&original)
+    );
     // The input is sorted in place.
     assert_top(
         &format!("{GAPS} 'g' STORE $g RSORT DROP $g 5 1 's' TIMESPLIT DROP $g TICKLIST"),
@@ -677,7 +686,9 @@ fn chunk_of_bucketized_series() {
     );
     let mut stack = test_stack();
     stack.push(Value::Gts(bucketized().shared()));
-    let error = stack.exec_checked("0 5 0 0 'c' false CHUNK").unwrap_err();
+    let error = stack
+        .exec_checked("0 5 0 0 'c' false CHUNK")
+        .expect_err("exec_checked should fail");
     assert!(
         error.to_string().contains(
             "Cannot operate on Geo Time Series with a bucketspan greater than the chunk width."
@@ -727,8 +738,13 @@ fn crop_keeps_the_bucket_boundaries() {
         &[longs(&[10, 20, 30]), Value::Long(0)],
     );
     let mut stack = exec(&format!("{SERIES} 'g' STORE $g CROP $g"));
-    let original = stack.pop().unwrap();
-    assert!(!stack.pop().unwrap().same_object(&original));
+    let original = stack.pop().expect("pop should succeed");
+    assert!(
+        !stack
+            .pop()
+            .expect("pop should succeed")
+            .same_object(&original)
+    );
     // Lists may nest lists of series; other elements are ignored.
     assert_top(
         &format!("{SERIES} 'g' STORE [ $g [ $g ] 1 'x' ] CROP SIZE"),
@@ -738,15 +754,17 @@ fn crop_keeps_the_bucket_boundaries() {
     stack.push(Value::Gts(gts.shared()));
     stack
         .exec_checked("'b' STORE [ $b ] CROP 0 GET BUCKETCOUNT")
-        .unwrap();
-    assert_eq!(stack.pop().unwrap(), Value::Long(8));
+        .expect("the value should succeed");
+    assert_eq!(stack.pop().expect("pop should succeed"), Value::Long(8));
     // No datapoint on a bucket boundary: Warp 10 dies on its empty result.
     let mut off = GeoTimeSerie::with_buckets(100, 10, 10);
     off.set_value(75, NO_LOCATION, NO_ELEVATION, &Value::Long(1), false);
     for script in ["CROP", "[ ] SWAP +! CROP"] {
         let mut stack = test_stack();
         stack.push(Value::Gts(off.clone().shared()));
-        let error = stack.exec_checked(script).unwrap_err();
+        let error = stack
+            .exec_checked(script)
+            .expect_err("exec_checked should fail");
         assert!(
             error
                 .to_string()
@@ -914,8 +932,10 @@ fn fuse_assembles_chunks() {
     let mut stack = test_stack();
     stack.push(Value::Gts(bucketized().shared()));
     stack.push(Value::Gts(other_span.shared()));
-    stack.exec_checked("2 ->LIST FUSE BUCKETCOUNT").unwrap();
-    assert_eq!(stack.pop().unwrap(), Value::Long(0));
+    stack
+        .exec_checked("2 ->LIST FUSE BUCKETCOUNT")
+        .expect("exec_checked should succeed");
+    assert_eq!(stack.pop().expect("pop should succeed"), Value::Long(0));
     assert_eq!(
         run_with(bucketized(), &format!("[ $b {SERIES} ] FUSE BUCKETCOUNT")),
         vec![Value::Long(0)]
@@ -961,8 +981,13 @@ fn shrink_keeps_the_first_or_last_datapoints() {
         longs(&[10]),
     );
     let mut stack = exec(&format!("{SERIES} 'g' STORE $g 1 SHRINK $g"));
-    let original = stack.pop().unwrap();
-    assert!(stack.pop().unwrap().same_object(&original));
+    let original = stack.pop().expect("pop should succeed");
+    assert!(
+        stack
+            .pop()
+            .expect("pop should succeed")
+            .same_object(&original)
+    );
     assert_eq!(
         crate::tests::top("[ [ ] [ [ ] ] ] -1 SHRINK").to_string(),
         "[[], [[]]]"

@@ -1,7 +1,5 @@
 // Copyright 2026 The influxftl Authors. Licensed under the Apache License, Version 2.0.
 
-#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
-
 //! Tests of `BUCKETIZE`. The expected values were checked against Warp 10 3.5.0
 //! (`warp10io/warp10:3.5.0-alpine`).
 
@@ -145,8 +143,13 @@ fn bucketize_derives_the_missing_parameters() {
     let mut stack = exec(&format!(
         "[ {M} 'g' STORE $g NULL 0 10 0 ] BUCKETIZE 0 GET $g"
     ));
-    let original = stack.pop().unwrap();
-    assert!(stack.pop().unwrap().same_object(&original));
+    let original = stack.pop().expect("pop should succeed");
+    assert!(
+        stack
+            .pop()
+            .expect("pop should succeed")
+            .same_object(&original)
+    );
     // Lists of series, nested or not.
     assert_stack(
         &format!(
@@ -934,7 +937,10 @@ fn every_registered_aggregator_can_be_built() {
         assert_eq!(object.name(), *name);
         assert_eq!(object.type_name(), "AGGREGATOR");
         assert_eq!(
-            object.as_aggregator().unwrap().roles(),
+            object
+                .as_aggregator()
+                .expect("as_aggregator should succeed")
+                .roles(),
             crate::aggregators::Roles::ALL
         );
         assert_top(&format!("{name} TYPEOF"), "AGGREGATOR");

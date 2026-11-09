@@ -1,7 +1,5 @@
 // Copyright 2026 The influxftl Authors. Licensed under the Apache License, Version 2.0.
 
-#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
-
 //! Tests of `PARSESELECTOR`, `TOSELECTOR`, `filter.byselector`, `filter.bymetadata` and
 //! `filter.latencies`.
 //! The expectations are the answers of Warp 10 3.5.0 to the same scripts:
@@ -47,7 +45,7 @@ fn stack_json(script: &str) -> Result<String, String> {
     stack
         .exec_checked(&format!("{script} DEPTH ->LIST REVERSE ->JSON"))
         .map_err(|err| err.to_string())?;
-    match stack.pop().unwrap() {
+    match stack.pop().expect("pop should succeed") {
         Value::String(json) => Ok(json.to_string()),
         other => panic!("not a string: {other:?}"),
     }

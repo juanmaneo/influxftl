@@ -1,7 +1,5 @@
 // Copyright 2026 The influxftl Authors. Licensed under the Apache License, Version 2.0.
 
-#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
-
 //! Tests of `mapper.product` and the `mapper.dotproduct` family. The expected values were
 //! checked against Warp 10 3.5.0 (`warp10io/warp10:3.5.0-alpine`).
 
@@ -129,7 +127,7 @@ fn products_of_reducer_windows() {
             &[Value::Null, Value::Long(-3), Value::Double(0.5)],
             None
         )
-        .unwrap(),
+        .expect("the value should succeed"),
         Aggregated {
             tick: 100,
             location: 11,
@@ -138,16 +136,20 @@ fn products_of_reducer_windows() {
         }
     );
     assert_eq!(
-        apply(&product, &[Value::Null], None).unwrap().value,
+        apply(&product, &[Value::Null], None)
+            .expect("apply should succeed")
+            .value,
         Value::Long(1)
     );
     assert_eq!(
-        apply(&product, &longs(&[-2, 3]), None).unwrap().value,
+        apply(&product, &longs(&[-2, 3]), None)
+            .expect("apply should succeed")
+            .value,
         Value::Long(-6)
     );
     assert_eq!(
         apply(&product, &[Value::Double(-2.0), Value::Double(-0.25)], None)
-            .unwrap()
+            .expect("the value should succeed")
             .value,
         Value::Double(0.5)
     );
@@ -157,12 +159,14 @@ fn products_of_reducer_windows() {
             &[Value::Double(f64::MIN_POSITIVE / 4.0), Value::Long(3)],
             None
         )
-        .unwrap()
+        .expect("the value should succeed")
         .value,
         Value::Double(f64::MIN_POSITIVE / 4.0 * 3.0)
     );
     assert_eq!(
-        Window::of(&[]).apply(&product).unwrap(),
+        Window::of(&[])
+            .apply(&product)
+            .expect("apply should succeed"),
         Aggregated {
             tick: 100,
             location: NO_LOCATION,
@@ -172,12 +176,12 @@ fn products_of_reducer_windows() {
     );
     assert_eq!(
         apply(&product, &longs(&[2]), parameters(None))
-            .unwrap_err()
+            .expect_err("the value should fail")
             .to_string(),
         "Index 4 out of bounds for length 4"
     );
     assert_eq!(
-        apply(&product, &longs(&[2, 3]), parameters(Some(1))).unwrap(),
+        apply(&product, &longs(&[2, 3]), parameters(Some(1))).expect("apply should succeed"),
         Aggregated {
             tick: 100,
             location: 12,
@@ -280,7 +284,9 @@ fn dot_products() {
     };
     assert_eq!(dot.roles(), Roles::MAPPER);
     assert_eq!(
-        apply(&dot, &longs(&[1, 2]), None).unwrap_err().to_string(),
+        apply(&dot, &longs(&[1, 2]), None)
+            .expect_err("apply should fail")
+            .to_string(),
         "Index 7 out of bounds for length 7"
     );
     // Only the first value is checked; a later one fails the cast to a `Number`.
@@ -290,15 +296,24 @@ fn dot_products() {
             &[Value::Long(1), Value::string("a")],
             parameters(Some(0))
         )
-        .unwrap_err()
+        .expect_err("the value should fail")
         .to_string(),
         "class java.lang.String cannot be cast to class java.lang.Number"
     );
     assert_eq!(
-        Window::of(&longs(&[1])).apply(&dot).unwrap().value,
+        Window::of(&longs(&[1]))
+            .apply(&dot)
+            .expect("apply should succeed")
+            .value,
         Value::Null
     );
-    assert_eq!(Window::of(&[]).apply(&dot).unwrap().value, Value::Null);
+    assert_eq!(
+        Window::of(&[])
+            .apply(&dot)
+            .expect("apply should succeed")
+            .value,
+        Value::Null
+    );
 }
 
 #[test]

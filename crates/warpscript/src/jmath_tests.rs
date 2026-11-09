@@ -1,11 +1,6 @@
 // Copyright 2026 The influxftl Authors. Licensed under the Apache License, Version 2.0.
 
-#![allow(
-    clippy::unwrap_used,
-    clippy::expect_used,
-    clippy::panic,
-    clippy::float_cmp
-)]
+#![allow(clippy::float_cmp)]
 
 //! Reference values below were produced with OpenJDK 27 (`java.lang.Math`).
 
@@ -196,63 +191,105 @@ fn ieee_remainder_matches_java() {
 
 #[test]
 fn floor_div_and_mod() {
-    assert_eq!(floor_div(7, 2).unwrap(), 3);
-    assert_eq!(floor_div(-7, 2).unwrap(), -4);
-    assert_eq!(floor_div(7, -2).unwrap(), -4);
-    assert_eq!(floor_div(-7, -2).unwrap(), 3);
-    assert_eq!(floor_div(6, 3).unwrap(), 2);
-    assert_eq!(floor_div(-6, 3).unwrap(), -2);
-    assert_eq!(floor_div(i64::MIN, -1).unwrap(), i64::MIN);
-    assert_eq!(floor_div(1, 0).unwrap_err().message(), "/ by zero");
-    assert_eq!(floor_mod(7, 2).unwrap(), 1);
-    assert_eq!(floor_mod(-7, 2).unwrap(), 1);
-    assert_eq!(floor_mod(7, -2).unwrap(), -1);
-    assert_eq!(floor_mod(-7, -2).unwrap(), -1);
-    assert_eq!(floor_mod(6, 3).unwrap(), 0);
-    assert_eq!(floor_mod(-6, 3).unwrap(), 0);
-    assert_eq!(floor_mod(i64::MIN, -1).unwrap(), 0);
-    assert_eq!(floor_mod(1, 0).unwrap_err().message(), "/ by zero");
+    assert_eq!(floor_div(7, 2).expect("floor_div should succeed"), 3);
+    assert_eq!(floor_div(-7, 2).expect("floor_div should succeed"), -4);
+    assert_eq!(floor_div(7, -2).expect("floor_div should succeed"), -4);
+    assert_eq!(floor_div(-7, -2).expect("floor_div should succeed"), 3);
+    assert_eq!(floor_div(6, 3).expect("floor_div should succeed"), 2);
+    assert_eq!(floor_div(-6, 3).expect("floor_div should succeed"), -2);
+    assert_eq!(
+        floor_div(i64::MIN, -1).expect("floor_div should succeed"),
+        i64::MIN
+    );
+    assert_eq!(
+        floor_div(1, 0)
+            .expect_err("floor_div should fail")
+            .message(),
+        "/ by zero"
+    );
+    assert_eq!(floor_mod(7, 2).expect("floor_mod should succeed"), 1);
+    assert_eq!(floor_mod(-7, 2).expect("floor_mod should succeed"), 1);
+    assert_eq!(floor_mod(7, -2).expect("floor_mod should succeed"), -1);
+    assert_eq!(floor_mod(-7, -2).expect("floor_mod should succeed"), -1);
+    assert_eq!(floor_mod(6, 3).expect("floor_mod should succeed"), 0);
+    assert_eq!(floor_mod(-6, 3).expect("floor_mod should succeed"), 0);
+    assert_eq!(
+        floor_mod(i64::MIN, -1).expect("floor_mod should succeed"),
+        0
+    );
+    assert_eq!(
+        floor_mod(1, 0)
+            .expect_err("floor_mod should fail")
+            .message(),
+        "/ by zero"
+    );
 }
 
 #[test]
 fn exact_arithmetic_detects_overflow() {
-    assert_eq!(add_exact(1, 2).unwrap(), 3);
+    assert_eq!(add_exact(1, 2).expect("add_exact should succeed"), 3);
     assert_eq!(
-        add_exact(i64::MAX, 1).unwrap_err().message(),
+        add_exact(i64::MAX, 1)
+            .expect_err("add_exact should fail")
+            .message(),
         "long overflow"
     );
-    assert_eq!(subtract_exact(1, 2).unwrap(), -1);
     assert_eq!(
-        subtract_exact(i64::MIN, 1).unwrap_err().message(),
+        subtract_exact(1, 2).expect("subtract_exact should succeed"),
+        -1
+    );
+    assert_eq!(
+        subtract_exact(i64::MIN, 1)
+            .expect_err("subtract_exact should fail")
+            .message(),
         "long overflow"
     );
-    assert_eq!(multiply_exact(3, 4).unwrap(), 12);
     assert_eq!(
-        multiply_exact(i64::MAX, 2).unwrap_err().message(),
+        multiply_exact(3, 4).expect("multiply_exact should succeed"),
+        12
+    );
+    assert_eq!(
+        multiply_exact(i64::MAX, 2)
+            .expect_err("multiply_exact should fail")
+            .message(),
         "long overflow"
     );
-    assert_eq!(increment_exact(1).unwrap(), 2);
     assert_eq!(
-        increment_exact(i64::MAX).unwrap_err().message(),
+        increment_exact(1).expect("increment_exact should succeed"),
+        2
+    );
+    assert_eq!(
+        increment_exact(i64::MAX)
+            .expect_err("increment_exact should fail")
+            .message(),
         "long overflow"
     );
-    assert_eq!(decrement_exact(1).unwrap(), 0);
     assert_eq!(
-        decrement_exact(i64::MIN).unwrap_err().message(),
+        decrement_exact(1).expect("decrement_exact should succeed"),
+        0
+    );
+    assert_eq!(
+        decrement_exact(i64::MIN)
+            .expect_err("decrement_exact should fail")
+            .message(),
         "long overflow"
     );
-    assert_eq!(negate_exact(1).unwrap(), -1);
+    assert_eq!(negate_exact(1).expect("negate_exact should succeed"), -1);
     assert_eq!(
-        negate_exact(i64::MIN).unwrap_err().message(),
+        negate_exact(i64::MIN)
+            .expect_err("negate_exact should fail")
+            .message(),
         "long overflow"
     );
-    assert_eq!(to_int_exact(-5).unwrap(), -5);
+    assert_eq!(to_int_exact(-5).expect("to_int_exact should succeed"), -5);
     assert_eq!(
-        to_int_exact(i64::from(i32::MAX)).unwrap(),
+        to_int_exact(i64::from(i32::MAX)).expect("to_int_exact should succeed"),
         i64::from(i32::MAX)
     );
     assert_eq!(
-        to_int_exact(i64::from(i32::MAX) + 1).unwrap_err().message(),
+        to_int_exact(i64::from(i32::MAX) + 1)
+            .expect_err("to_int_exact should fail")
+            .message(),
         "integer overflow"
     );
 }

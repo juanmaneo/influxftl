@@ -1,7 +1,5 @@
 // Copyright 2026 The influxftl Authors. Licensed under the Apache License, Version 2.0.
 
-#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
-
 //! Tests of the GeoXP point conversions, against values computed with `HHCodeHelper`.
 
 use crate::geoxp::{from_geoxp_point, to_geoxp_point};

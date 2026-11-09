@@ -1,7 +1,5 @@
 // Copyright 2026 The influxftl Authors. Licensed under the Apache License, Version 2.0.
 
-#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
-
 //! Tests of `TEMPLATE` against mustache.java 0.9.6 (`compiler-0.9.6.jar`) driven through
 //! Warp 10's `TEMPLATE` configuration: every expected output below was produced by Java.
 
@@ -404,13 +402,16 @@ fn arguments_and_scope_types() {
     assert_fails("'x' { NULL 'a' } TEMPLATE", invalid);
     assert_fails("'x' { 'a' <% %> } TEMPLATE", invalid);
     assert!(render_template("", Value::Null).is_err());
-    assert_eq!(render_template("{{.}}", Value::Long(3)).unwrap(), "3");
+    assert_eq!(
+        render_template("{{.}}", Value::Long(3)).expect("render_template should succeed"),
+        "3"
+    );
     assert_eq!(
         render_template(
             "{{#.}}{{.}}{{/.}}",
             Value::list(vec![Value::Long(1), Value::Long(2)])
         )
-        .unwrap(),
+        .expect("the value should succeed"),
         "12"
     );
 }

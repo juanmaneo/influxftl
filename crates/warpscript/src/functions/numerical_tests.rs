@@ -1,7 +1,5 @@
 // Copyright 2026 The influxftl Authors. Licensed under the Apache License, Version 2.0.
 
-#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
-
 use crate::functions::numerical::{Binary, Unary, binary, unary};
 use crate::stack::Stack;
 use crate::tests::{assert_fails, assert_top};
@@ -145,8 +143,8 @@ fn binary_reduces_a_single_list_when_allowed() {
 fn reduce(op: Binary, inputs: Vec<Value>) -> Value {
     let mut stack = Stack::new();
     stack.push(Value::list(inputs));
-    binary(&mut stack, "OP", op, true).unwrap();
-    stack.pop().unwrap()
+    binary(&mut stack, "OP", op, true).expect("binary should succeed");
+    stack.pop().expect("pop should succeed")
 }
 
 #[test]
@@ -174,12 +172,12 @@ fn reduction_seeds_use_the_operator_type() {
 fn unary_api_rejects_non_numbers() {
     let mut stack = Stack::new();
     stack.push("x");
-    let err = unary(&mut stack, "NEG", Unary::Double(|d| -d)).unwrap_err();
+    let err = unary(&mut stack, "NEG", Unary::Double(|d| -d)).expect_err("unary should fail");
     assert_eq!(
         err.to_string(),
         "NEG can only operate on numerical values, list of numerical values or numerical GTSs."
     );
     stack.push(2.0);
-    unary(&mut stack, "NEG", Unary::Double(|d| -d)).unwrap();
-    assert_eq!(stack.pop().unwrap(), double(-2.0));
+    unary(&mut stack, "NEG", Unary::Double(|d| -d)).expect("unary should succeed");
+    assert_eq!(stack.pop().expect("pop should succeed"), double(-2.0));
 }

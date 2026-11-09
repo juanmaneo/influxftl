@@ -1,7 +1,5 @@
 // Copyright 2026 The influxftl Authors. Licensed under the Apache License, Version 2.0.
 
-#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
-
 //! Tests of the datapoint selection and ordering functions. The expected values were checked
 //! against Warp 10 3.5.0 (`warp10io/warp10:3.5.0-alpine`).
 
@@ -86,8 +84,12 @@ fn bucketized() -> GeoTimeSerie {
 fn run_with(gts: GeoTimeSerie, script: &str) -> Vec<Value> {
     let mut stack = test_stack();
     stack.push(Value::Gts(gts.shared()));
-    stack.exec_checked("'b' STORE").unwrap();
-    stack.exec_checked(script).unwrap();
+    stack
+        .exec_checked("'b' STORE")
+        .expect("exec_checked should succeed");
+    stack
+        .exec_checked(script)
+        .expect("exec_checked should succeed");
     stack.elements().to_vec()
 }
 
@@ -270,8 +272,13 @@ fn empty_and_nonempty_filter_lists() {
     );
     // The same series objects are returned.
     let mut stack = exec(&format!("{SERIES} 'g' STORE [ $g ] NONEMPTY 0 GET $g"));
-    let original = stack.pop().unwrap();
-    assert!(stack.pop().unwrap().same_object(&original));
+    let original = stack.pop().expect("pop should succeed");
+    assert!(
+        stack
+            .pop()
+            .expect("pop should succeed")
+            .same_object(&original)
+    );
     assert_fails("1 EMPTY", "EMPTY operates on a list of Geo Time Series.");
     assert_fails(
         "1 NONEMPTY",
@@ -854,7 +861,9 @@ fn atbucket_reads_a_bucket() {
     );
     let mut stack = test_stack();
     stack.push(Value::Gts(bucketized().shared()));
-    let error = stack.exec_checked("10 ATBUCKET").unwrap_err();
+    let error = stack
+        .exec_checked("10 ATBUCKET")
+        .expect_err("exec_checked should fail");
     assert!(
         error
             .to_string()
@@ -863,7 +872,9 @@ fn atbucket_reads_a_bucket() {
     );
     let mut stack = test_stack();
     stack.push(Value::Gts(bucketized().shared()));
-    let error = stack.exec_checked("'x' ATBUCKET").unwrap_err();
+    let error = stack
+        .exec_checked("'x' ATBUCKET")
+        .expect_err("exec_checked should fail");
     assert!(
         error
             .to_string()

@@ -1,7 +1,5 @@
 // Copyright 2026 The influxftl Authors. Licensed under the Apache License, Version 2.0.
 
-#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
-
 //! Tests of the statistics and value-based transforms. The expected values were checked
 //! against Warp 10 3.5.0 (`warp10io/warp10:3.5.0-alpine`).
 
@@ -53,8 +51,12 @@ fn bucketized() -> GeoTimeSerie {
 fn run_with(gts: GeoTimeSerie, script: &str) -> Vec<Value> {
     let mut stack = test_stack();
     stack.push(Value::Gts(gts.shared()));
-    stack.exec_checked("'b' STORE").unwrap();
-    stack.exec_checked(script).unwrap();
+    stack
+        .exec_checked("'b' STORE")
+        .expect("exec_checked should succeed");
+    stack
+        .exec_checked(script)
+        .expect("exec_checked should succeed");
     stack.elements().to_vec()
 }
 
@@ -444,7 +446,7 @@ fn valuehistogram_counts_values() {
     // The offending argument is pushed back.
     let mut stack = test_stack();
     assert!(stack.exec_checked("1 VALUEHISTOGRAM").is_err());
-    assert_eq!(stack.pop().unwrap(), Value::Long(1));
+    assert_eq!(stack.pop().expect("pop should succeed"), Value::Long(1));
 }
 
 #[test]

@@ -1,7 +1,5 @@
 // Copyright 2026 The influxftl Authors. Licensed under the Apache License, Version 2.0.
 
-#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
-
 use std::rc::Rc;
 
 use super::macros::{Callable, Macro, Statement};
@@ -21,7 +19,7 @@ fn callables() {
     };
     assert_eq!(native.name(), "NOOP");
     let mut stack = Stack::new();
-    native.apply(&mut stack).unwrap();
+    native.apply(&mut stack).expect("apply should succeed");
     let defined = Callable::Defined {
         name: Rc::from("MYFN"),
         body: Rc::new(Macro::from_statements(vec![Statement::Push(Value::Long(
@@ -29,14 +27,17 @@ fn callables() {
         ))])),
     };
     assert_eq!(defined.name(), "MYFN");
-    defined.apply(&mut stack).unwrap();
-    assert_eq!(stack.pop().unwrap(), Value::Long(1));
+    defined.apply(&mut stack).expect("apply should succeed");
+    assert_eq!(stack.pop().expect("pop should succeed"), Value::Long(1));
     let undefined = Callable::Undefined {
         name: Rc::from("GONE"),
     };
     assert_eq!(undefined.name(), "GONE");
     assert_eq!(
-        undefined.apply(&mut stack).unwrap_err().to_string(),
+        undefined
+            .apply(&mut stack)
+            .expect_err("apply should fail")
+            .to_string(),
         "GONE is undefined."
     );
     let cloned = undefined.clone();
@@ -95,7 +96,7 @@ fn macro_with_calls_snapshots_names() {
     let m = top("<% DUP 'x' STORE %>");
     assert_eq!(m.to_string(), "<% DUP 'x' STORE %>");
     let stack = exec("<% DUP %> 'm' STORE");
-    let Value::Macro(m) = stack.load("m").unwrap() else {
+    let Value::Macro(m) = stack.load("m").expect("load should succeed") else {
         panic!("not a macro");
     };
     assert_eq!(m.len(), 1);

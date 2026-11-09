@@ -1,7 +1,5 @@
 // Copyright 2026 The influxftl Authors. Licensed under the Apache License, Version 2.0.
 
-#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
-
 //! Shared helpers of the aggregator tests: windows `BUCKETIZE` cannot produce (`null`
 //! values, mixed value types, empty windows) applied to an aggregator directly.
 
@@ -48,12 +46,14 @@ impl Window {
 
     /// The value `aggregator` produces on the window.
     pub(super) fn value(&self, aggregator: &dyn Aggregator) -> Value {
-        self.apply(aggregator).unwrap().value
+        self.apply(aggregator).expect("apply should succeed").value
     }
 
     /// The error `aggregator` produces on the window.
     pub(super) fn error(&self, aggregator: &dyn Aggregator) -> String {
-        self.apply(aggregator).unwrap_err().to_string()
+        self.apply(aggregator)
+            .expect_err("apply should fail")
+            .to_string()
     }
 }
 
@@ -110,9 +110,11 @@ fn every_registered_name_builds_an_aggregator() {
                 Entry::Object(build) => build(name),
                 Entry::Builder(build) => {
                     let mut stack = test_stack();
-                    stack.exec_checked(parameter).unwrap();
-                    build(&mut stack, name).unwrap();
-                    let Value::Function(object) = stack.pop().unwrap() else {
+                    stack
+                        .exec_checked(parameter)
+                        .expect("exec_checked should succeed");
+                    build(&mut stack, name).expect("build should succeed");
+                    let Value::Function(object) = stack.pop().expect("pop should succeed") else {
                         panic!("{name} did not build a function object");
                     };
                     object
@@ -121,7 +123,13 @@ fn every_registered_name_builds_an_aggregator() {
             };
             assert_eq!(object.name(), *name);
             assert_eq!(object.type_name(), "AGGREGATOR");
-            assert_eq!(object.as_aggregator().unwrap().roles(), super::Roles::ALL);
+            assert_eq!(
+                object
+                    .as_aggregator()
+                    .expect("as_aggregator should succeed")
+                    .roles(),
+                super::Roles::ALL
+            );
             assert_top(&format!("{parameter} {name} TYPEOF"), "AGGREGATOR");
             if parameter.is_empty() {
                 assert_top(&format!("{name} SNAPSHOT"), format!("'{name}' FUNCREF "));

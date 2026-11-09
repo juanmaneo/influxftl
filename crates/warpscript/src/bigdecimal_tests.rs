@@ -1,7 +1,5 @@
 // Copyright 2026 The influxftl Authors. Licensed under the Apache License, Version 2.0.
 
-#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
-
 use crate::bigdecimal::{BigDecimal, RoundingMode};
 
 #[test]
@@ -12,9 +10,11 @@ fn divide_rounded_keeps_the_scale_of_the_dividend() {
         ("7.5", "1E+1", "0.8"),
         ("-7.5", "-3", "2.5"),
     ] {
-        let a = BigDecimal::parse(a).unwrap();
-        let b = BigDecimal::parse(b).unwrap();
-        let quotient = a.divide_rounded(&b, RoundingMode::HalfUp).unwrap();
+        let a = BigDecimal::parse(a).expect("parse should succeed");
+        let b = BigDecimal::parse(b).expect("parse should succeed");
+        let quotient = a
+            .divide_rounded(&b, RoundingMode::HalfUp)
+            .expect("divide_rounded should succeed");
         assert_eq!(quotient.to_string(), expected);
     }
 }

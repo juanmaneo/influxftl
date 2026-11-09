@@ -1,7 +1,5 @@
 // Copyright 2026 The influxftl Authors. Licensed under the Apache License, Version 2.0.
 
-#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
-
 use crate::stack::{Limits, Stack};
 use crate::tests::{assert_fails, assert_stack, assert_top, exec, top};
 use crate::value::Value;
@@ -311,7 +309,7 @@ fn loop_duration_limit() {
         ("FOR", "0 9223372036854775807 <% DROP %> FOR"),
         ("FORSTEP", "0 9223372036854775807 <% %> <% DROP %> FORSTEP"),
     ] {
-        let err = stack.exec(script).unwrap_err();
+        let err = stack.exec(script).expect_err("exec should fail");
         assert!(
             err.to_string().contains(&format!(
                 "{name} executed for too long (> 1 ms). Consider raising the limit or using capabilities."

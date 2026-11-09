@@ -1,7 +1,5 @@
 // Copyright 2026 The influxftl Authors. Licensed under the Apache License, Version 2.0.
 
-#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
-
 //! Tests of `GZIP` / `UNGZIP` / `DEFLATE` / `INFLATE`, including streams produced by the JDK.
 
 use super::compression::{
@@ -29,7 +27,12 @@ fn gzip_round_trips() {
     // gzip magic, deflate method, no flags, no mtime, and the "unknown" OS byte like JDK 16+.
     let header = top(&format!("'{TEXT}' GZIP ->HEX")).to_string();
     assert!(header.starts_with("1f8b08000000000000ff"), "{header}");
-    assert!(top(&format!("'{TEXT}' GZIP SIZE")).as_i64().unwrap() < TEXT.len() as i64);
+    assert!(
+        top(&format!("'{TEXT}' GZIP SIZE"))
+            .as_i64()
+            .expect("as_i64 should succeed")
+            < TEXT.len() as i64
+    );
 }
 
 #[test]
@@ -56,17 +59,23 @@ fn java_streams_decompress() {
 
 #[test]
 fn ungzip_handles_members_and_trailing_bytes() {
-    let hello = gzip_bytes(b"hello").unwrap();
-    let world = gzip_bytes(b" world").unwrap();
-    let empty = gzip_bytes(b"").unwrap();
+    let hello = gzip_bytes(b"hello").expect("gzip_bytes should succeed");
+    let world = gzip_bytes(b" world").expect("gzip_bytes should succeed");
+    let empty = gzip_bytes(b"").expect("gzip_bytes should succeed");
     let mut members = hello.clone();
     members.extend_from_slice(&empty);
     members.extend_from_slice(&world);
-    assert_eq!(ungzip_bytes(&members).unwrap(), b"hello world");
+    assert_eq!(
+        ungzip_bytes(&members).expect("ungzip_bytes should succeed"),
+        b"hello world"
+    );
     // Like `GZIPInputStream`, bytes that are not another member are ignored…
     let mut trailing = hello.clone();
     trailing.extend_from_slice(&[1, 2, 3]);
-    assert_eq!(ungzip_bytes(&trailing).unwrap(), b"hello");
+    assert_eq!(
+        ungzip_bytes(&trailing).expect("ungzip_bytes should succeed"),
+        b"hello"
+    );
     // …but a second member that is corrupt or truncated is an error.
     let mut corrupt = hello.clone();
     let mut bad = world.clone();
@@ -74,7 +83,9 @@ fn ungzip_handles_members_and_trailing_bytes() {
     bad[crc] ^= 1;
     corrupt.extend_from_slice(&bad);
     assert_eq!(
-        ungzip_bytes(&corrupt).unwrap_err().to_string(),
+        ungzip_bytes(&corrupt)
+            .expect_err("ungzip_bytes should fail")
+            .to_string(),
         "corrupt gzip stream does not have a matching checksum"
     );
     let mut truncated = hello.clone();
@@ -125,7 +136,7 @@ fn compression_failures_are_reported() {
     }
     let mut stack = Stack::new();
     stack.push(Value::from("data"));
-    let err = compress_fn(&mut stack, "GZIP", failing).unwrap_err();
+    let err = compress_fn(&mut stack, "GZIP", failing).expect_err("compress_fn should fail");
     assert_eq!(
         err.to_string(),
         "GZIP encountered an error while compressing. (disk full)"
@@ -161,24 +172,38 @@ fn write_errors_surface_while_compressing() {
         })
         .collect();
     assert_eq!(
-        gzip_into(&mut BrokenSink, &noise).unwrap_err().to_string(),
+        gzip_into(&mut BrokenSink, &noise)
+            .expect_err("gzip_into should fail")
+            .to_string(),
         "broken pipe"
     );
     assert_eq!(
         deflate_into(&mut BrokenSink, &noise)
-            .unwrap_err()
+            .expect_err("the value should fail")
             .to_string(),
         "broken pipe"
     );
     // A sink that fails only once the stream is finished.
     assert!(gzip_into(&mut BrokenSink, b"").is_err());
     assert!(deflate_into(&mut BrokenSink, b"").is_err());
-    assert_eq!(ungzip_bytes(&gzip_bytes(&noise).unwrap()).unwrap(), noise);
+    assert_eq!(
+        ungzip_bytes(&gzip_bytes(&noise).expect("gzip_bytes should succeed"))
+            .expect("ungzip_bytes should succeed"),
+        noise
+    );
 }
 
 #[test]
 fn byte_helpers_round_trip() {
-    let data = hex_decode("00010203fffefd").unwrap();
-    assert_eq!(ungzip_bytes(&gzip_bytes(&data).unwrap()).unwrap(), data);
-    assert_eq!(inflate_bytes(&deflate_bytes(&data).unwrap()).unwrap(), data);
+    let data = hex_decode("00010203fffefd").expect("hex_decode should succeed");
+    assert_eq!(
+        ungzip_bytes(&gzip_bytes(&data).expect("gzip_bytes should succeed"))
+            .expect("ungzip_bytes should succeed"),
+        data
+    );
+    assert_eq!(
+        inflate_bytes(&deflate_bytes(&data).expect("deflate_bytes should succeed"))
+            .expect("inflate_bytes should succeed"),
+        data
+    );
 }

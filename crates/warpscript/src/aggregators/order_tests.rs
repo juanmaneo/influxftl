@@ -1,7 +1,5 @@
 // Copyright 2026 The influxftl Authors. Licensed under the Apache License, Version 2.0.
 
-#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
-
 //! Tests of the order statistics aggregators. The expected values were checked against
 //! Warp 10 3.5.0 (`warp10io/warp10:3.5.0-alpine`).
 
@@ -181,7 +179,7 @@ fn median_on_windows_with_nulls_and_mixed_types() {
         values: vec![Value::Null, Value::Long(5)],
     };
     assert_eq!(
-        single.apply(&median).unwrap(),
+        single.apply(&median).expect("apply should succeed"),
         Aggregated {
             tick: 100,
             location: 8,
@@ -247,7 +245,7 @@ fn median_on_windows_with_nulls_and_mixed_types() {
         elevations: vec![NO_ELEVATION, NO_ELEVATION, 300, NO_ELEVATION],
         values: longs(&[1, 2, 3, 4]),
     };
-    let result = even.apply(&median).unwrap();
+    let result = even.apply(&median).expect("apply should succeed");
     assert_eq!(
         geoxp::from_geoxp_point(result.location),
         (48.499_999_959_021_81, 2.499_999_934_807_419_8)
@@ -263,7 +261,7 @@ fn median_on_windows_with_nulls_and_mixed_types() {
         ],
         ..even
     };
-    let result = low_only.apply(&median).unwrap();
+    let result = low_only.apply(&median).expect("apply should succeed");
     assert_eq!(result.elevation, 200);
     assert_eq!(result.location, geoxp::to_geoxp_point(48.0, 2.0));
     let high_only = Window {
@@ -276,7 +274,7 @@ fn median_on_windows_with_nulls_and_mixed_types() {
         ],
         ..low_only
     };
-    let result = high_only.apply(&median).unwrap();
+    let result = high_only.apply(&median).expect("apply should succeed");
     assert_eq!(result.elevation, NO_ELEVATION);
     assert_eq!(result.location, geoxp::to_geoxp_point(49.0, 3.0));
 }
@@ -402,7 +400,9 @@ fn mad_on_windows_with_nulls_and_mixed_types() {
         Value::Long(1)
     );
     assert_eq!(
-        Window::of(&[Value::Null, Value::Null]).apply(&Mad).unwrap(),
+        Window::of(&[Value::Null, Value::Null])
+            .apply(&Mad)
+            .expect("apply should succeed"),
         Aggregated {
             tick: 100,
             location: NO_LOCATION,
@@ -644,7 +644,7 @@ fn percentile_keeps_or_interpolates_the_datapoint() {
     };
     assert_eq!(
         two.apply(&Percentile::new("mapper.percentile", 25.0, 7, false))
-            .unwrap(),
+            .expect("the value should succeed"),
         Aggregated {
             tick: 13,
             location: NO_LOCATION,
@@ -739,13 +739,20 @@ fn percentile_on_windows_with_nulls_and_mixed_types() {
         "reducer.percentile.forbid-nulls cannot compute percentile of null values."
     );
     assert_eq!(
-        Window::of(&[Value::Null]).apply(&median).unwrap(),
+        Window::of(&[Value::Null])
+            .apply(&median)
+            .expect("apply should succeed"),
         Aggregated {
             tick: 0,
             ..Aggregated::none()
         }
     );
-    assert_eq!(Window::of(&[]).apply(&median).unwrap(), Aggregated::none());
+    assert_eq!(
+        Window::of(&[])
+            .apply(&median)
+            .expect("apply should succeed"),
+        Aggregated::none()
+    );
     assert_eq!(
         Window::of(&[Value::Null, Value::from("a")]).value(&median),
         Value::from("a")

@@ -1,7 +1,5 @@
 // Copyright 2026 The influxftl Authors. Licensed under the Apache License, Version 2.0.
 
-#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
-
 //! Tests of the cryptographic functions against values produced by the BouncyCastle version
 //! Warp 10 depends on (1.78.1) and by Warp 10's own `SipHashInline`, `TOB58` and `B58TO`.
 
@@ -439,12 +437,20 @@ fn base58check_decoding_matches_warp10() {
 
 #[test]
 fn base58_helpers() {
-    assert_eq!(b58_encode(&[0, 0, 1]).unwrap(), "112");
-    assert_eq!(b58_decode("112").unwrap(), vec![0, 0, 1]);
-    assert_eq!(b58_decode("1").unwrap(), vec![0]);
+    assert_eq!(
+        b58_encode(&[0, 0, 1]).expect("b58_encode should succeed"),
+        "112"
+    );
+    assert_eq!(
+        b58_decode("112").expect("b58_decode should succeed"),
+        vec![0, 0, 1]
+    );
+    assert_eq!(b58_decode("1").expect("b58_decode should succeed"), vec![0]);
     // A lone surrogate is rendered as U+FFFD (Java prints the unpaired char).
     assert_eq!(
-        b58_decode("a😀").unwrap_err().message(),
+        b58_decode("a😀")
+            .expect_err("b58_decode should fail")
+            .message(),
         "Invalid input '\u{FFFD}' at position 1."
     );
 }
@@ -452,9 +458,9 @@ fn base58_helpers() {
 /// The AES keys of the reference vectors: `seq(16)`, `seq(24)` and `seq(32)`.
 fn keks() -> [(Kek, &'static str); 3] {
     [
-        (Kek::new(&seq(16)).unwrap(), "k16"),
-        (Kek::new(&seq(24)).unwrap(), "k24"),
-        (Kek::new(&seq(32)).unwrap(), "k32"),
+        (Kek::new(&seq(16)).expect("new should succeed"), "k16"),
+        (Kek::new(&seq(24)).expect("new should succeed"), "k24"),
+        (Kek::new(&seq(32)).expect("new should succeed"), "k32"),
     ]
 }
 
@@ -492,14 +498,18 @@ fn aes_wrap_matches_cryptoutils() {
         for (data, want) in datas.iter().zip(wants) {
             let wrapped = aes_wrap(&kek, data);
             assert_eq!(hex_encode(&wrapped), want, "{label} {data:?}");
-            assert_eq!(aes_unwrap(&kek, &wrapped).unwrap(), *data, "{label}");
+            assert_eq!(
+                aes_unwrap(&kek, &wrapped).expect("aes_unwrap should succeed"),
+                *data,
+                "{label}"
+            );
         }
     }
 }
 
 #[test]
 fn aes_unwrap_rejects_bad_data() {
-    let (kek, _) = keks().into_iter().next().unwrap();
+    let (kek, _) = keks().into_iter().next().expect("next should succeed");
     // Not a multiple of 8 bytes, too short, bad integrity check.
     for bad in [seq(0), seq(7), seq(8), seq(16), seq(24)] {
         assert!(aes_unwrap(&kek, &bad).is_none(), "{bad:?}");
@@ -513,7 +523,7 @@ fn aes_unwrap_rejects_bad_data() {
     }
     // A full block of padding is valid and unwraps to nothing.
     assert_eq!(
-        aes_unwrap(&kek, &rfc3394_wrap(&kek, &[8u8; 8])).unwrap(),
+        aes_unwrap(&kek, &rfc3394_wrap(&kek, &[8u8; 8])).expect("aes_unwrap should succeed"),
         b""
     );
 }
@@ -535,26 +545,27 @@ fn aeswrap_and_aesunwrap_round_trip() {
     let mut stack = exec(&format!(
         "'abc' '{key}' HEX-> AESWRAP 'abc' '{key}' HEX-> AESWRAP"
     ));
-    let second = stack.pop().unwrap();
-    let first = stack.pop().unwrap();
+    let second = stack.pop().expect("pop should succeed");
+    let first = stack.pop().expect("pop should succeed");
     assert_ne!(first, second);
 }
 
 #[test]
 fn aeswrap_with_a_known_nonce() {
-    let kek = Kek::new(&seq(16)).unwrap();
+    let kek = Kek::new(&seq(16)).expect("new should succeed");
     let mut stack = Stack::new();
     stack.push(Value::from("abc"));
     stack.push(Value::bytes(seq(16)));
-    aeswrap_impl(&mut stack, Ok([7; NONCE_LEN])).unwrap();
-    let wrapped = stack.pop().unwrap();
+    aeswrap_impl(&mut stack, Ok([7; NONCE_LEN])).expect("aeswrap_impl should succeed");
+    let wrapped = stack.pop().expect("pop should succeed");
     let mut expected = vec![7u8; NONCE_LEN];
     expected.extend_from_slice(b"abc");
     assert_eq!(wrapped, Value::bytes(aes_wrap(&kek, &expected)));
 
     stack.push(Value::from("abc"));
     stack.push(Value::bytes(seq(16)));
-    let err = aeswrap_impl(&mut stack, Err(getrandom::Error::UNSUPPORTED)).unwrap_err();
+    let err = aeswrap_impl(&mut stack, Err(getrandom::Error::UNSUPPORTED))
+        .expect_err("aeswrap_impl should fail");
     assert!(
         err.to_string()
             .starts_with("Unable to obtain random data from the operating system ("),
@@ -598,7 +609,7 @@ fn aes_key_errors() {
 #[test]
 fn aesunwrap_without_nonce_fails_like_copyofrange() {
     // Data wrapped without the 8-byte nonce: `Arrays.copyOfRange(unwrapped, 8, 3)` fails.
-    let kek = Kek::new(&seq(16)).unwrap();
+    let kek = Kek::new(&seq(16)).expect("new should succeed");
     let wrapped = hex_encode(&aes_wrap(&kek, b"abc"));
     assert!(
         fail_msg(&format!(
@@ -625,7 +636,10 @@ fn kek_accepts_only_aes_key_sizes() {
     for len in [0, 15, 17, 23, 25, 31, 33, 64] {
         assert!(Kek::new(&seq(len)).is_none(), "{len}");
     }
-    assert_eq!(hex_decode("00").unwrap(), vec![0]);
+    assert_eq!(
+        hex_decode("00").expect("hex_decode should succeed"),
+        vec![0]
+    );
 }
 
 /// Run `script` on a stack granted `capabilities`.
@@ -691,7 +705,7 @@ fn argon2_capabilities() {
             "{{ 'password' 'password' 'salt' 'saltsalt' 'UTF-8' ->BYTES {extra} }} ARGON2 ->HEX"
         )
     };
-    let hex = |value: Result<Value, String>| value.unwrap().to_string();
+    let hex = |value: Result<Value, String>| value.expect("value should succeed").to_string();
     assert_eq!(
         hex(with_capabilities(
             &[("argon2.maxmem", "64"), ("argon2.maxpar", "2")],
@@ -749,11 +763,12 @@ fn argon2_capabilities() {
         ),
     ];
     for (extra, cap, message) in exceeded {
-        let err = with_capabilities(&[(cap, "4")], &script(extra)).unwrap_err();
+        let err = with_capabilities(&[(cap, "4")], &script(extra))
+            .expect_err("with_capabilities should fail");
         assert!(err.contains(message), "{err}");
     }
-    let err =
-        with_capabilities(&[("argon2.maxiter", "lots")], &script("'iterations' 4")).unwrap_err();
+    let err = with_capabilities(&[("argon2.maxiter", "lots")], &script("'iterations' 4"))
+        .expect_err("with_capabilities should fail");
     assert!(err.contains("For input string: \"lots\""), "{err}");
 }
 

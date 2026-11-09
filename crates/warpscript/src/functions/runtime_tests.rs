@@ -1,7 +1,5 @@
 // Copyright 2026 The influxftl Authors. Licensed under the Apache License, Version 2.0.
 
-#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
-
 //! Tests of the runtime introspection and control functions.
 
 use std::cell::RefCell;
@@ -45,8 +43,10 @@ fn functions_needs_the_inventory_capability() {
     stack
         .capabilities_mut()
         .insert("inventory".to_owned(), String::new());
-    stack.exec_checked("FUNCTIONS").unwrap();
-    let Value::List(names) = stack.pop().unwrap() else {
+    stack
+        .exec_checked("FUNCTIONS")
+        .expect("exec_checked should succeed");
+    let Value::List(names) = stack.pop().expect("pop should succeed") else {
         panic!("not a list");
     };
     let names = names.borrow();
@@ -193,7 +193,10 @@ fn deref_substitutes_loads_and_registers() {
     let mut stack = test_stack();
     stack.push(outer);
     stack.push(top("{ }"));
-    let err = stack.exec("DEREF").unwrap_err().to_string();
+    let err = stack
+        .exec("DEREF")
+        .expect_err("exec should fail")
+        .to_string();
     assert!(
         err.contains("DEREF cannot operate on a secure Macro."),
         "{err}"
@@ -351,14 +354,16 @@ fn guard_failures_abort_without_details() {
     let mut stack = test_stack();
     let err = stack
         .exec("1 2 <% 3 'x' STORE 4 FAIL %> [ 'x' ] GUARD")
-        .unwrap_err();
+        .expect_err("the value should fail");
     assert!(matches!(err.root_cause(), Error::Abort(_)), "{err:?}");
     assert_eq!(err.root_cause().message(), "Exception in GUARDed macro.");
     assert_eq!(stack.depth(), 0);
     assert!(!stack.has_symbol("x"));
     // Hidden levels are shown again after a failure.
     let mut stack = test_stack();
-    stack.exec("1 2 <% FAIL %> NULL GUARD").unwrap_err();
+    stack
+        .exec("1 2 <% FAIL %> NULL GUARD")
+        .expect_err("exec should fail");
     assert_eq!(stack.depth(), 2);
     // The abort is catchable by TRY and reported by ERROR.
     assert_top(
@@ -387,40 +392,42 @@ fn guard_restores_capabilities_unless_exported() {
         .insert("keep".to_owned(), "1".to_owned());
     stack
         .exec_checked("<% 'keep' CAPDEL 'a' CAPEXPORT %> GUARD")
-        .unwrap();
+        .expect("the value should succeed");
     assert_eq!(stack.capability("keep"), Some("1"));
     // Exported capabilities survive (here `keep` is removed, `a` is absent anyway).
     stack
         .exec_checked("<% 'keep' CAPDEL 'keep' CAPEXPORT %> GUARD")
-        .unwrap();
+        .expect("the value should succeed");
     assert_eq!(stack.capability("keep"), None);
     // Capabilities added by a token inside the guard are exported by name.
     stack.set_token_resolver(Some(Rc::new(Granting)));
-    stack.exec_checked("<% 'tok' CAPADD %> GUARD").unwrap();
+    stack
+        .exec_checked("<% 'tok' CAPADD %> GUARD")
+        .expect("exec_checked should succeed");
     assert_eq!(stack.capability("x"), None);
     stack
         .exec_checked("<% 'tok' CAPADD 'x' CAPEXPORT %> GUARD")
-        .unwrap();
+        .expect("the value should succeed");
     assert_eq!(stack.capability("x"), Some("42"));
     // A NULL export propagates the exported names to the enclosing GUARD.
     let mut stack = test_stack();
     stack.set_token_resolver(Some(Rc::new(Granting)));
     stack
         .exec_checked("<% <% 'tok' CAPADD 'x' CAPEXPORT NULL CAPEXPORT %> GUARD %> GUARD")
-        .unwrap();
+        .expect("the value should succeed");
     assert_eq!(stack.capability("x"), Some("42"));
     let mut stack = test_stack();
     stack.set_token_resolver(Some(Rc::new(Granting)));
     stack
         .exec_checked("<% <% 'tok' CAPADD 'x' CAPEXPORT %> GUARD %> GUARD")
-        .unwrap();
+        .expect("the value should succeed");
     assert_eq!(stack.capability("x"), None);
     // Nothing is exported when the macro fails.
     let mut stack = test_stack();
     stack.set_token_resolver(Some(Rc::new(Granting)));
     stack
         .exec("<% 'tok' CAPADD 'x' CAPEXPORT FAIL %> GUARD")
-        .unwrap_err();
+        .expect_err("the value should fail");
     assert_eq!(stack.capability("x"), None);
     assert!(stack.exported_capabilities_mut().is_none());
 }
@@ -605,9 +612,11 @@ fn timings_and_elapsed() {
         ATTRIBUTE_ELAPSED,
         Some(Value::list(vec![Value::Long(5), Value::Long(9)])),
     );
-    stack.exec_checked("ELAPSED").unwrap();
+    stack
+        .exec_checked("ELAPSED")
+        .expect("exec_checked should succeed");
     assert_eq!(
-        stack.pop().unwrap(),
+        stack.pop().expect("pop should succeed"),
         Value::list(vec![Value::Long(5), Value::Long(9)])
     );
 }
@@ -619,7 +628,7 @@ fn chronometers() {
         "'a' CHRONOSTART 'a' CHRONOSTART 'a' CHRONOEND 'a' CHRONOEND 'b' CHRONOSTART 'b' CHRONOEND CHRONOSTATS",
     );
     let mut stack = stack;
-    let Value::Map(stats) = stack.pop().unwrap() else {
+    let Value::Map(stats) = stack.pop().expect("pop should succeed") else {
         panic!("not a map");
     };
     let stats = stats.borrow();
@@ -628,7 +637,13 @@ fn chronometers() {
     };
     let a = a.borrow();
     assert_eq!(a.get(&Value::from("total_calls")), Some(&Value::Long(2)));
-    assert!(a.get(&Value::from("total_time")).unwrap().as_i64().unwrap() >= 0);
+    assert!(
+        a.get(&Value::from("total_time"))
+            .expect("get should succeed")
+            .as_i64()
+            .expect("as_i64 should succeed")
+            >= 0
+    );
     let Some(Value::Map(b)) = stats.get(&Value::from("b")) else {
         panic!("no stats for b");
     };
@@ -662,16 +677,16 @@ fn chronometers() {
     );
     stack
         .exec_checked("CHRONOSTATS 'x' GET 'total_time' GET")
-        .unwrap();
-    assert_eq!(stack.pop().unwrap(), Value::Long(0));
+        .expect("the value should succeed");
+    assert_eq!(stack.pop().expect("pop should succeed"), Value::Long(0));
     stack
         .exec_checked("'x' CHRONOSTART 'x' CHRONOEND CHRONOSTATS 'x' GET 'total_calls' GET")
-        .unwrap();
-    assert_eq!(stack.pop().unwrap(), Value::Long(0));
+        .expect("the value should succeed");
+    assert_eq!(stack.pop().expect("pop should succeed"), Value::Long(0));
     stack
         .exec_checked("'y' CHRONOSTART 'y' CHRONOEND CHRONOSTATS 'y' GET 'total_time' GET")
-        .unwrap();
-    assert_eq!(stack.pop().unwrap(), Value::Long(0));
+        .expect("the value should succeed");
+    assert_eq!(stack.pop().expect("pop should succeed"), Value::Long(0));
 }
 
 #[test]
@@ -711,7 +726,7 @@ fn interactive() -> (Stack, Rc<RefCell<Vec<u8>>>) {
 }
 
 fn output(buffer: &Rc<RefCell<Vec<u8>>>) -> String {
-    String::from_utf8(buffer.borrow().clone()).unwrap()
+    String::from_utf8(buffer.borrow().clone()).expect("from_utf8 should succeed")
 }
 
 #[test]
@@ -728,39 +743,67 @@ fn printers_write_to_the_interactive_writer() {
     assert_fails("PEEKN", "Empty stack.");
 
     let (mut stack, buffer) = interactive();
-    stack.exec_checked("1 'a' PEEK").unwrap();
+    stack
+        .exec_checked("1 'a' PEEK")
+        .expect("exec_checked should succeed");
     assert_eq!(output(&buffer), "/* 1 */ 'a' \n");
     buffer.borrow_mut().clear();
-    stack.exec_checked("PSTACK").unwrap();
+    stack
+        .exec_checked("PSTACK")
+        .expect("exec_checked should succeed");
     assert_eq!(output(&buffer), "/* 2 */ 1 \n/* 1 */ 'a' \n");
     buffer.borrow_mut().clear();
-    stack.exec_checked("1 PEEKN").unwrap();
+    stack
+        .exec_checked("1 PEEKN")
+        .expect("exec_checked should succeed");
     assert_eq!(output(&buffer), "/* 2 */ 1 \n");
     assert_eq!(stack.depth(), 2);
     buffer.borrow_mut().clear();
-    stack.exec_checked("5 NPEEK").unwrap();
+    stack
+        .exec_checked("5 NPEEK")
+        .expect("exec_checked should succeed");
     assert_eq!(output(&buffer), "/* 2 */ 1 \n/* 1 */ 'a' \n");
     buffer.borrow_mut().clear();
-    stack.exec_checked("0 NPEEK -1 NPEEK").unwrap();
+    stack
+        .exec_checked("0 NPEEK -1 NPEEK")
+        .expect("exec_checked should succeed");
     assert_eq!(output(&buffer), "");
-    let err = stack.exec("7 PEEKN").unwrap_err().to_string();
+    let err = stack
+        .exec("7 PEEKN")
+        .expect_err("exec should fail")
+        .to_string();
     assert!(err.contains("Invalid level."), "{err}");
-    let err = stack.exec("-1 PEEKN").unwrap_err().to_string();
+    let err = stack
+        .exec("-1 PEEKN")
+        .expect_err("exec should fail")
+        .to_string();
     assert!(err.contains("Invalid level."), "{err}");
     assert_eq!(stack.depth(), 2);
     // JSON output.
     buffer.borrow_mut().clear();
-    stack.exec_checked("JSONSTACK [ 1 'b' ] PEEK").unwrap();
+    stack
+        .exec_checked("JSONSTACK [ 1 'b' ] PEEK")
+        .expect("exec_checked should succeed");
     assert_eq!(output(&buffer), "/* 1 */ [1,\"b\"]\n");
     // Structures that cannot be rendered are errors.
-    stack.exec_checked("WSSTACK [ ] DUP DUP +! ").unwrap();
-    let err = stack.exec("PEEK").unwrap_err().to_string();
+    stack
+        .exec_checked("WSSTACK [ ] DUP DUP +! ")
+        .expect("exec_checked should succeed");
+    let err = stack
+        .exec("PEEK")
+        .expect_err("exec should fail")
+        .to_string();
     assert!(
         err.contains("Recursive data structures exceeded 16 levels."),
         "{err}"
     );
-    stack.exec_checked("JSONSTACK").unwrap();
-    let err = stack.exec("PEEK").unwrap_err().to_string();
+    stack
+        .exec_checked("JSONSTACK")
+        .expect("exec_checked should succeed");
+    let err = stack
+        .exec("PEEK")
+        .expect_err("exec should fail")
+        .to_string();
     assert!(err.contains("StackOverflowError"), "{err}");
 }
 
@@ -778,7 +821,10 @@ fn printer_write_errors_are_reported() {
     let mut stack = test_stack();
     stack.set_interactive_writer(Some(Rc::new(RefCell::new(Broken))));
     assert!(stack.interactive_writer().is_some());
-    let err = stack.exec("1 PEEK").unwrap_err().to_string();
+    let err = stack
+        .exec("1 PEEK")
+        .expect_err("exec should fail")
+        .to_string();
     assert!(err.contains("(closed)"), "{err}");
 }
 
@@ -789,11 +835,11 @@ fn printer_write_errors_are_reported() {
 #[test]
 fn time_functions() {
     let before = current_time();
-    let now = top("NOW").as_i64().unwrap();
+    let now = top("NOW").as_i64().expect("as_i64 should succeed");
     assert!(now >= before && now <= current_time());
-    let ago = top("1000000 AGO").as_i64().unwrap();
+    let ago = top("1000000 AGO").as_i64().expect("as_i64 should succeed");
     assert!(ago <= current_time() - 1_000_000);
-    assert!(top("1.5 AGO").as_i64().unwrap() <= current_time());
+    assert!(top("1.5 AGO").as_i64().expect("as_i64 should succeed") <= current_time());
     assert_fails(
         "'x' AGO",
         "AGO expects an offset in time units on top of the stack.",
@@ -831,12 +877,13 @@ fn revisions() {
     // A platform without a proper revision cannot be compared.
     assert_eq!(
         super::runtime::check_rev("MINREV", "UNAVAILABLE", "3")
-            .unwrap_err()
+            .expect_err("the value should fail")
             .message(),
         "MINREV expects the revision to be set on the platform to a string of the form 'X.Y.Z'. X, Y and Z are integers."
     );
     assert_eq!(
-        super::runtime::check_rev("MINREV", "3.5.0-1-gb576436", "3.5").unwrap(),
+        super::runtime::check_rev("MINREV", "3.5.0-1-gb576436", "3.5")
+            .expect("check_rev should succeed"),
         0
     );
     assert_fails(
@@ -893,8 +940,10 @@ fn extensions_and_report() {
     stack
         .capabilities_mut()
         .insert("report".to_owned(), String::new());
-    stack.exec_checked("REPORT").unwrap();
-    let report = stack.pop().unwrap().to_string();
+    stack
+        .exec_checked("REPORT")
+        .expect("exec_checked should succeed");
+    let report = stack.pop().expect("pop should succeed").to_string();
     assert!(
         report.starts_with(&format!("\n[revision]\n{REVISION}\n")),
         "{report}"
@@ -1015,7 +1064,12 @@ fn snapshot_all_includes_symbols_and_registers() {
     // The snapshot recreates the symbols and registers.
     let stack = exec("1 'a' STORE 3 POPR1 SNAPSHOTALL 'a' FORGET CLEARREGS EVAL");
     assert_eq!(stack.load("a"), Some(&Value::Long(1)));
-    assert_eq!(stack.load_register(1).unwrap(), &Value::Long(3));
+    assert_eq!(
+        stack
+            .load_register(1)
+            .expect("load_register should succeed"),
+        &Value::Long(3)
+    );
 }
 
 #[test]
@@ -1026,17 +1080,24 @@ fn snapshot_errors_on_deep_structures() {
     }
     let mut stack = test_stack();
     stack.push(nested.clone());
-    let err = stack.exec("SNAPSHOT").unwrap_err().to_string();
+    let err = stack
+        .exec("SNAPSHOT")
+        .expect_err("exec should fail")
+        .to_string();
     assert!(
         err.contains("Recursive data structures exceeded 16 levels."),
         "{err}"
     );
     // Also through the symbols and registers.
     let mut stack = test_stack();
-    stack.store("deep", nested.clone()).unwrap();
+    stack
+        .store("deep", nested.clone())
+        .expect("store should succeed");
     assert!(stack.exec("SNAPSHOTALL").is_err());
     let mut stack = test_stack();
-    stack.store_register(0, nested).unwrap();
+    stack
+        .store_register(0, nested)
+        .expect("store_register should succeed");
     assert!(stack.exec("SNAPSHOTALL").is_err());
 }
 
@@ -1064,8 +1125,10 @@ fn tdescribe() {
     }
     let mut stack = test_stack();
     stack.push(nested);
-    stack.exec_checked("TDESCRIBE").unwrap();
-    let description = stack.pop().unwrap().to_string();
+    stack
+        .exec_checked("TDESCRIBE")
+        .expect("exec_checked should succeed");
+    let description = stack.pop().expect("pop should succeed").to_string();
     assert!(
         description.ends_with("... (recursion limit reached) ] ] ] ] ] ] ] ] ] ] ] ] ] ] ] ] ]"),
         "{description}"
@@ -1149,7 +1212,7 @@ fn vars_lists_the_symbols_of_a_macro() {
         panic!("not a macro")
     };
     assert_eq!(
-        super::runtime::macro_vars(&m, false).unwrap(),
+        super::runtime::macro_vars(&m, false).expect("macro_vars should succeed"),
         vec![Value::from("a")]
     );
     assert_fails("1 VARS", "VARS operates on a macro.");
@@ -1169,7 +1232,7 @@ fn stdout_stderr_and_sleep() {
         .insert("debug".to_owned(), String::new());
     stack
         .exec_checked("'to stdout' STDOUT 'to stderr' STDERR")
-        .unwrap();
+        .expect("the value should succeed");
     assert_eq!(stack.depth(), 0);
     assert_fails("STDOUT", "Empty stack.");
     assert_fails("STDERR", "Empty stack.");
@@ -1179,25 +1242,39 @@ fn stdout_stderr_and_sleep() {
     stack
         .capabilities_mut()
         .insert("sleep.maxtime".to_owned(), "10".to_owned());
-    stack.exec_checked("1000 SLEEP 0 SLEEP").unwrap();
-    let err = stack.exec("11000 SLEEP").unwrap_err().to_string();
+    stack
+        .exec_checked("1000 SLEEP 0 SLEEP")
+        .expect("exec_checked should succeed");
+    let err = stack
+        .exec("11000 SLEEP")
+        .expect_err("exec should fail")
+        .to_string();
     assert!(
         err.contains(
             "SLEEP cannot sleep during more than 10 ms, as defined in sleep.maxtime capability."
         ),
         "{err}"
     );
-    let err = stack.exec("'x' SLEEP").unwrap_err().to_string();
+    let err = stack
+        .exec("'x' SLEEP")
+        .expect_err("exec should fail")
+        .to_string();
     assert!(
         err.contains("SLEEP expects a LONG period as parameter."),
         "{err}"
     );
-    let err = stack.exec("SLEEP").unwrap_err().to_string();
+    let err = stack
+        .exec("SLEEP")
+        .expect_err("exec should fail")
+        .to_string();
     assert!(err.contains("Empty stack."), "{err}");
     stack
         .capabilities_mut()
         .insert("sleep.maxtime".to_owned(), "0".to_owned());
-    let err = stack.exec("1 SLEEP").unwrap_err().to_string();
+    let err = stack
+        .exec("1 SLEEP")
+        .expect_err("exec should fail")
+        .to_string();
     assert!(
         err.contains("SLEEP requires capability sleep.maxtime to be set to a value strictly greater than 0 ms."),
         "{err}"
@@ -1205,7 +1282,10 @@ fn stdout_stderr_and_sleep() {
     stack
         .capabilities_mut()
         .insert("sleep.maxtime".to_owned(), "lots".to_owned());
-    let err = stack.exec("1 SLEEP").unwrap_err().to_string();
+    let err = stack
+        .exec("1 SLEEP")
+        .expect_err("exec should fail")
+        .to_string();
     assert!(
         err.contains("SLEEP cannot parse capability sleep.maxtime: 'lots' is not a valid LONG"),
         "{err}"

@@ -1,7 +1,5 @@
 // Copyright 2026 The influxftl Authors. Licensed under the Apache License, Version 2.0.
 
-#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
-
 use std::rc::Rc;
 use std::time::{Duration, Instant};
 
@@ -142,7 +140,7 @@ fn redefinitions() {
     let mut stack = exec("<% 42 %> 'DUP' DEF");
     stack.set_allow_redefined(false);
     assert!(!stack.allow_redefined());
-    let err = stack.exec("1 DUP").unwrap_err();
+    let err = stack.exec("1 DUP").expect_err("exec should fail");
     assert!(
         err.to_string()
             .contains("Disallowed redefined function 'DUP'."),
@@ -171,12 +169,14 @@ fn error_messages_locate_the_statement() {
     );
     // Macros loaded by name from a repository carry their name.
     let mut stack = exec("<% DROP %>");
-    let Value::Macro(m) = stack.pop().unwrap() else {
+    let Value::Macro(m) = stack.pop().expect("pop should succeed") else {
         panic!("not a macro");
     };
     m.set_name_recursive("lib/m");
-    stack.store("m", Value::Macro(m)).unwrap();
-    let err = stack.exec("@m").unwrap_err();
+    stack
+        .store("m", Value::Macro(m))
+        .expect("store should succeed");
+    let err = stack.exec("@m").expect_err("exec should fail");
     assert_eq!(
         err.to_string(),
         "Line #1 (Exception at '=>@m<=' in section [TOP] (Exception at 'DROP' in section '[TOP]' called from macro 'lib/m' (Empty stack.)))"
@@ -200,7 +200,7 @@ fn stack_limits() {
     let mut stack = Stack::new();
     stack.limits.max_depth = 2;
     assert!(stack.exec("1 2").is_ok());
-    let err = stack.exec("3").unwrap_err();
+    let err = stack.exec("3").expect_err("exec should fail");
     assert!(
         err.to_string().contains(
             "Stack depth would exceed set limit of 2. Consider raising the limit or using capabilities."
@@ -209,7 +209,7 @@ fn stack_limits() {
     );
     let mut stack = Stack::new();
     stack.limits.max_ops = 3;
-    let err = stack.exec("1 2 3 4").unwrap_err();
+    let err = stack.exec("1 2 3 4").expect_err("exec should fail");
     assert!(
         err.to_string().contains(
             "Operation count (4) exceeded maximum of 3. Consider raising the limit or using capabilities."
@@ -223,14 +223,16 @@ fn stack_limits() {
     let mut stack = Stack::new();
     stack.limits.max_symbols = 1;
     assert!(stack.exec("1 'a' STORE 2 'a' STORE").is_ok());
-    let err = stack.exec("3 'b' STORE").unwrap_err();
+    let err = stack.exec("3 'b' STORE").expect_err("exec should fail");
     assert!(
         err.to_string()
             .contains("Symbol table has reached its maximum number of entries: 1"),
         "{err}"
     );
     let mut stack = Stack::new();
-    let err = stack.exec("<% 'm' RUN %> 'm' STORE 'm' RUN").unwrap_err();
+    let err = stack
+        .exec("<% 'm' RUN %> 'm' STORE 'm' RUN")
+        .expect_err("exec should fail");
     assert!(
         err.root_cause()
             .message()
@@ -244,7 +246,7 @@ fn stack_limits() {
 fn depth_limit_is_checked_after_every_statement() {
     let mut stack = Stack::new();
     stack.limits.max_depth = 1;
-    let err = stack.exec("1 DUP").unwrap_err();
+    let err = stack.exec("1 DUP").expect_err("exec should fail");
     assert!(
         err.to_string()
             .contains("Stack depth would exceed set limit of 1."),
@@ -267,7 +269,9 @@ fn depth_limit_is_checked_after_every_statement() {
 #[test]
 fn recursion_limit_applies_to_eval() {
     let mut stack = Stack::new();
-    let err = stack.exec("'$s EVAL' 's' STORE $s EVAL").unwrap_err();
+    let err = stack
+        .exec("'$s EVAL' 's' STORE $s EVAL")
+        .expect_err("exec should fail");
     assert!(
         err.root_cause()
             .message()
@@ -280,13 +284,13 @@ fn recursion_limit_applies_to_eval() {
 #[test]
 fn ops_limit_inside_macros() {
     let mut stack = Stack::with_limits(Limits::unlimited());
-    stack.exec("<% 1 2 3 %>").unwrap();
-    let Value::Macro(m) = stack.pop().unwrap() else {
+    stack.exec("<% 1 2 3 %>").expect("exec should succeed");
+    let Value::Macro(m) = stack.pop().expect("pop should succeed") else {
         panic!("not a macro");
     };
     stack.limits.max_ops = 2;
     stack.set_ops(0);
-    let err = stack.exec_macro(&m).unwrap_err();
+    let err = stack.exec_macro(&m).expect_err("exec_macro should fail");
     assert_eq!(
         err.to_string(),
         "Exception in section '[TOP]' (Operation count (4) exceeded maximum of 2. Consider raising the limit or using capabilities.)"
@@ -297,28 +301,40 @@ fn ops_limit_inside_macros() {
 fn element_access() {
     let mut stack = Stack::new();
     assert_eq!(stack.depth(), 0);
-    assert_eq!(stack.pop().unwrap_err().to_string(), "Empty stack.");
-    assert_eq!(stack.peek().unwrap_err().to_string(), "Empty stack.");
-    assert_eq!(stack.get(0).unwrap_err().to_string(), "Invalid level.");
     assert_eq!(
-        stack.popn(1).unwrap_err().to_string(),
+        stack.pop().expect_err("pop should fail").to_string(),
+        "Empty stack."
+    );
+    assert_eq!(
+        stack.peek().expect_err("peek should fail").to_string(),
+        "Empty stack."
+    );
+    assert_eq!(
+        stack.get(0).expect_err("get should fail").to_string(),
+        "Invalid level."
+    );
+    assert_eq!(
+        stack.popn(1).expect_err("popn should fail").to_string(),
         "Index out of bound."
     );
     assert_eq!(
-        stack.dropn(1).unwrap_err().to_string(),
+        stack.dropn(1).expect_err("dropn should fail").to_string(),
         "Index out of bound."
     );
     stack.push(1i64);
     stack.push(2i64);
     stack.push(3i64);
-    assert_eq!(stack.peek().unwrap(), &long(3));
-    assert_eq!(stack.get(2).unwrap(), &long(1));
+    assert_eq!(stack.peek().expect("peek should succeed"), &long(3));
+    assert_eq!(stack.get(2).expect("get should succeed"), &long(1));
     assert_eq!(stack.elements(), &[long(1), long(2), long(3)]);
     stack.elements_mut()[0] = long(10);
-    assert_eq!(stack.popn(2).unwrap(), vec![long(2), long(3)]);
+    assert_eq!(
+        stack.popn(2).expect("popn should succeed"),
+        vec![long(2), long(3)]
+    );
     assert_eq!(stack.depth(), 1);
     stack.push(0i64);
-    stack.dropn(1).unwrap();
+    stack.dropn(1).expect("dropn should succeed");
     assert_eq!(stack.elements(), &[long(10)]);
     stack.reset(5);
     assert_eq!(stack.depth(), 1);
@@ -379,7 +395,7 @@ fn hide_and_show() {
 fn symbols_registers_and_context() {
     let mut stack = Stack::new();
     assert!(!stack.has_symbol("a"));
-    stack.store("a", long(1)).unwrap();
+    stack.store("a", long(1)).expect("store should succeed");
     assert!(stack.has_symbol("a"));
     assert_eq!(stack.load("a"), Some(&long(1)));
     assert_eq!(stack.symbols().len(), 1);
@@ -389,16 +405,26 @@ fn symbols_registers_and_context() {
     stack.forget_all();
     assert_eq!(stack.symbols().len(), 0);
     assert_eq!(stack.registers().len(), 256);
-    stack.store_register(3, long(3)).unwrap();
-    assert_eq!(stack.load_register(3).unwrap(), &long(3));
+    stack
+        .store_register(3, long(3))
+        .expect("store_register should succeed");
     assert_eq!(
-        stack.load_register(256).unwrap_err().to_string(),
+        stack
+            .load_register(3)
+            .expect("load_register should succeed"),
+        &long(3)
+    );
+    assert_eq!(
+        stack
+            .load_register(256)
+            .expect_err("load_register should fail")
+            .to_string(),
         "Invalid register number, must be between 0 and 255"
     );
     assert_eq!(
         stack
             .store_register(-1, Value::Null)
-            .unwrap_err()
+            .expect_err("the value should fail")
             .to_string(),
         "Invalid register number, must be between 0 and 255"
     );
@@ -410,7 +436,12 @@ fn symbols_registers_and_context() {
     stack.define("Y", None);
     assert_eq!(stack.defined().len(), 2);
     stack.restore(&context);
-    assert_eq!(stack.load_register(3).unwrap(), &long(3));
+    assert_eq!(
+        stack
+            .load_register(3)
+            .expect("load_register should succeed"),
+        &long(3)
+    );
     assert_eq!(stack.defined().len(), 1);
 }
 
@@ -453,13 +484,16 @@ fn attributes_and_state() {
 #[test]
 fn line_numbers_are_tracked_while_executing() {
     let mut stack = Stack::new();
-    stack.exec("1\n2").unwrap();
+    stack.exec("1\n2").expect("exec should succeed");
     assert_eq!(stack.line_number(), None);
     assert_eq!(stack.macro_depth(), 0);
-    stack.exec("<%").unwrap();
+    stack.exec("<%").expect("exec should succeed");
     assert_eq!(stack.macro_depth(), 1);
     assert_eq!(
-        stack.check_balanced().unwrap_err().to_string(),
+        stack
+            .check_balanced()
+            .expect_err("check_balanced should fail")
+            .to_string(),
         "Unbalanced <% construct."
     );
 }
@@ -480,10 +514,17 @@ fn stop_and_return_at_top_level() {
     );
     let mut stack = Stack::new();
     assert_eq!(
-        stack.exec_multi("1 STOP").unwrap_err(),
+        stack
+            .exec_multi("1 STOP")
+            .expect_err("exec_multi should fail"),
         Error::Stop("STOP".to_owned())
     );
-    assert_eq!(stack.exec_multi("RETURN").unwrap_err(), Error::Return);
+    assert_eq!(
+        stack
+            .exec_multi("RETURN")
+            .expect_err("exec_multi should fail"),
+        Error::Return
+    );
     assert_fails(
         "BREAK",
         "Line #1 (Exception at BREAK: must be used in a one of",
@@ -498,12 +539,12 @@ fn stop_and_return_at_top_level() {
 #[test]
 fn secure_macros_do_not_wrap_errors() {
     let mut stack = Stack::new();
-    stack.exec("<% DROP %>").unwrap();
-    let Value::Macro(m) = stack.pop().unwrap() else {
+    stack.exec("<% DROP %>").expect("exec should succeed");
+    let Value::Macro(m) = stack.pop().expect("pop should succeed") else {
         panic!("not a macro");
     };
     m.set_secure_recursive(true);
-    let err = stack.exec_macro(&m).unwrap_err();
+    let err = stack.exec_macro(&m).expect_err("exec_macro should fail");
     assert_eq!(err.to_string(), "Empty stack.");
     assert!(!stack.in_secure_macro());
 }
@@ -511,52 +552,70 @@ fn secure_macros_do_not_wrap_errors() {
 #[test]
 fn forced_macros() {
     let mut stack = Stack::new();
-    stack.macro_close().unwrap();
-    stack.macro_open().unwrap();
+    stack.macro_close().expect("macro_close should succeed");
+    stack.macro_open().expect("macro_open should succeed");
     assert_eq!(
-        stack.macro_open().unwrap_err().to_string(),
+        stack
+            .macro_open()
+            .expect_err("macro_open should fail")
+            .to_string(),
         "Already in a forced Macro."
     );
-    stack.exec("1 2 <% 3 %>").unwrap();
+    stack.exec("1 2 <% 3 %>").expect("exec should succeed");
     assert_eq!(stack.depth(), 0);
-    let err = stack.exec("%>").unwrap_err();
+    let err = stack.exec("%>").expect_err("exec should fail");
     assert!(
         err.to_string().contains("Not inside a macro definition."),
         "{err}"
     );
-    stack.exec("<%").unwrap();
+    stack.exec("<%").expect("exec should succeed");
     assert_eq!(
-        stack.macro_close().unwrap_err().to_string(),
+        stack
+            .macro_close()
+            .expect_err("macro_close should fail")
+            .to_string(),
         "Invalid level for closing forced Macro, check that all macros are correctly closed."
     );
-    stack.exec("%>").unwrap();
-    stack.exec("<'").unwrap();
+    stack.exec("%>").expect("exec should succeed");
+    stack.exec("<'").expect("exec should succeed");
     assert_eq!(
-        stack.macro_close().unwrap_err().to_string(),
+        stack
+            .macro_close()
+            .expect_err("macro_close should fail")
+            .to_string(),
         "Unbalanced <' construct."
     );
-    stack.exec("'>").unwrap();
-    stack.exec("/*").unwrap();
+    stack.exec("'>").expect("exec should succeed");
+    stack.exec("/*").expect("exec should succeed");
     assert_eq!(
-        stack.macro_close().unwrap_err().to_string(),
+        stack
+            .macro_close()
+            .expect_err("macro_close should fail")
+            .to_string(),
         "Unbalanced /* construct."
     );
-    stack.exec("*/").unwrap();
-    stack.exec("<S").unwrap();
+    stack.exec("*/").expect("exec should succeed");
+    stack.exec("<S").expect("exec should succeed");
     assert_eq!(
-        stack.macro_close().unwrap_err().to_string(),
+        stack
+            .macro_close()
+            .expect_err("macro_close should fail")
+            .to_string(),
         "Unbalanced <S construct."
     );
     assert_eq!(
-        stack.check_balanced().unwrap_err().to_string(),
+        stack
+            .check_balanced()
+            .expect_err("check_balanced should fail")
+            .to_string(),
         "Unbalanced <S construct."
     );
     let mut stack = Stack::new();
-    stack.macro_open().unwrap();
-    stack.exec("1 2 <% 3 %>").unwrap();
-    stack.macro_close().unwrap();
+    stack.macro_open().expect("macro_open should succeed");
+    stack.exec("1 2 <% 3 %>").expect("exec should succeed");
+    stack.macro_close().expect("macro_close should succeed");
     assert_eq!(stack.depth(), 1);
-    let Value::Macro(m) = stack.pop().unwrap() else {
+    let Value::Macro(m) = stack.pop().expect("pop should succeed") else {
         panic!("not a macro");
     };
     assert_eq!(m.len(), 3);
@@ -566,19 +625,25 @@ fn forced_macros() {
 #[test]
 fn check_balanced_reports_every_construct() {
     let mut stack = Stack::new();
-    stack.exec("<'").unwrap();
+    stack.exec("<'").expect("exec should succeed");
     assert_eq!(
-        stack.check_balanced().unwrap_err().to_string(),
+        stack
+            .check_balanced()
+            .expect_err("check_balanced should fail")
+            .to_string(),
         "Unbalanced <' construct."
     );
     let mut stack = Stack::new();
-    stack.exec("/*").unwrap();
+    stack.exec("/*").expect("exec should succeed");
     assert_eq!(
-        stack.check_balanced().unwrap_err().to_string(),
+        stack
+            .check_balanced()
+            .expect_err("check_balanced should fail")
+            .to_string(),
         "Unbalanced /* construct."
     );
-    stack.exec("").unwrap();
-    stack.exec("*/ 1").unwrap();
+    stack.exec("").expect("exec should succeed");
+    stack.exec("*/ 1").expect("exec should succeed");
     assert!(stack.check_balanced().is_ok());
     assert_eq!(stack.depth(), 1);
 }
@@ -604,31 +669,44 @@ impl SecureCodec for FakeCodec {
 fn secure_stack() -> Stack {
     let mut stack = Stack::with_limits(Limits::unlimited());
     stack.set_secure_codec(Some(Rc::new(FakeCodec)));
-    stack.exec("'k' SECUREKEY").unwrap();
+    stack.exec("'k' SECUREKEY").expect("exec should succeed");
     stack
 }
 
 #[test]
 fn secure_script_syntax() {
     let mut stack = secure_stack();
-    stack.exec("<S 1 'a b'\n<'\nmulti\nline\n'>\nS>").unwrap();
+    stack
+        .exec("<S 1 'a b'\n<'\nmulti\nline\n'>\nS>")
+        .expect("exec should succeed");
     assert_eq!(
-        stack.pop().unwrap(),
+        stack.pop().expect("pop should succeed"),
         Value::from("k| 1 'a b' 'multi%0Aline'")
     );
     let mut stack = secure_stack();
-    stack.exec("<S 'it%27s%0A' S>").unwrap();
-    assert_eq!(stack.pop().unwrap(), Value::from("k| 'it%27s%0a'"));
+    stack
+        .exec("<S 'it%27s%0A' S>")
+        .expect("exec should succeed");
+    assert_eq!(
+        stack.pop().expect("pop should succeed"),
+        Value::from("k| 'it%27s%0a'")
+    );
     let mut stack = secure_stack();
-    stack.exec("<S\n2 3\nS>").unwrap();
-    assert_eq!(stack.pop().unwrap(), Value::from("k| 2 3"));
+    stack.exec("<S\n2 3\nS>").expect("exec should succeed");
+    assert_eq!(
+        stack.pop().expect("pop should succeed"),
+        Value::from("k| 2 3")
+    );
     assert_fails("S>", "Not inside a secure script definition.");
     assert_fails("<S <S", "Already inside a secure script definition.");
     assert_fails("<S 1", "Unbalanced <S construct.");
     let mut stack = secure_stack();
-    stack.exec("<S").unwrap();
+    stack.exec("<S").expect("exec should succeed");
     assert_eq!(
-        stack.check_balanced().unwrap_err().to_string(),
+        stack
+            .check_balanced()
+            .expect_err("check_balanced should fail")
+            .to_string(),
         "Unbalanced <S construct."
     );
 }
@@ -636,12 +714,14 @@ fn secure_script_syntax() {
 #[test]
 fn deadline_aborts_macros() {
     let mut stack = Stack::with_limits(Limits::unlimited());
-    stack.exec("<% <% true %> <% %> WHILE %>").unwrap();
-    let Value::Macro(m) = stack.pop().unwrap() else {
+    stack
+        .exec("<% <% true %> <% %> WHILE %>")
+        .expect("exec should succeed");
+    let Value::Macro(m) = stack.pop().expect("pop should succeed") else {
         panic!("not a macro");
     };
     stack.set_deadline(Some(Instant::now() + Duration::from_millis(5)));
-    let err = stack.exec_macro(&m).unwrap_err();
+    let err = stack.exec_macro(&m).expect_err("exec_macro should fail");
     assert_eq!(err.root_cause().message(), "Execution time limit reached.");
 }
 
@@ -649,15 +729,15 @@ fn deadline_aborts_macros() {
 fn run_and_find_macro() {
     let mut stack = exec("<% 1 %> 'm' STORE");
     assert!(stack.find_macro("m").is_ok());
-    stack.run("m").unwrap();
-    assert_eq!(stack.pop().unwrap(), long(1));
+    stack.run("m").expect("run should succeed");
+    assert_eq!(stack.pop().expect("pop should succeed"), long(1));
     assert!(fail("@m").to_string().contains("Unknown macro 'm'"));
 }
 
 #[test]
 fn exec_line_recursion_is_released() {
     let mut stack = Stack::new();
-    stack.exec_line("1").unwrap();
+    stack.exec_line("1").expect("exec_line should succeed");
     assert_eq!(stack.recursion_level(), 0);
     let _ = stack.exec_line("DROP DROP");
     assert_eq!(stack.recursion_level(), 0);

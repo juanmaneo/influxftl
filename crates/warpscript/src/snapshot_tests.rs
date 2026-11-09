@@ -1,7 +1,5 @@
 // Copyright 2026 The influxftl Authors. Licensed under the Apache License, Version 2.0.
 
-#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
-
 use std::rc::Rc;
 
 use indexmap::{IndexMap, IndexSet};
@@ -93,7 +91,9 @@ fn recursive_structures_are_cut() {
     // …while `addElement` reports the error, past 16 levels.
     let mut out = String::new();
     assert_eq!(
-        add_element(&mut out, &inner, false).unwrap_err().message(),
+        add_element(&mut out, &inner, false)
+            .expect_err("add_element should fail")
+            .message(),
         "Recursive data structures exceeded 16 levels."
     );
     let mut nested = Value::Long(1);
@@ -101,7 +101,7 @@ fn recursive_structures_are_cut() {
         nested = Value::list(vec![nested]);
     }
     let mut out = String::new();
-    add_element(&mut out, &nested, false).unwrap();
+    add_element(&mut out, &nested, false).expect("add_element should succeed");
     assert_eq!(out.matches("[] ").count(), 15);
     let mut out = String::new();
     assert!(add_element(&mut out, &Value::list(vec![nested]), false).is_err());
@@ -141,13 +141,13 @@ fn recursive_structures_are_cut() {
 fn readable_snapshots() {
     let mut out = String::new();
     let value = top("{ 'k' [ 1 'a%25b' ( true NULL ) ] 'it%27s' 2.5 }");
-    add_element(&mut out, &value, true).unwrap();
+    add_element(&mut out, &value, true).expect("add_element should succeed");
     assert_eq!(
         out,
         "{\n'k' [ 1 'a%25b' ( true NULL ) ] \n'it%27s' 2.5 \n} "
     );
     let mut out = String::new();
-    add_element(&mut out, &top("'tab\there'"), true).unwrap();
+    add_element(&mut out, &top("'tab\there'"), true).expect("add_element should succeed");
     assert_eq!(out, "'tab%09here' ");
     // Structures nested too deep fail in every container, readable or not.
     let mut deep = Value::Long(1);

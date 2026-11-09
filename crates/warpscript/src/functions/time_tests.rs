@@ -1,7 +1,5 @@
 // Copyright 2026 The influxftl Authors. Licensed under the Apache License, Version 2.0.
 
-#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
-
 //! Tests of the date and time functions against Joda-Time 2.13.1 and `java.time` values.
 
 use super::runtime::current_time;
@@ -516,7 +514,7 @@ fn duration_matches_joda() {
     assert_eq!(parse_period("P1X", &mut period), 1);
     assert_eq!(parse_period("P-0D", &mut period), 4);
     assert_eq!(
-        parse_duration("-P1DT-1H").unwrap(),
+        parse_duration("-P1DT-1H").expect("parse_duration should succeed"),
         -(86_400 - 3600) * 1_000_000
     );
 }
@@ -684,7 +682,14 @@ fn addduration() {
     let mut period = Period::default();
     assert!(parse_period("P1Y1M1W1DT1H1M1S", &mut period) > 0);
     assert_eq!(
-        add_period(0, &period, 500_000, Zone::for_id(None).unwrap(), 2).unwrap(),
+        add_period(
+            0,
+            &period,
+            500_000,
+            Zone::for_id(None).expect("for_id should succeed"),
+            2
+        )
+        .expect("add_period should succeed"),
         // 2 years, 2 months, 16 days (1972 is a leap year), 2 hours, 2 minutes, 2 seconds and
         // 1 second of offset
         ((((365 + 365 + 31 + 29 + 16) * 24 + 2) * 60 + 2) * 60 + 2) * 1_000_000 + 1_000_000,
@@ -735,7 +740,11 @@ fn totimestamp_matches_java_time() {
     ];
     for (text, expected) in cases {
         assert_top(&format!("'{text}' TOTIMESTAMP"), expected);
-        assert_eq!(parse_timestamp(text).unwrap(), expected, "{text}");
+        assert_eq!(
+            parse_timestamp(text).expect("parse_timestamp should succeed"),
+            expected,
+            "{text}"
+        );
     }
     let errors = [
         (
@@ -882,19 +891,19 @@ fn not_before_and_not_after() {
     );
     assert_fails("NOTBEFORE", "Empty stack.");
     assert_fails("NOTAFTER", "Empty stack.");
-    let now = top("NOW").as_i64().unwrap();
+    let now = top("NOW").as_i64().expect("as_i64 should succeed");
     assert!(now <= current_time());
 }
 
 #[test]
 fn zones() {
     assert_eq!(
-        Zone::for_id(None).unwrap(),
-        Zone::for_id(Some("UTC")).unwrap()
+        Zone::for_id(None).expect("for_id should succeed"),
+        Zone::for_id(Some("UTC")).expect("for_id should succeed")
     );
     assert_eq!(
-        Zone::for_id(Some("+00:00")).unwrap(),
-        Zone::for_id(Some("UTC")).unwrap()
+        Zone::for_id(Some("+00:00")).expect("for_id should succeed"),
+        Zone::for_id(Some("UTC")).expect("for_id should succeed")
     );
     assert!(Zone::for_id(Some("Europe/Paris")).is_ok());
     assert!(Zone::for_id(Some("")).is_err());

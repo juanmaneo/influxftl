@@ -1,7 +1,5 @@
 // Copyright 2026 The influxftl Authors. Licensed under the Apache License, Version 2.0.
 
-#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
-
 //! Tests of `CAPGET`, `CAPCHECK`, `CAPDEL`, `CAPADD` and `CAPEXPORT`.
 
 use std::rc::Rc;
@@ -25,8 +23,10 @@ fn granted(caps: &[(&str, &str)]) -> Stack {
 
 /// Run `script` on `stack` and return the top of the stack.
 fn run(stack: &mut Stack, script: &str) -> Value {
-    stack.exec_checked(script).unwrap();
-    stack.pop().unwrap()
+    stack
+        .exec_checked(script)
+        .expect("exec_checked should succeed");
+    stack.pop().expect("pop should succeed")
 }
 
 fn map(entries: &[(&str, Value)]) -> Value {
@@ -83,14 +83,20 @@ fn capget_and_capcheck() {
 #[test]
 fn capdel() {
     let mut stack = granted(&[("a", "1"), ("b", "2"), ("c", "3"), ("d", "4")]);
-    stack.exec_checked("'a' CAPDEL").unwrap();
+    stack
+        .exec_checked("'a' CAPDEL")
+        .expect("exec_checked should succeed");
     assert_eq!(run(&mut stack, "'a' CAPCHECK"), Value::Boolean(false));
-    stack.exec_checked("[ 'b' 7 'zz' ] CAPDEL").unwrap();
+    stack
+        .exec_checked("[ 'b' 7 'zz' ] CAPDEL")
+        .expect("exec_checked should succeed");
     assert_eq!(
         run(&mut stack, "NULL CAPGET"),
         map(&[("c", Value::from("3")), ("d", Value::from("4"))])
     );
-    stack.exec_checked("NULL CAPDEL").unwrap();
+    stack
+        .exec_checked("NULL CAPDEL")
+        .expect("exec_checked should succeed");
     assert_eq!(run(&mut stack, "NULL CAPGET"), map(&[]));
     assert_eq!(stack.depth(), 0);
     // Deleting from a stack without capabilities is a no-op.
@@ -126,15 +132,23 @@ fn capadd() {
     let mut stack = granted(&[("a", "1")]);
     stack.set_token_resolver(Some(Rc::new(OneToken)));
     assert!(stack.token_resolver().is_some());
-    stack.exec_checked("'good' CAPADD").unwrap();
+    stack
+        .exec_checked("'good' CAPADD")
+        .expect("exec_checked should succeed");
     // Existing capabilities are kept, new ones added, other attributes ignored.
     assert_eq!(
         run(&mut stack, "NULL CAPGET"),
         map(&[("a", Value::from("1")), ("x", Value::from("10"))])
     );
-    let err = stack.exec_checked("'bad' CAPADD").unwrap_err().to_string();
+    let err = stack
+        .exec_checked("'bad' CAPADD")
+        .expect_err("exec_checked should fail")
+        .to_string();
     assert!(err.contains("(invalid token.)"), "{err}");
-    let err = stack.exec_checked("1 CAPADD").unwrap_err().to_string();
+    let err = stack
+        .exec_checked("1 CAPADD")
+        .expect_err("exec_checked should fail")
+        .to_string();
     assert!(err.contains("CAPADD expects a TOKEN."), "{err}");
     // Without a resolver every token is invalid.
     assert_fails("'good' CAPADD", "invalid token.");
@@ -152,20 +166,38 @@ fn capexport() {
     assert!(stack.set_exported_capabilities(Some(Vec::new())).is_none());
     stack
         .exec_checked("'a' CAPEXPORT NULL CAPEXPORT [ 'b' 'a' NULL ] CAPEXPORT")
-        .unwrap();
+        .expect("the value should succeed");
     assert_eq!(
-        stack.exported_capabilities_mut().unwrap().clone(),
+        stack
+            .exported_capabilities_mut()
+            .expect("exported_capabilities_mut should succeed")
+            .clone(),
         vec![Some("a".to_owned()), None, Some("b".to_owned())]
     );
     for bad in ["1 CAPEXPORT", "[ 'c' 1 ] CAPEXPORT"] {
-        let err = stack.exec_checked(bad).unwrap_err().to_string();
+        let err = stack
+            .exec_checked(bad)
+            .expect_err("exec_checked should fail")
+            .to_string();
         assert!(
             err.contains("CAPEXPORT expects NULL, a capability name (STRING) or a LIST thereof."),
             "{err}"
         );
     }
     // The elements before the invalid one were exported.
-    assert_eq!(stack.exported_capabilities_mut().unwrap().len(), 4);
-    assert_eq!(stack.set_exported_capabilities(None).unwrap().len(), 4);
+    assert_eq!(
+        stack
+            .exported_capabilities_mut()
+            .expect("exported_capabilities_mut should succeed")
+            .len(),
+        4
+    );
+    assert_eq!(
+        stack
+            .set_exported_capabilities(None)
+            .expect("set_exported_capabilities should succeed")
+            .len(),
+        4
+    );
     assert!(stack.exported_capabilities_mut().is_none());
 }

@@ -83,3 +83,50 @@ value enters or leaves the evaluator.
   tests, the 100 % coverage gate and the Kani proofs. Each commit leaves it green.
 - Clippy denies `unwrap_used`, `expect_used`, `panic` and the other lints of `[workspace.lints]`
   in non-test code. Test modules opt out explicitly with `#![allow(..)]` at the top of the file.
+
+## 6. How the errors are organised
+
+`warpscript::Error` is one `thiserror` enum. Each failing domain has its own enum, wrapped by a
+`#[from]` variant, so that `?` converts and Rust code matches on the variant:
+
+| Enum (module)                        | Failures                                                           |
+|--------------------------------------|--------------------------------------------------------------------|
+| `StackError` (`error/stack.rs`)      | limits, malformed scripts, unknown functions/symbols/macros         |
+| `Usage` variant (`Error::usage`)     | a function given arguments it refuses: function name + requirement |
+| `ArithmeticError`, `NumberFormatError`, `BoundsError`, `IllegalArgumentError`, `ResourceError` (`error/fault.rs`) | the JDK faults WarpLib functions inherit |
+| `MathError` (`error/math.rs`)        | Commons Math (interpolation, fitting, distributions, matrices)     |
+| `TimeError`, `TextError`, `FormatError`, `SeriesError`, `AggregatorError`, `CollectionError`, `PlatformError`, `CryptoError`, `GeoError` | one per function family |
+| `ThriftError`, `EncoderError`, `PickleError` | the binary formats, next to their code                      |
+
+- **Display is Warp 10's wording**, because a script reads it (`TRY`, `ERROR`, the exec
+  endpoint). Rust code never matches on message text.
+- **Java class names live in `error/compat.rs` only** (the `type` field of `ERROR`, and the class
+  names a message quotes through `compat::value_class` / `compat::py_class`). The sole exceptions
+  are messages that quote a Java or Pyrolite *message* verbatim (`PickleError`), which are data.
+- `Error::Usage` is the one place where a family of failures is a single variant: Warp 10 has
+  about 1 300 `"<FUNCTION> expects …"` messages. The requirement is the Warp 10 sentence;
+  callers tell the failures apart by function, never by text.
+- The coverage gate skips a file that defines no function (the enum files whose `Display` is
+  derived hold nothing the instrumentation can count).
+
+## 7. Known gaps (to burn down)
+
+The rules above hold for every `Result` of the crate, with these remaining exceptions, listed so
+that they are not forgotten (`grep -rnF` the pattern to list them):
+
+- **`Option` defaults on an index that was just proven valid**: `get(i).unwrap_or_default()`,
+  `unwrap_or(Value::Null)` (about 280). They hide no `Err`; replacing them by direct indexing
+  needs a panic-free access helper.
+- **Probes of a conversion**: `parse::<i64>().ok()`, `u32::try_from(x).ok()`,
+  `usize::try_from(x) else { … }` (about 40). The error carries no information; `None` leads to a
+  typed error or to the alternative path.
+- **`map_err(|_| …)`** (36): the dropped error is a `TryFromIntError`/`ParseIntError`; the typed
+  replacement names the input.
+- **Infallible by construction, not yet expressed as such**: `->PICKLE` of an encoder
+  (`togts(..).unwrap_or(())`), the series of the encoders `PARSE` fills (`decode().unwrap_or_default()`),
+  the double of a JSON number the scanner validated (`parse().unwrap_or(NaN)`), the integer part of
+  `message_decimal`. Each needs an API that cannot fail, because an unreachable `?` is an
+  uncovered region.
+- **Documented Warp 10 tolerances**, matched explicitly with a comment: a series of `LONG` that
+  stores `0` for an unparsable string, `->JSON` of an encoder that stops at a corrupt datapoint,
+  `CHECKMACRO` answering `false` for a macro that cannot be loaded.

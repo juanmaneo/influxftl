@@ -1,7 +1,5 @@
 // Copyright 2026 The influxftl Authors. Licensed under the Apache License, Version 2.0.
 
-#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
-
 use indexmap::IndexSet;
 
 use crate::functions::call;
@@ -20,8 +18,8 @@ fn apply(name: &str, inputs: &[Value]) -> Value {
     for value in inputs {
         stack.push(value.clone());
     }
-    call(&mut stack, name).unwrap();
-    stack.pop().unwrap()
+    call(&mut stack, name).expect("call should succeed");
+    stack.pop().expect("pop should succeed")
 }
 
 #[test]
@@ -323,9 +321,17 @@ fn java_double_parsing() {
         ("0x1.00000000000008000000001p0", 1.000_000_000_000_000_2),
         ("0x123456789abcdef01p0", 2.098_829_547_942_064_5E19),
     ] {
-        assert_eq!(parse_java_double(text).unwrap(), expected, "{text}");
+        assert_eq!(
+            parse_java_double(text).expect("parse_java_double should succeed"),
+            expected,
+            "{text}"
+        );
     }
-    assert!(parse_java_double("0x1p-1075").unwrap().is_sign_positive());
+    assert!(
+        parse_java_double("0x1p-1075")
+            .expect("parse_java_double should succeed")
+            .is_sign_positive()
+    );
     for text in [
         "nan",
         "inf",
@@ -346,7 +352,9 @@ fn java_double_parsing() {
         "0x1p-",
     ] {
         assert_eq!(
-            parse_java_double(text).unwrap_err().to_string(),
+            parse_java_double(text)
+                .expect_err("parse_java_double should fail")
+                .to_string(),
             format!("For input string: \"{text}\""),
         );
     }

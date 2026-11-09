@@ -1,7 +1,5 @@
 // Copyright 2026 The influxftl Authors. Licensed under the Apache License, Version 2.0.
 
-#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
-
 //! Tests of `reducer.argmin` / `argmax` and `reducer.shannonentropy.*`. The expected values
 //! were checked against Warp 10 3.5.0 (`warp10io/warp10:3.5.0-alpine`).
 
@@ -127,7 +125,7 @@ fn arg_extrema_edge_cases() {
                 values: &window.values,
                 window: None,
             })
-            .unwrap()
+            .expect("the value should succeed")
             .value
     };
     // The sentinel extremum counts as an extremum.
@@ -228,7 +226,13 @@ fn shannon_entropy() {
     );
     // No value: `0 / log(0)`.
     let nothing = Window::of(&[Value::Null]).value(&entropy(false));
-    assert!(nothing.as_f64().unwrap() == 0.0 && nothing.as_f64().unwrap().is_sign_negative());
+    assert!(
+        nothing.as_f64().expect("as_f64 should succeed") == 0.0
+            && nothing
+                .as_f64()
+                .expect("as_f64 should succeed")
+                .is_sign_negative()
+    );
     assert_eq!(entropy(true).roles(), Roles::ALL);
     assert_top(
         "reducer.shannonentropy.0 SNAPSHOT",

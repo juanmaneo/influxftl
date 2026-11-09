@@ -1,7 +1,5 @@
 // Copyright 2026 The influxftl Authors. Licensed under the Apache License, Version 2.0.
 
-#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
-
 use indexmap::IndexMap;
 
 use super::collections::{labels_id, set_at, siphash24, siphash24_palindromic};
@@ -11,7 +9,7 @@ use crate::tests::{assert_fails, assert_stack, assert_top, exec, run, top};
 use crate::value::Value;
 
 fn bytes(hex: &str) -> Value {
-    Value::bytes(hex_decode(hex).unwrap())
+    Value::bytes(hex_decode(hex).expect("hex_decode should succeed"))
 }
 
 fn longs(items: &[i64]) -> Value {
@@ -64,8 +62,8 @@ fn set_conversions() {
     assert_fails("[ ] SET->", "SET-> operates on a SET.");
     // Vectors are plain lists: V-> copies the list.
     let mut stack = exec("[ 1 2 ] DUP V->");
-    let copy = stack.pop().unwrap();
-    let original = stack.pop().unwrap();
+    let copy = stack.pop().expect("pop should succeed");
+    let original = stack.pop().expect("pop should succeed");
     assert_eq!(copy, longs(&[1, 2]));
     assert!(!copy.same_object(&original));
     assert_fails("1 V->", "V-> expects a vector on top of the stack.");
@@ -378,8 +376,8 @@ fn submap_keylist_valuelist() {
     assert_eq!(show("{ 1 'x' } [ 1.0 ] SUBMAP"), "{}");
     // A new map is built.
     let mut stack = exec("{ 'a' 1 } DUP [ 'a' ] SUBMAP");
-    let sub = stack.pop().unwrap();
-    let original = stack.pop().unwrap();
+    let sub = stack.pop().expect("pop should succeed");
+    let original = stack.pop().expect("pop should succeed");
     assert_eq!(sub, original);
     assert!(!sub.same_object(&original));
     assert_fails("1 [ ] SUBMAP", "SUBMAP operates on a map.");
@@ -437,8 +435,8 @@ fn sublist_with_index_list() {
     assert_eq!(show("[ 1 0 2 ] DUP SUBLIST"), "[0, 1, 2]");
     // A new list is built.
     let mut stack = exec("[ 1 2 ] DUP [ 0 1 ] SUBLIST");
-    let sub = stack.pop().unwrap();
-    let original = stack.pop().unwrap();
+    let sub = stack.pop().expect("pop should succeed");
+    let original = stack.pop().expect("pop should succeed");
     assert_eq!(sub, original);
     assert!(!sub.same_object(&original));
 }
@@ -760,14 +758,14 @@ fn containskey_and_containsvalue() {
 fn reverse_and_clonereverse() {
     // REVERSE reverses the list in place.
     let mut stack = exec("[ 1 2 3 ] DUP REVERSE");
-    let reversed = stack.pop().unwrap();
-    let original = stack.pop().unwrap();
+    let reversed = stack.pop().expect("pop should succeed");
+    let original = stack.pop().expect("pop should succeed");
     assert!(reversed.same_object(&original));
     assert_eq!(reversed, longs(&[3, 2, 1]));
     // CLONEREVERSE leaves the original alone.
     let mut stack = exec("[ 1 2 3 ] DUP CLONEREVERSE");
-    let reversed = stack.pop().unwrap();
-    let original = stack.pop().unwrap();
+    let reversed = stack.pop().expect("pop should succeed");
+    let original = stack.pop().expect("pop should succeed");
     assert!(!reversed.same_object(&original));
     assert_eq!(reversed, longs(&[3, 2, 1]));
     assert_eq!(original, longs(&[1, 2, 3]));
@@ -805,8 +803,8 @@ fn append_collections_and_maps() {
     assert_eq!(show("{ 'a' 1 } DUP APPEND"), "{a=1}");
     // In place: the first collection is returned.
     let mut stack = exec("[ 1 ] DUP [ 2 ] APPEND");
-    let appended = stack.pop().unwrap();
-    let original = stack.pop().unwrap();
+    let appended = stack.pop().expect("pop should succeed");
+    let original = stack.pop().expect("pop should succeed");
     assert!(appended.same_object(&original));
     let message = "APPEND can only operate on 2 collections (LIST, SET, VECTOR), 2 MAPs or 2 GTSs.";
     assert_fails("[ ] 1 APPEND", message);
@@ -867,20 +865,20 @@ fn zip_lists() {
 #[test]
 fn clone_is_shallow() {
     let mut stack = exec("[ 1 [ 2 ] ] CLONE");
-    let clone = stack.pop().unwrap();
-    let original = stack.pop().unwrap();
+    let clone = stack.pop().expect("pop should succeed");
+    let original = stack.pop().expect("pop should succeed");
     assert_eq!(clone, original);
     assert!(!clone.same_object(&original));
     // Shallow like Java: the inner list is shared.
     assert_eq!(show("[ 1 [ 2 ] ] CLONE 1 GET 9 0 SET DROP"), "[1, [9]]");
     let mut stack = exec("{ 'a' 1 } CLONE");
-    let clone = stack.pop().unwrap();
-    let original = stack.pop().unwrap();
+    let clone = stack.pop().expect("pop should succeed");
+    let original = stack.pop().expect("pop should succeed");
     assert_eq!(clone, original);
     assert!(!clone.same_object(&original));
     let mut stack = exec("( 1 2 ) CLONE");
-    let clone = stack.pop().unwrap();
-    let original = stack.pop().unwrap();
+    let clone = stack.pop().expect("pop should succeed");
+    let original = stack.pop().expect("pop should succeed");
     assert_eq!(clone, original);
     assert!(!clone.same_object(&original));
     assert_fails(
@@ -1015,7 +1013,10 @@ fn lstore_api_paths() {
         max_symbols: 0,
         ..Limits::unlimited()
     });
-    let err = stack.exec("[ 1 ] [ 'a' ] LSTORE").unwrap_err().to_string();
+    let err = stack
+        .exec("[ 1 ] [ 'a' ] LSTORE")
+        .expect_err("exec should fail")
+        .to_string();
     assert!(
         err.contains("Symbol table has reached its maximum number of entries: 0"),
         "{err}"
@@ -1023,6 +1024,6 @@ fn lstore_api_paths() {
     let mut stack = Stack::new();
     stack.push(longs(&[1]));
     stack.push(Value::list(vec![Value::from("x")]));
-    crate::functions::call(&mut stack, "LSTORE").unwrap();
+    crate::functions::call(&mut stack, "LSTORE").expect("call should succeed");
     assert_eq!(stack.load("x"), Some(&Value::Long(1)));
 }

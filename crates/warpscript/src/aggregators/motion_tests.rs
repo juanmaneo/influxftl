@@ -1,7 +1,5 @@
 // Copyright 2026 The influxftl Authors. Licensed under the Apache License, Version 2.0.
 
-#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
-
 //! Tests of the change and motion aggregators. The expected values were checked against
 //! Warp 10 3.5.0 (`warp10io/warp10:3.5.0-alpine`).
 
@@ -263,7 +261,9 @@ fn windows_frameworks_cannot_produce() {
     ];
     for kind in all {
         assert_eq!(
-            Window::of(&[]).apply(&aggregator(kind)).unwrap(),
+            Window::of(&[])
+                .apply(&aggregator(kind))
+                .expect("apply should succeed"),
             Aggregated::none()
         );
         assert_eq!(aggregator(kind).roles(), Roles::ALL);
@@ -293,7 +293,9 @@ fn windows_frameworks_cannot_produce() {
     };
     assert_eq!(window.value(&aggregator(Kind::Delta)), Value::Long(9));
     assert_eq!(
-        window.apply(&aggregator(Kind::Rate)).unwrap(),
+        window
+            .apply(&aggregator(Kind::Rate))
+            .expect("apply should succeed"),
         Aggregated {
             tick: 8,
             location: NO_LOCATION,
@@ -311,19 +313,37 @@ fn windows_frameworks_cannot_produce() {
     };
     assert_eq!(window.value(&aggregator(Kind::Rate)), Value::Double(0.0));
     assert_eq!(
-        window.apply(&aggregator(Kind::Highest)).unwrap().location,
+        window
+            .apply(&aggregator(Kind::Highest))
+            .expect("apply should succeed")
+            .location,
         1
     );
-    assert_eq!(window.apply(&aggregator(Kind::Lowest)).unwrap().location, 1);
+    assert_eq!(
+        window
+            .apply(&aggregator(Kind::Lowest))
+            .expect("apply should succeed")
+            .location,
+        1
+    );
     let window = Window {
         ticks: vec![4, 6],
         ..window
     };
     assert_eq!(
-        window.apply(&aggregator(Kind::Highest)).unwrap().location,
+        window
+            .apply(&aggregator(Kind::Highest))
+            .expect("apply should succeed")
+            .location,
         2
     );
-    assert_eq!(window.apply(&aggregator(Kind::Lowest)).unwrap().location, 1);
+    assert_eq!(
+        window
+            .apply(&aggregator(Kind::Lowest))
+            .expect("apply should succeed")
+            .location,
+        1
+    );
     // `Lowest` never picks a datapoint at `Long.MAX_VALUE` of elevation `Long.MAX_VALUE`.
     let window = Window {
         ticks: vec![i64::MAX],
@@ -332,11 +352,16 @@ fn windows_frameworks_cannot_produce() {
         values: vec![Value::Long(1)],
     };
     assert_eq!(
-        window.apply(&aggregator(Kind::Lowest)).unwrap(),
+        window
+            .apply(&aggregator(Kind::Lowest))
+            .expect("apply should succeed"),
         Aggregated::none()
     );
     assert_eq!(
-        window.apply(&aggregator(Kind::Highest)).unwrap().value,
+        window
+            .apply(&aggregator(Kind::Highest))
+            .expect("apply should succeed")
+            .value,
         Value::Long(1)
     );
     // A tick at `Long.MIN_VALUE` alone has no last tick.

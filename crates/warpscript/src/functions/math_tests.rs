@@ -1,9 +1,6 @@
 // Copyright 2026 The influxftl Authors. Licensed under the Apache License, Version 2.0.
 
 #![allow(
-    clippy::unwrap_used,
-    clippy::expect_used,
-    clippy::panic,
     clippy::unreadable_literal,
     clippy::approx_constant,
     clippy::excessive_precision
@@ -56,7 +53,8 @@ fn random_numbers_are_in_the_unit_interval() {
 #[test]
 fn entropy_errors_are_reported() {
     let mut stack = Stack::new();
-    let err = push_secure_double(&mut stack, Err(getrandom::Error::UNSUPPORTED)).unwrap_err();
+    let err = push_secure_double(&mut stack, Err(getrandom::Error::UNSUPPORTED))
+        .expect_err("push_secure_double should fail");
     assert!(
         err.to_string()
             .starts_with("Unable to obtain random data from the operating system ("),
@@ -64,10 +62,13 @@ fn entropy_errors_are_reported() {
     );
     assert_eq!(stack.depth(), 0);
     // The top 53 bits of the entropy become the mantissa: all ones is the largest double < 1.
-    push_secure_double(&mut stack, Ok(u64::MAX)).unwrap();
-    assert_eq!(stack.pop().unwrap(), Value::Double(0.999_999_999_999_999_9));
-    push_secure_double(&mut stack, Ok(0)).unwrap();
-    assert_eq!(stack.pop().unwrap(), Value::Double(0.0));
+    push_secure_double(&mut stack, Ok(u64::MAX)).expect("push_secure_double should succeed");
+    assert_eq!(
+        stack.pop().expect("pop should succeed"),
+        Value::Double(0.999_999_999_999_999_9)
+    );
+    push_secure_double(&mut stack, Ok(0)).expect("push_secure_double should succeed");
+    assert_eq!(stack.pop().expect("pop should succeed"), Value::Double(0.0));
 }
 
 #[test]
@@ -273,8 +274,13 @@ fn ident_reads_the_configuration() {
         WARP_IDENT.to_owned(),
         "influxftl-test".to_owned(),
     )]));
-    stack.exec_checked("IDENT").unwrap();
-    assert_eq!(stack.pop().unwrap(), Value::string("influxftl-test"));
+    stack
+        .exec_checked("IDENT")
+        .expect("exec_checked should succeed");
+    assert_eq!(
+        stack.pop().expect("pop should succeed"),
+        Value::string("influxftl-test")
+    );
 }
 
 #[test]

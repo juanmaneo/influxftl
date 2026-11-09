@@ -1,8 +1,6 @@
 // Copyright 2026 The influxftl Authors. Licensed under the Apache License, Version 2.0.
 // Derived from Warp 10 (Copyright 2018-2026 SenX S.A.S., Apache-2.0), ported to Rust and modified.
 
-#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
-
 //! Tests of `NEWENCODER`, the `WRAP` family and the `UNWRAP` functions, with the answers of
 //! Warp 10 3.5.0.
 
@@ -157,7 +155,7 @@ fn unwrap_errors() {
     }
     // A compressed empty content has no first datapoint to start an encoder from.
     let wrapper = GtsWrapper {
-        encoded: Some(gzip_bytes(&[]).unwrap()),
+        encoded: Some(gzip_bytes(&[]).expect("gzip_bytes should succeed")),
         compressed: Some(true),
         ..GtsWrapper::default()
     };
@@ -394,7 +392,7 @@ fn asencoders() {
     assert_fails("'00' HEX-> ASENCODERS", "NullPointerException");
     assert_fails("'78014c00' HEX-> ASENCODERS", "BufferUnderflowException");
     let wrapper = GtsWrapper {
-        encoded: Some(gzip_bytes(&[]).unwrap()),
+        encoded: Some(gzip_bytes(&[]).expect("gzip_bytes should succeed")),
         compressed: Some(true),
         ..GtsWrapper::default()
     };

@@ -1,7 +1,5 @@
 // Copyright 2026 The influxftl Authors. Licensed under the Apache License, Version 2.0.
 
-#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
-
 //! Oracle-checked tests of `PARSE`.
 //! The expectations are the answers of Warp 10 3.5.0 to the same scripts:
 //! the JSON stack (top first) or the error message (in its JDK 11+ form).
@@ -23,7 +21,7 @@ fn stack_json(script: &str) -> Result<String, String> {
     stack
         .exec_checked(&format!("{script} DEPTH ->LIST REVERSE ->JSON"))
         .map_err(|err| err.to_string())?;
-    match stack.pop().unwrap() {
+    match stack.pop().expect("pop should succeed") {
         Value::String(json) => Ok(json.to_string()),
         other => panic!("not a string: {other:?}"),
     }

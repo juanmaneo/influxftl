@@ -1,7 +1,5 @@
 // Copyright 2026 The influxftl Authors. Licensed under the Apache License, Version 2.0.
 
-#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
-
 //! Tests of the mappers configured with constants. The expected values were checked against
 //! Warp 10 3.5.0 (`warp10io/warp10:3.5.0-alpine`).
 
@@ -92,7 +90,7 @@ fn mod_min_max() {
     // An `ArithmeticException`, which `MAP` lets through unwrapped.
     let err = Window::of(&[Value::Long(7)])
         .apply(&arithmetic(Op::Mod, Num::Long(0)))
-        .unwrap_err();
+        .expect_err("the value should fail");
     assert_eq!(
         crate::error::compat::exception_class(&err),
         "java.lang.ArithmeticException"
@@ -125,7 +123,7 @@ fn mod_min_max() {
         Window::of(&[Value::Double(f64::NAN)])
             .value(&arithmetic(Op::MaxX, Num::Long(3)))
             .as_f64()
-            .unwrap()
+            .expect("the value should succeed")
             .is_nan()
     );
 }
@@ -145,7 +143,7 @@ fn pow_exp_log() {
         Window::of(&[Value::Long(1)])
             .value(&arithmetic(Op::Pow, Num::Double(f64::NAN)))
             .as_f64()
-            .unwrap()
+            .expect("the value should succeed")
             .is_nan()
     );
     assert_top(
@@ -191,7 +189,9 @@ fn snapshots_and_builders() {
         assert_top(&format!("{script} SNAPSHOT"), snapshot);
         assert_top(&format!("{script} TYPEOF"), "AGGREGATOR");
         let object = crate::tests::top(script);
-        let roles = super::aggregator_of(&object).unwrap().roles();
+        let roles = super::aggregator_of(&object)
+            .expect("aggregator_of should succeed")
+            .roles();
         assert_eq!(roles, super::Roles::MAPPER, "{script}");
     }
     for name in [
@@ -258,7 +258,9 @@ fn single_value_windows() {
     ];
     for mapper in &mappers {
         assert_eq!(
-            Window::of(&[]).apply(mapper.as_ref()).unwrap(),
+            Window::of(&[])
+                .apply(mapper.as_ref())
+                .expect("apply should succeed"),
             Aggregated {
                 tick: 0,
                 ..Aggregated::none()
@@ -278,7 +280,9 @@ fn replace_and_npdf() {
     };
     // No single value check, and the tick of the empty window.
     assert_eq!(
-        Window::of(&[]).apply(&replace).unwrap(),
+        Window::of(&[])
+            .apply(&replace)
+            .expect("apply should succeed"),
         Aggregated {
             tick: 100,
             ..Aggregated::none()
@@ -381,9 +385,13 @@ fn number_format_parsing() {
     ] {
         assert_eq!(parse_number(text, ROOT), Some(expected), "{text}");
     }
-    let negative_zero = parse_number("-0", ROOT).unwrap();
+    let negative_zero = parse_number("-0", ROOT).expect("parse_number should succeed");
     assert!(negative_zero == 0.0 && negative_zero.is_sign_negative());
-    assert!(parse_number("NaN", ROOT).unwrap().is_nan());
+    assert!(
+        parse_number("NaN", ROOT)
+            .expect("parse_number should succeed")
+            .is_nan()
+    );
     for text in [" 5", "+5", "-NaN", "Infinity", "", "-", "abc", ".", "E5"] {
         assert_eq!(parse_number(text, ROOT), None, "{text}");
     }

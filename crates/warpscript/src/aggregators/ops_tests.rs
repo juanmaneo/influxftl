@@ -1,7 +1,5 @@
 // Copyright 2026 The influxftl Authors. Licensed under the Apache License, Version 2.0.
 
-#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
-
 //! Tests of the `op.*` operations applied directly (the window's ticks stand for the indices
 //! of the collections of `APPLY`).
 
@@ -158,12 +156,16 @@ fn masks() {
         elevations: vec![21, 22],
         values: vec![b(true), Value::Long(5)],
     };
-    let aggregated = window.apply(&op(Kind::Mask, false)).unwrap();
+    let aggregated = window
+        .apply(&op(Kind::Mask, false))
+        .expect("apply should succeed");
     assert_eq!(
         (aggregated.location, aggregated.elevation, aggregated.value),
         (12, 22, Value::Long(5))
     );
-    let aggregated = window.apply(&op(Kind::Mask, true)).unwrap();
+    let aggregated = window
+        .apply(&op(Kind::Mask, true))
+        .expect("apply should succeed");
     assert_eq!(aggregated.value, Value::Null);
     assert_eq!(aggregated.location, crate::gts::NO_LOCATION);
     // A non boolean mask is not `true`.
@@ -244,6 +246,11 @@ fn registration() {
         assert_top(&format!("{name} TYPEOF"), "AGGREGATOR");
         assert_top(&format!("{name} SNAPSHOT"), format!("'{name}' FUNCREF "));
         let object = crate::tests::top(name);
-        assert!(super::aggregator_of(&object).unwrap().nary(), "{name}");
+        assert!(
+            super::aggregator_of(&object)
+                .expect("aggregator_of should succeed")
+                .nary(),
+            "{name}"
+        );
     }
 }

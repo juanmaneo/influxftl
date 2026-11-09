@@ -1,7 +1,5 @@
 // Copyright 2026 The influxftl Authors. Licensed under the Apache License, Version 2.0.
 
-#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
-
 //! Tests of the Geo Time Series functions.
 
 use indexmap::IndexMap;
@@ -35,8 +33,10 @@ fn string_map(entries: &[(&str, &str)]) -> Value {
 fn top_with(gts: GeoTimeSerie, script: &str) -> Value {
     let mut stack = test_stack();
     stack.push(Value::Gts(gts.shared()));
-    stack.exec_checked(script).unwrap();
-    stack.pop().unwrap()
+    stack
+        .exec_checked(script)
+        .expect("exec_checked should succeed");
+    stack.pop().expect("pop should succeed")
 }
 
 #[test]
@@ -101,10 +101,12 @@ fn addvalue_takes_a_tick_a_location_an_elevation_and_a_value() {
     );
     // The series is modified in place and left on the stack.
     let mut stack = exec("NEWGTS 'g' STORE $g 1 NaN NaN NaN 1 ADDVALUE $g SIZE");
-    assert_eq!(stack.pop().unwrap(), Value::Long(1));
-    let returned = stack.pop().unwrap();
-    stack.exec_checked("$g").unwrap();
-    assert!(returned.same_object(&stack.pop().unwrap()));
+    assert_eq!(stack.pop().expect("pop should succeed"), Value::Long(1));
+    let returned = stack.pop().expect("pop should succeed");
+    stack
+        .exec_checked("$g")
+        .expect("exec_checked should succeed");
+    assert!(returned.same_object(&stack.pop().expect("pop should succeed")));
     // Datapoints keep their insertion order, `SETVALUE` overwrites an existing tick.
     assert_top(
         "NEWGTS 2 NaN NaN NaN 'b' ADDVALUE 1 NaN NaN NaN 'a' ADDVALUE 2 NaN NaN NaN 'c' ADDVALUE \
@@ -492,14 +494,19 @@ fn ticks_are_the_sorted_distinct_ticks() {
     );
     // `GTSStackFunction` pushes the offending argument back before failing.
     let mut stack = test_stack();
-    let error = stack.exec_checked("[ NEWGTS 1 ] ELEVATIONS").unwrap_err();
+    let error = stack
+        .exec_checked("[ NEWGTS 1 ] ELEVATIONS")
+        .expect_err("exec_checked should fail");
     assert!(
         error
             .to_string()
             .contains("ELEVATIONS can only operate on Geo Time Series instances.")
     );
     assert_eq!(stack.depth(), 1);
-    assert!(matches!(stack.pop().unwrap(), Value::List(_)));
+    assert!(matches!(
+        stack.pop().expect("pop should succeed"),
+        Value::List(_)
+    ));
 }
 
 #[test]
@@ -563,7 +570,11 @@ fn sort_and_rsort_order_the_datapoints_in_place() {
             Value::list(vec![Value::from("a"), Value::from("b"), Value::from("c")]),
         ),
     ] {
-        let [v1, v2, v3]: [&str; 3] = values.split(' ').collect::<Vec<_>>().try_into().unwrap();
+        let [v1, v2, v3]: [&str; 3] = values
+            .split(' ')
+            .collect::<Vec<_>>()
+            .try_into()
+            .expect("try_into should succeed");
         let script = format!(
             "NEWGTS 3 NaN NaN NaN {v3} ADDVALUE 1 NaN NaN NaN {v1} ADDVALUE 2 NaN NaN NaN {v2} ADDVALUE"
         );
@@ -863,11 +874,15 @@ fn series_as_values() {
     };
     let mut stack = test_stack();
     stack.push(nest(15));
-    stack.exec_checked("SNAPSHOT SIZE").unwrap();
-    assert_eq!(stack.pop().unwrap(), Value::Long(107));
+    stack
+        .exec_checked("SNAPSHOT SIZE")
+        .expect("exec_checked should succeed");
+    assert_eq!(stack.pop().expect("pop should succeed"), Value::Long(107));
     let mut stack = test_stack();
     stack.push(nest(16));
-    let error = stack.exec_checked("SNAPSHOT").unwrap_err();
+    let error = stack
+        .exec_checked("SNAPSHOT")
+        .expect_err("exec_checked should fail");
     assert!(
         error
             .to_string()
@@ -884,7 +899,9 @@ fn series_as_values() {
         "g{l=v}\n=10// 1\n=20/47.99999998882413:1.9999999646097422/35 2\n=30//5 3\n"
     );
     assert_eq!(
-        exec(&format!("{SERIES} TYPEOF")).pop().unwrap(),
+        exec(&format!("{SERIES} TYPEOF"))
+            .pop()
+            .expect("pop should succeed"),
         Value::from("GTS")
     );
 }

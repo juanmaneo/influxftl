@@ -1,7 +1,5 @@
 // Copyright 2026 The influxftl Authors. Licensed under the Apache License, Version 2.0.
 
-#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
-
 use super::format::{
     decimal_value, is_double, is_long, java_double_to_string, parse_double, parse_long,
     parse_radix_wrapping, snapshot_encode_readable, url_decode, url_encode,
@@ -136,22 +134,43 @@ fn double_detection() {
 
 #[test]
 fn parsing_numbers() {
-    assert_eq!(parse_long("42").unwrap(), 42);
-    assert_eq!(parse_long("+42").unwrap(), 42);
-    assert_eq!(parse_long("  -42").unwrap(), -42);
+    assert_eq!(parse_long("42").expect("parse_long should succeed"), 42);
+    assert_eq!(parse_long("+42").expect("parse_long should succeed"), 42);
+    assert_eq!(parse_long("  -42").expect("parse_long should succeed"), -42);
     assert_eq!(
-        parse_long("99999999999999999999").unwrap_err().to_string(),
+        parse_long("99999999999999999999")
+            .expect_err("parse_long should fail")
+            .to_string(),
         "For input string: \"99999999999999999999\""
     );
-    assert_eq!(parse_double("1.5").unwrap(), 1.5);
-    assert_eq!(parse_double("+1.5").unwrap(), 1.5);
-    assert_eq!(parse_double(" -1.5e2").unwrap(), -150.0);
-    assert!(parse_double("NaN").unwrap().is_nan());
-    assert_eq!(parse_double("-Infinity").unwrap(), f64::NEG_INFINITY);
-    assert_eq!(parse_double("Infinity").unwrap(), f64::INFINITY);
+    assert_eq!(
+        parse_double("1.5").expect("parse_double should succeed"),
+        1.5
+    );
+    assert_eq!(
+        parse_double("+1.5").expect("parse_double should succeed"),
+        1.5
+    );
+    assert_eq!(
+        parse_double(" -1.5e2").expect("parse_double should succeed"),
+        -150.0
+    );
+    assert!(
+        parse_double("NaN")
+            .expect("parse_double should succeed")
+            .is_nan()
+    );
+    assert_eq!(
+        parse_double("-Infinity").expect("parse_double should succeed"),
+        f64::NEG_INFINITY
+    );
+    assert_eq!(
+        parse_double("Infinity").expect("parse_double should succeed"),
+        f64::INFINITY
+    );
     assert!(
         parse_double("1.5.5")
-            .unwrap_err()
+            .expect_err("the value should fail")
             .to_string()
             .contains("For input string")
     );
@@ -159,12 +178,24 @@ fn parsing_numbers() {
 
 #[test]
 fn radix_parsing_wraps_like_biginteger() {
-    assert_eq!(parse_radix_wrapping("ff", 16).unwrap(), 255);
-    assert_eq!(parse_radix_wrapping("-ff", 16).unwrap(), -255);
-    assert_eq!(parse_radix_wrapping("+101", 2).unwrap(), 5);
-    assert_eq!(parse_radix_wrapping("ffffffffffffffff", 16).unwrap(), -1);
     assert_eq!(
-        parse_radix_wrapping("1ffffffffffffffff", 16).unwrap(),
+        parse_radix_wrapping("ff", 16).expect("parse_radix_wrapping should succeed"),
+        255
+    );
+    assert_eq!(
+        parse_radix_wrapping("-ff", 16).expect("parse_radix_wrapping should succeed"),
+        -255
+    );
+    assert_eq!(
+        parse_radix_wrapping("+101", 2).expect("parse_radix_wrapping should succeed"),
+        5
+    );
+    assert_eq!(
+        parse_radix_wrapping("ffffffffffffffff", 16).expect("parse_radix_wrapping should succeed"),
+        -1
+    );
+    assert_eq!(
+        parse_radix_wrapping("1ffffffffffffffff", 16).expect("parse_radix_wrapping should succeed"),
         -1,
         "17 hex digits wrap"
     );
@@ -184,22 +215,35 @@ fn url_encoding() {
 
 #[test]
 fn url_decoding() {
-    assert_eq!(url_decode("abc").unwrap(), "abc");
-    assert_eq!(url_decode("a+b").unwrap(), "a+b");
-    assert_eq!(url_decode("a%20b%2Bc").unwrap(), "a b+c");
-    assert_eq!(url_decode("%C3%A9").unwrap(), "é");
-    assert_eq!(url_decode("%FF").unwrap(), "\u{FFFD}");
+    assert_eq!(url_decode("abc").expect("url_decode should succeed"), "abc");
+    assert_eq!(url_decode("a+b").expect("url_decode should succeed"), "a+b");
     assert_eq!(
-        url_decode("ab%2").unwrap_err().to_string(),
+        url_decode("a%20b%2Bc").expect("url_decode should succeed"),
+        "a b+c"
+    );
+    assert_eq!(
+        url_decode("%C3%A9").expect("url_decode should succeed"),
+        "é"
+    );
+    assert_eq!(
+        url_decode("%FF").expect("url_decode should succeed"),
+        "\u{FFFD}"
+    );
+    assert_eq!(
+        url_decode("ab%2")
+            .expect_err("url_decode should fail")
+            .to_string(),
         "URLDecoder: Incomplete trailing escape (%) pattern"
     );
     assert_eq!(
-        url_decode("%").unwrap_err().to_string(),
+        url_decode("%")
+            .expect_err("url_decode should fail")
+            .to_string(),
         "URLDecoder: Incomplete trailing escape (%) pattern"
     );
     assert!(
         url_decode("%zz")
-            .unwrap_err()
+            .expect_err("the value should fail")
             .to_string()
             .contains("Illegal hex characters in escape (%) pattern")
     );

@@ -1,7 +1,5 @@
 // Copyright 2026 The influxftl Authors. Licensed under the Apache License, Version 2.0.
 
-#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
-
 //! Tests of the statistical aggregators. The expected values were checked against Warp 10
 //! 3.5.0 (`warp10io/warp10:3.5.0-alpine`).
 
@@ -79,14 +77,27 @@ fn rms_on_windows_with_nulls_and_mixed_types() {
     };
     let ignore = Rms { ignore_nulls: true };
     let with_null = Window::of(&[Value::Long(1), Value::Null, Value::Long(3)]);
-    assert_eq!(with_null.apply(&poison).unwrap(), Aggregated::none());
+    assert_eq!(
+        with_null.apply(&poison).expect("apply should succeed"),
+        Aggregated::none()
+    );
     // sqrt((1 + 9) / 2) = 2.236… cast to a LONG.
     assert_eq!(with_null.value(&ignore), Value::Long(2));
     let all_null = Window::of(&[Value::Null, Value::Null]);
-    assert_eq!(all_null.apply(&ignore).unwrap(), Aggregated::none());
-    assert_eq!(Window::of(&[]).apply(&ignore).unwrap(), Aggregated::none());
     assert_eq!(
-        Window::of(&[Value::Boolean(true)]).apply(&ignore).unwrap(),
+        all_null.apply(&ignore).expect("apply should succeed"),
+        Aggregated::none()
+    );
+    assert_eq!(
+        Window::of(&[])
+            .apply(&ignore)
+            .expect("apply should succeed"),
+        Aggregated::none()
+    );
+    assert_eq!(
+        Window::of(&[Value::Boolean(true)])
+            .apply(&ignore)
+            .expect("apply should succeed"),
         Aggregated::none()
     );
     // The first value fixes the type, the following ones must be numbers.
@@ -109,7 +120,7 @@ fn rms_on_windows_with_nulls_and_mixed_types() {
         values: longs(&[1, 2]),
     };
     assert_eq!(
-        latest.apply(&ignore).unwrap(),
+        latest.apply(&ignore).expect("apply should succeed"),
         Aggregated {
             tick: 100,
             location: 7,
@@ -212,9 +223,14 @@ fn variance_on_windows_with_nulls_and_mixed_types() {
     };
     let with_null = Window::of(&[Value::Long(1), Value::Null, Value::Long(3)]);
     assert_eq!(with_null.value(&naive), Value::Double(1.0));
-    assert_eq!(with_null.apply(&forbid).unwrap(), Aggregated::none());
     assert_eq!(
-        with_null.apply(&welford_forbid).unwrap(),
+        with_null.apply(&forbid).expect("apply should succeed"),
+        Aggregated::none()
+    );
+    assert_eq!(
+        with_null
+            .apply(&welford_forbid)
+            .expect("apply should succeed"),
         Aggregated::none()
     );
     // Welford divides by the index in the window, so a skipped null skews the result
@@ -229,11 +245,16 @@ fn variance_on_windows_with_nulls_and_mixed_types() {
         Value::Double(2.0)
     );
     for variance in [&naive, &welford] {
-        assert_eq!(Window::of(&[]).apply(variance).unwrap(), Aggregated::none());
+        assert_eq!(
+            Window::of(&[])
+                .apply(variance)
+                .expect("apply should succeed"),
+            Aggregated::none()
+        );
         assert_eq!(
             Window::of(&[Value::from("a"), Value::Long(1)])
                 .apply(variance)
-                .unwrap(),
+                .expect("the value should succeed"),
             Aggregated::none()
         );
         assert_eq!(
@@ -247,7 +268,10 @@ fn variance_on_windows_with_nulls_and_mixed_types() {
         mixed.error(&naive),
         "class java.lang.Boolean cannot be cast to class java.lang.Number"
     );
-    assert_eq!(mixed.apply(&welford).unwrap(), Aggregated::none());
+    assert_eq!(
+        mixed.apply(&welford).expect("apply should succeed"),
+        Aggregated::none()
+    );
     let sd = StandardDeviation {
         variance: Variance {
             use_bessel: true,
@@ -265,7 +289,9 @@ fn variance_on_windows_with_nulls_and_mixed_types() {
         Value::Double(std::f64::consts::SQRT_2)
     );
     assert_eq!(
-        Window::of(&[Value::from("a")]).apply(&sd).unwrap(),
+        Window::of(&[Value::from("a")])
+            .apply(&sd)
+            .expect("apply should succeed"),
         Aggregated::none()
     );
     // Location and elevation of the most recent non-null datapoint.
@@ -276,7 +302,7 @@ fn variance_on_windows_with_nulls_and_mixed_types() {
         values: vec![Value::Null, Value::Long(1), Value::Long(2)],
     };
     assert_eq!(
-        latest.apply(&sd).unwrap(),
+        latest.apply(&sd).expect("apply should succeed"),
         Aggregated {
             tick: 0,
             location: 8,
@@ -355,16 +381,24 @@ fn circular_mean_on_windows_with_nulls_and_mixed_types() {
         forbid_nulls: false,
     };
     let with_null = Window::of(&[Value::Long(90), Value::Null, Value::Long(180)]);
-    assert_eq!(with_null.apply(&forbid).unwrap(), Aggregated::none());
+    assert_eq!(
+        with_null.apply(&forbid).expect("apply should succeed"),
+        Aggregated::none()
+    );
     assert_eq!(with_null.value(&exclude), Value::Double(135.0));
     // All nulls: a NaN mean.
     let all_null = Window::of(&[Value::Null]);
     assert!(matches!(all_null.value(&exclude), Value::Double(d) if d.is_nan()));
-    assert_eq!(Window::of(&[]).apply(&exclude).unwrap(), Aggregated::none());
+    assert_eq!(
+        Window::of(&[])
+            .apply(&exclude)
+            .expect("apply should succeed"),
+        Aggregated::none()
+    );
     assert_eq!(
         Window::of(&[Value::from("a"), Value::Long(1)])
             .apply(&exclude)
-            .unwrap(),
+            .expect("the value should succeed"),
         Aggregated::none()
     );
     assert_eq!(
@@ -387,7 +421,7 @@ fn circular_mean_on_windows_with_nulls_and_mixed_types() {
         elevations: vec![100, 1000, NO_ELEVATION, 200],
         values: vec![Value::Long(0), Value::Null, Value::Long(0), Value::Long(0)],
     };
-    let result = located.apply(&exclude).unwrap();
+    let result = located.apply(&exclude).expect("apply should succeed");
     assert_eq!(
         crate::geoxp::from_geoxp_point(result.location),
         (48.499_999_959_021_81, 2.499_999_934_807_419_8)

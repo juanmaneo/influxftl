@@ -1,7 +1,5 @@
 // Copyright 2026 The influxftl Authors. Licensed under the Apache License, Version 2.0.
 
-#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
-
 use indexmap::{IndexMap, IndexSet};
 
 use super::json::{
@@ -31,7 +29,7 @@ fn render(value: &Value, strict: bool, pretty: bool) -> String {
         pretty,
         ..JsonOptions::default()
     };
-    to_json(value, options).unwrap()
+    to_json(value, options).expect("to_json should succeed")
 }
 
 fn bounded(value: &Value, pretty: bool, max_size: i64) -> Result<String, JsonError> {
@@ -44,11 +42,13 @@ fn bounded(value: &Value, pretty: bool, max_size: i64) -> Result<String, JsonErr
 }
 
 fn parse(text: &str) -> Value {
-    from_json(text).unwrap()
+    from_json(text).expect("from_json should succeed")
 }
 
 fn parse_err(text: &str) -> String {
-    from_json(text).unwrap_err().to_string()
+    from_json(text)
+        .expect_err("from_json should fail")
+        .to_string()
 }
 
 fn list(items: Vec<Value>) -> Value {
@@ -73,9 +73,9 @@ fn with_big_stack(test: fn()) {
     std::thread::Builder::new()
         .stack_size(64 << 20)
         .spawn(test)
-        .unwrap()
+        .expect("the value should succeed")
         .join()
-        .unwrap();
+        .expect("the value should succeed");
 }
 
 // -----------------------------------------------------------------------------------------
@@ -340,8 +340,11 @@ fn json_attributes() {
     let mut stack = exec("[ NaN ]");
     stack.set_attribute(ATTRIBUTE_JSON_STRICT, Some(Value::Long(1)));
     stack.set_attribute(ATTRIBUTE_JSON_PRETTY, Some(Value::string("yes")));
-    stack.exec("->JSON").unwrap();
-    assert_eq!(stack.pop().unwrap(), Value::string("[NaN]"));
+    stack.exec("->JSON").expect("exec should succeed");
+    assert_eq!(
+        stack.pop().expect("pop should succeed"),
+        Value::string("[NaN]")
+    );
 }
 
 // -----------------------------------------------------------------------------------------
@@ -376,18 +379,30 @@ fn tojson_size_bound() {
     assert_fails("10 MAXJSON NEWENCODER ->JSON", &format!("{TOO_BIG}10))"));
     assert_eq!(json("MAXLONG 1 - MAXJSON [ 1 ] ->JSON"), "[1]");
     let big = Value::string("x".repeat(10_000));
-    assert_eq!(bounded(&big, false, 10_002).unwrap().len(), 10_002);
+    assert_eq!(
+        bounded(&big, false, 10_002)
+            .expect("bounded should succeed")
+            .len(),
+        10_002
+    );
     assert_eq!(bounded(&big, false, 10_001), Err(JsonError::TooBig));
     // The bound applies to characters of the escaped output.
     let astral = Value::string("\u{1f600}");
-    assert_eq!(bounded(&astral, false, 14).unwrap(), "\"\\uD83D\\uDE00\"");
+    assert_eq!(
+        bounded(&astral, false, 14).expect("bounded should succeed"),
+        "\"\\uD83D\\uDE00\""
+    );
     assert_eq!(bounded(&astral, false, 13), Err(JsonError::TooBig));
     assert_eq!(
-        bounded(&nested_lists(1000), false, 2000).unwrap().len(),
+        bounded(&nested_lists(1000), false, 2000)
+            .expect("bounded should succeed")
+            .len(),
         2000
     );
     assert_eq!(
-        bounded(&nested_lists(999), false, 2000).unwrap().len(),
+        bounded(&nested_lists(999), false, 2000)
+            .expect("bounded should succeed")
+            .len(),
         1998
     );
     assert_eq!(
@@ -396,11 +411,15 @@ fn tojson_size_bound() {
     );
     with_big_stack(|| {
         assert_eq!(
-            bounded(&nested_lists(1000), false, 2000).unwrap().len(),
+            bounded(&nested_lists(1000), false, 2000)
+                .expect("bounded should succeed")
+                .len(),
             2000
         );
         assert_eq!(
-            bounded(&nested_lists(999), false, 2000).unwrap().len(),
+            bounded(&nested_lists(999), false, 2000)
+                .expect("bounded should succeed")
+                .len(),
             1998
         );
         assert_eq!(
@@ -431,7 +450,9 @@ fn tojson_depth() {
             deep_map = map(vec![(Value::string("k"), deep_map)]);
         }
         assert_eq!(
-            to_json(&deep_map, JsonOptions::default()).unwrap().len(),
+            to_json(&deep_map, JsonOptions::default())
+                .expect("to_json should succeed")
+                .len(),
             999 * 6 + 2
         );
         let deep_set = Value::set(IndexSet::from([nested_lists(1000)]));
@@ -462,7 +483,9 @@ fn maxjson() {
     assert_fails("MAXJSON", "Empty stack.");
     // The hard limit cannot be exceeded (default stack: 20 MB).
     let mut stack = Stack::new();
-    let err = stack.exec("20971521 MAXJSON").unwrap_err();
+    let err = stack
+        .exec("20971521 MAXJSON")
+        .expect_err("exec should fail");
     assert!(
         err.to_string()
             .contains("MAXJSON missing capability 'maxjson' or 'limits'."),
@@ -471,14 +494,18 @@ fn maxjson() {
     stack
         .capabilities_mut()
         .insert("limits".to_owned(), String::new());
-    let err = stack.exec("20971521 MAXJSON").unwrap_err();
+    let err = stack
+        .exec("20971521 MAXJSON")
+        .expect_err("exec should fail");
     assert!(
         err.to_string()
             .contains("MAXJSON cannot extend limit past 20971520"),
         "{err}"
     );
     assert_eq!(stack.limits.max_json, 20_971_520);
-    stack.exec("20971520 MAXJSON 5 MAXJSON").unwrap();
+    stack
+        .exec("20971520 MAXJSON 5 MAXJSON")
+        .expect("exec should succeed");
     assert_eq!(stack.limits.max_json, 5);
 }
 
@@ -1317,7 +1344,10 @@ fn options_default() {
     let options = JsonOptions::default();
     assert!(!options.strict && !options.pretty);
     assert_eq!(options.max_size, i64::MAX);
-    assert_eq!(to_json(&Value::Null, options).unwrap(), "null");
+    assert_eq!(
+        to_json(&Value::Null, options).expect("to_json should succeed"),
+        "null"
+    );
     assert_ne!(JsonError::TooBig, JsonError::TooDeep);
 }
 

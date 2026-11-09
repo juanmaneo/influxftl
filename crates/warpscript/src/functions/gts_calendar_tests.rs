@@ -1,7 +1,5 @@
 // Copyright 2026 The influxftl Authors. Licensed under the Apache License, Version 2.0.
 
-#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
-
 //! Oracle-checked tests of `BUCKETIZE.CALENDAR`, `UNBUCKETIZE.CALENDAR` and `UNBUCKETIZE`.
 //! The expectations are the answers of Warp 10 3.5.0 to the same scripts:
 //! the JSON stack (top first) or the error message (in its JDK 11+ form).
@@ -38,7 +36,7 @@ fn stack_json(script: &str) -> Result<String, String> {
     stack
         .exec_checked(&format!("{script} DEPTH ->LIST REVERSE ->JSON"))
         .map_err(|err| err.to_string())?;
-    match stack.pop().unwrap() {
+    match stack.pop().expect("pop should succeed") {
         Value::String(json) => Ok(json.to_string()),
         other => panic!("not a string: {other:?}"),
     }
@@ -1044,7 +1042,9 @@ fn calendar_overflows() {
         "[ NEWGTS 1 NaN NaN NaN 1 ADDVALUE bucketizer.last 10 1 0 ] BUCKETIZE 0 GET { '.bucketduration' 'P1000000000Y' '.bucketoffset' '0' '.buckettimezone' 'UTC' } SETATTRIBUTES UNBUCKETIZE.CALENDAR",
     ] {
         assert!(
-            stack_json(script).unwrap_err().contains("overflow"),
+            stack_json(script)
+                .expect_err("stack_json should fail")
+                .contains("overflow"),
             "{script}"
         );
     }

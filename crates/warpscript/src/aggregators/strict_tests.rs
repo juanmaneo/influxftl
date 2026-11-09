@@ -1,7 +1,5 @@
 // Copyright 2026 The influxftl Authors. Licensed under the Apache License, Version 2.0.
 
-#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
-
 //! Tests of `STRICTMAPPER` and `STRICTREDUCER`. The expected values were checked against
 //! Warp 10 3.5.0 (`warp10io/warp10:3.5.0-alpine`).
 
@@ -141,7 +139,7 @@ fn strict_mapper_builder() {
         panic!("not a function");
     };
     assert_eq!(function.name(), "STRICTMAPPER");
-    let strict = super::aggregator_of(&object).unwrap();
+    let strict = super::aggregator_of(&object).expect("aggregator_of should succeed");
     assert_eq!(strict.roles(), Roles::MAPPER);
     // Applied directly: out of the bounds no result, within them the mapper's.
     assert_eq!(Window::of(&longs(&[-3])).value(strict), Value::Long(3));
@@ -197,7 +195,7 @@ fn strict_reducers() {
         panic!("not a function");
     };
     assert_eq!(function.name(), "STRICTREDUCER");
-    let strict = super::aggregator_of(&object).unwrap();
+    let strict = super::aggregator_of(&object).expect("aggregator_of should succeed");
     assert!(strict.roles().reducer && !strict.roles().mapper && !strict.roles().bucketizer);
     assert_eq!(Window::of(&longs(&[1, 2])).value(strict), Value::Long(3));
     assert_eq!(

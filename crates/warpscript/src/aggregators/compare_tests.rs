@@ -1,7 +1,5 @@
 // Copyright 2026 The influxftl Authors. Licensed under the Apache License, Version 2.0.
 
-#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
-
 //! Tests of `CompareTo`. The expected values were checked against Warp 10 3.5.0
 //! (`warp10io/warp10:3.5.0-alpine`).
 
@@ -84,7 +82,9 @@ fn earliest_passing_datapoint() {
         comparison: Comparison::Gt,
     };
     assert_eq!(
-        window.apply(&greater_than_zero).unwrap(),
+        window
+            .apply(&greater_than_zero)
+            .expect("apply should succeed"),
         Aggregated {
             tick: 3,
             location: 12,
@@ -98,7 +98,7 @@ fn earliest_passing_datapoint() {
         comparison: Comparison::Gt,
     };
     assert_eq!(
-        window.apply(&nothing).unwrap(),
+        window.apply(&nothing).expect("apply should succeed"),
         Aggregated {
             tick: 100,
             location: NO_LOCATION,
@@ -132,7 +132,7 @@ fn null_values_of_reducers() {
         match expected {
             Some(value) => assert_eq!(window.value(&compare), value),
             None => {
-                let err = window.apply(&compare).unwrap_err();
+                let err = window.apply(&compare).expect_err("apply should fail");
                 assert_eq!(
                     crate::error::compat::exception_class(&err),
                     "java.lang.NullPointerException"
@@ -149,7 +149,9 @@ fn builders() {
         assert_top(&format!("1 {name} SNAPSHOT"), format!("1 {name} "));
         assert_top(&format!("1 {name} TYPEOF"), "AGGREGATOR");
         let object = crate::tests::top(&format!("1 {name}"));
-        let roles = super::aggregator_of(&object).unwrap().roles();
+        let roles = super::aggregator_of(&object)
+            .expect("aggregator_of should succeed")
+            .roles();
         assert_eq!(roles, Roles::ALL, "{name}");
         assert_fails(name, "Empty stack");
     }

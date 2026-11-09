@@ -1,7 +1,5 @@
 // Copyright 2026 The influxftl Authors. Licensed under the Apache License, Version 2.0.
 
-#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
-
 //! Oracle-checked tests of `THRESHOLDTEST`, `ZSCORETEST`, `GRUBBSTEST` and `ESDTEST`.
 //! The expectations are the answers of Warp 10 3.5.0 to the same scripts:
 //! the JSON stack (top first) or the error message (in its JDK 11+ form).
@@ -42,7 +40,7 @@ fn stack_json(script: &str) -> Result<String, String> {
     stack
         .exec_checked(&format!("{script} DEPTH ->LIST REVERSE ->JSON"))
         .map_err(|err| err.to_string())?;
-    match stack.pop().unwrap() {
+    match stack.pop().expect("pop should succeed") {
         Value::String(json) => Ok(json.to_string()),
         other => panic!("not a string: {other:?}"),
     }
@@ -626,10 +624,10 @@ fn zscore_of_nothing() {
     // A `DOUBLE` series without values (not reachable from WarpScript).
     let mut gts = crate::gts::GeoTimeSerie::new();
     gts.values = crate::gts::Values::Double(Vec::new());
-    let err = super::outliers::zscore(&gts, true, 1.0).unwrap_err();
+    let err = super::outliers::zscore(&gts, true, 1.0).expect_err("zscore should fail");
     assert_eq!(err.to_string(), "Index 0 out of bounds for length 0");
     assert_eq!(
-        super::outliers::zscore(&gts, false, 1.0).unwrap(),
+        super::outliers::zscore(&gts, false, 1.0).expect("zscore should succeed"),
         Vec::<i64>::new()
     );
 }

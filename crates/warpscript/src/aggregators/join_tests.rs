@@ -1,7 +1,5 @@
 // Copyright 2026 The influxftl Authors. Licensed under the Apache License, Version 2.0.
 
-#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
-
 //! Tests of the `join` aggregator. The expected values were checked against Warp 10 3.5.0
 //! (`warp10io/warp10:3.5.0-alpine`).
 
@@ -77,7 +75,12 @@ fn join_on_windows_with_nulls() {
         Window::of(&[Value::Null, Value::Long(1)]).value(&ignore),
         Value::from("-1")
     );
-    assert_eq!(Window::of(&[]).apply(&ignore).unwrap(), Aggregated::none());
+    assert_eq!(
+        Window::of(&[])
+            .apply(&ignore)
+            .expect("apply should succeed"),
+        Aggregated::none()
+    );
     // `reducer.join.urlencoded`: percent-encoded values, nulls rendered as the empty string
     // (and still making the result null, as nulls are not ignored).
     let urlencoded = Join {
@@ -109,7 +112,7 @@ fn join_on_windows_with_nulls() {
         values: vec![Value::Boolean(true), Value::Double(0.5)],
     };
     assert_eq!(
-        latest.apply(&ignore).unwrap(),
+        latest.apply(&ignore).expect("apply should succeed"),
         Aggregated {
             tick: 0,
             location: 7,

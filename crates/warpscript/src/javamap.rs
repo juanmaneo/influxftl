@@ -157,8 +157,6 @@ impl<K: PartialEq, V> JavaHashMap<K, V> {
 
 #[cfg(test)]
 mod tests {
-    #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
-
     use super::*;
 
     fn keys(map: &JavaHashMap<i32, ()>) -> Vec<i32> {

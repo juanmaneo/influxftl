@@ -1,7 +1,5 @@
 // Copyright 2026 The influxftl Authors. Licensed under the Apache License, Version 2.0.
 
-#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
-
 //! Tests of the elementary aggregators on windows `BUCKETIZE` cannot produce: `null` values
 //! and mixed value types (the windows of reducers).
 
@@ -41,7 +39,9 @@ fn apply_at(
 }
 
 fn value(aggregator: &dyn Aggregator, values: &[Value]) -> Value {
-    apply(aggregator, values).unwrap().value
+    apply(aggregator, values)
+        .expect("apply should succeed")
+        .value
 }
 
 #[test]
@@ -71,7 +71,7 @@ fn nulls_are_ignored_or_poison_the_result() {
             },
             &with_null
         )
-        .unwrap(),
+        .expect("the value should succeed"),
         Aggregated::none()
     );
     assert_eq!(
@@ -120,7 +120,7 @@ fn nulls_are_ignored_or_poison_the_result() {
             },
             &booleans
         )
-        .unwrap(),
+        .expect("the value should succeed"),
         Aggregated::none()
     );
     assert_eq!(
@@ -134,7 +134,7 @@ fn nulls_are_ignored_or_poison_the_result() {
             },
             &booleans
         )
-        .unwrap(),
+        .expect("the value should succeed"),
         Aggregated::none()
     );
     // The location and elevation come from the most recent non null datapoint.
@@ -142,7 +142,7 @@ fn nulls_are_ignored_or_poison_the_result() {
         &And { ignore_nulls: true },
         &[Value::Boolean(true), Value::Null],
     )
-    .unwrap();
+    .expect("the value should succeed");
     assert_eq!((aggregated.tick, aggregated.elevation), (100, 0));
     // Only nulls: nothing to sum, a `null` first / last, an unreadable extremum.
     let nulls = [Value::Null, Value::Null];
@@ -152,7 +152,7 @@ fn nulls_are_ignored_or_poison_the_result() {
     assert_eq!(value(&Last, &nulls), Value::Null);
     assert_eq!(
         apply(&Min { ignore_nulls: true }, &nulls)
-            .unwrap_err()
+            .expect_err("the value should fail")
             .message(),
         "Index -1 out of bounds for length 2"
     );
@@ -168,7 +168,10 @@ fn nulls_are_ignored_or_poison_the_result() {
         &And { ignore_nulls: true },
         &Or { ignore_nulls: true },
     ] {
-        assert_eq!(apply(aggregator, &[]).unwrap(), Aggregated::none());
+        assert_eq!(
+            apply(aggregator, &[]).expect("apply should succeed"),
+            Aggregated::none()
+        );
         assert_eq!(aggregator.roles(), Roles::ALL);
     }
 }
@@ -195,7 +198,7 @@ fn mixed_types_follow_the_first_value() {
             &Sum { ignore_nulls: true },
             &[Value::from("a"), Value::Long(2)]
         )
-        .unwrap(),
+        .expect("the value should succeed"),
         Aggregated::none()
     );
     assert_eq!(
@@ -203,7 +206,7 @@ fn mixed_types_follow_the_first_value() {
             &Sum { ignore_nulls: true },
             &[Value::Long(1), Value::from("a")]
         )
-        .unwrap_err()
+        .expect_err("the value should fail")
         .message(),
         "class java.lang.String cannot be cast to class java.lang.Number"
     );
@@ -212,7 +215,7 @@ fn mixed_types_follow_the_first_value() {
             &Mean { ignore_nulls: true },
             &[Value::Double(1.0), Value::Boolean(true)]
         )
-        .unwrap_err()
+        .expect_err("the value should fail")
         .message(),
         "class java.lang.Boolean cannot be cast to class java.lang.Number"
     );
@@ -237,7 +240,7 @@ fn mixed_types_follow_the_first_value() {
             &Min { ignore_nulls: true },
             &[Value::Long(1), Value::from("x")]
         )
-        .unwrap_err()
+        .expect_err("the value should fail")
         .message(),
         "min cannot determine min of numeric and non numeric values."
     );
@@ -246,7 +249,7 @@ fn mixed_types_follow_the_first_value() {
             &Max { ignore_nulls: true },
             &[Value::Double(1.0), Value::from("x")]
         )
-        .unwrap_err()
+        .expect_err("the value should fail")
         .message(),
         "max cannot compare non numeric values to numeric ones."
     );
@@ -255,7 +258,7 @@ fn mixed_types_follow_the_first_value() {
             &Min { ignore_nulls: true },
             &[Value::Double(1.0), Value::Boolean(true)]
         )
-        .unwrap_err()
+        .expect_err("the value should fail")
         .message(),
         "min cannot determine min of numeric and non numeric values."
     );
@@ -289,20 +292,24 @@ fn mixed_types_follow_the_first_value() {
     );
     // Among equal values the earliest tick wins, whatever the order of the window.
     let min = Min { ignore_nulls: true };
-    let tie = apply_at(&min, &[2, 1], &[Value::from("a"), Value::from("a")]).unwrap();
+    let tie = apply_at(&min, &[2, 1], &[Value::from("a"), Value::from("a")])
+        .expect("apply_at should succeed");
     assert_eq!((tie.tick, tie.elevation), (1, 10));
-    let tie = apply_at(&min, &[2, 1], &[Value::Long(7), Value::Long(7)]).unwrap();
+    let tie = apply_at(&min, &[2, 1], &[Value::Long(7), Value::Long(7)])
+        .expect("apply_at should succeed");
     assert_eq!((tie.tick, tie.elevation), (1, 10));
     let tie = apply_at(
         &Max { ignore_nulls: true },
         &[2, 1],
         &[Value::Double(7.0), Value::Double(7.0)],
     )
-    .unwrap();
+    .expect("the value should succeed");
     assert_eq!((tie.tick, tie.elevation), (1, 10));
     // A value of another kind is never retained.
     assert_eq!(
-        apply(&min, &[Value::list(vec![])]).unwrap_err().message(),
+        apply(&min, &[Value::list(vec![])])
+            .expect_err("apply should fail")
+            .message(),
         "Index -1 out of bounds for length 1"
     );
     // `and` / `or` keep the location and elevation of the most recent datapoint.
@@ -311,10 +318,10 @@ fn mixed_types_follow_the_first_value() {
         &[2, 1],
         &[Value::Boolean(true), Value::Boolean(true)],
     )
-    .unwrap();
+    .expect("the value should succeed");
     assert_eq!(folded.elevation, 0);
     // The `Aggregated` tuple is comparable and printable.
-    let aggregated = apply(&Last, &[Value::Long(1)]).unwrap();
+    let aggregated = apply(&Last, &[Value::Long(1)]).expect("apply should succeed");
     assert_eq!(
         aggregated,
         Aggregated {

@@ -1,12 +1,7 @@
 // Copyright 2026 The influxftl Authors. Licensed under the Apache License, Version 2.0.
 // Derived from Warp 10 (Copyright 2018-2026 SenX S.A.S., Apache-2.0), ported to Rust and modified.
 
-#![allow(
-    clippy::unwrap_used,
-    clippy::expect_used,
-    clippy::panic,
-    clippy::format_collect
-)]
+#![allow(clippy::format_collect)]
 
 use std::rc::Rc;
 
@@ -59,7 +54,7 @@ fn wrap_hex(gts: &GeoTimeSerie, optimized: bool) -> String {
 /// Every datapoint of a decoder.
 fn decode_all(decoder: &mut GtsDecoder) -> Vec<(i64, i64, i64, EncodedValue)> {
     let mut out = Vec::new();
-    while decoder.next().unwrap() {
+    while decoder.next().expect("next should succeed") {
         out.push((
             decoder.timestamp(),
             decoder.location(),
@@ -123,7 +118,7 @@ fn decimals() {
 #[test]
 fn values() {
     let list = Value::list(vec![]);
-    let e = EncodedValue::from_value(&list).unwrap_err();
+    let e = EncodedValue::from_value(&list).expect_err("from_value should fail");
     assert_eq!(
         e.message(),
         "Unsuported value type 'class java.util.ArrayList'"
@@ -140,7 +135,12 @@ fn values() {
         Value::from("s"),
         Value::bytes([1u8, 2]),
     ] {
-        assert_eq!(EncodedValue::from_value(&v).unwrap().to_value(), v);
+        assert_eq!(
+            EncodedValue::from_value(&v)
+                .expect("from_value should succeed")
+                .to_value(),
+            v
+        );
     }
     assert_eq!(
         EncodedValue::Decimal(dec(25, 1)).to_value(),
@@ -231,8 +231,8 @@ fn oracle_unwraps() {
         "1c18016e1b018801610162160016001b000068271f8b0800000000000000f369e8ac62f2fbdf51c594",
         "53ff1f0d30fa21988c00e4a36f102900000016081100"
     ));
-    let wrapper = deserialize_wrapper(&bytes).unwrap();
-    let gts = wrapper_to_gts(&wrapper, false).unwrap();
+    let wrapper = deserialize_wrapper(&bytes).expect("deserialize_wrapper should succeed");
+    let gts = wrapper_to_gts(&wrapper, false).expect("wrapper_to_gts should succeed");
     assert_eq!(gts.name(), Some("n"));
     assert_eq!(gts.ticks, vec![1_000_000, -1_000_000, i64::MAX, i64::MIN]);
     assert_eq!(gts.value_at(2), Value::Long(i64::MIN));
@@ -250,13 +250,13 @@ fn oracle_unwraps() {
         true,
         true,
     );
-    let gts = wrapper_to_gts(&wrapper, false).unwrap();
+    let gts = wrapper_to_gts(&wrapper, false).expect("wrapper_to_gts should succeed");
     assert_eq!(gts.value_at(3), Value::Double(123_456_789.125));
     let wrapper = deserialize_wrapper(&hex(
         "781b1f8b08000000000000008b606a674c1c1c000026dc61218b00000016021100",
     ))
-    .unwrap();
-    let gts = wrapper_to_gts(&wrapper, false).unwrap();
+    .expect("the value should succeed");
+    let gts = wrapper_to_gts(&wrapper, false).expect("wrapper_to_gts should succeed");
     assert_eq!(gts.value_at(0), Value::from("a".repeat(135)));
 }
 
@@ -370,7 +370,7 @@ fn encode_decode() {
     // `getValue` keeps binary values as ISO-8859-1 strings.
     let mut d = encoder.decoder();
     for _ in 0..12 {
-        d.next().unwrap();
+        d.next().expect("next should succeed");
     }
     assert_eq!(d.value(), EncodedValue::String(Rc::from("A")));
 }
@@ -379,21 +379,21 @@ fn encode_decode() {
 fn decoder_quirks() {
     // A string identical to a previous non Latin-1 one, flagged binary.
     let mut d = decoder("3802c4803b");
-    d.next().unwrap();
-    d.next().unwrap();
+    d.next().expect("next should succeed");
+    d.next().expect("next should succeed");
     assert_eq!(d.binary_value(), EncodedValue::Bytes(Rc::from(vec![b'?'])));
     // An identical string without a previous one is null.
     let mut d = decoder("39");
-    d.next().unwrap();
+    d.next().expect("next should succeed");
     assert_eq!(d.value(), EncodedValue::Null);
     // Encrypted blocks are skipped; a continuation without its byte ends the stream.
     let mut d = decoder("000201022480");
-    assert!(d.next().unwrap());
+    assert!(d.next().expect("next should succeed"));
     assert_eq!(d.value(), EncodedValue::Boolean(true));
-    assert!(!d.next().unwrap());
+    assert!(!d.next().expect("next should succeed"));
     // Nine continuation bytes are fine, the shift wraps.
     let mut d = decoder("44ffffffffffffffffff01");
-    d.next().unwrap();
+    d.next().expect("next should succeed");
     assert_eq!(d.timestamp(), i64::MIN);
     for (bytes, message, class) in [
         (
@@ -456,14 +456,14 @@ fn encoders_from_decoders() {
         encoder.add_value(t, NO_LOCATION, NO_ELEVATION, &EncodedValue::Long(v));
     }
     let mut d = encoder.decoder();
-    let e = d.encoder().unwrap_err();
+    let e = d.encoder().expect_err("encoder should fail");
     assert_eq!(
         e.message(),
         "Can only get an encoder for a decoder on which 'next' was called at least once."
     );
-    d.next().unwrap();
-    d.next().unwrap();
-    let tail = d.encoder().unwrap();
+    d.next().expect("next should succeed");
+    d.next().expect("next should succeed");
+    let tail = d.encoder().expect("encoder should succeed");
     assert_eq!(tail.count(), 2);
     assert_eq!(tail.base(), 5);
     assert_eq!(tail.metadata.name.as_deref(), Some("n"));
@@ -493,12 +493,12 @@ fn merges() {
     b.add_value(2, NO_LOCATION, NO_ELEVATION, &EncodedValue::Long(2));
     // Into an empty encoder of the same base: a copy.
     let mut empty = GtsEncoder::new(0);
-    empty.merge(&b).unwrap();
+    empty.merge(&b).expect("merge should succeed");
     assert_eq!(empty.metadata.name.as_deref(), Some("b"));
     assert_eq!(empty.bytes(), b.bytes());
     // Same base: the bytes are appended.
     let mut same = a.clone();
-    same.merge(&b).unwrap();
+    same.merge(&b).expect("merge should succeed");
     same.add_value(3, NO_LOCATION, NO_ELEVATION, &EncodedValue::Long(2));
     assert_eq!(same.count(), 3);
     let ticks: Vec<_> = decode_all(&mut same.decoder())
@@ -508,8 +508,8 @@ fn merges() {
     assert_eq!(ticks, vec![1, 2, 3]);
     // Different bases: re-encoded.
     let mut other = GtsEncoder::new(100);
-    other.merge(&a).unwrap();
-    other.merge(&b).unwrap();
+    other.merge(&a).expect("merge should succeed");
+    other.merge(&b).expect("merge should succeed");
     let ticks: Vec<_> = decode_all(&mut other.decoder())
         .into_iter()
         .map(|p| p.0)
@@ -522,7 +522,7 @@ fn merges() {
         encoded: Some(hex("442121")),
         ..GtsWrapper::default()
     };
-    let corrupt = wrapper_to_encoder(&wrapper).unwrap();
+    let corrupt = wrapper_to_encoder(&wrapper).expect("wrapper_to_encoder should succeed");
     let mut target = GtsEncoder::new(1);
     assert!(target.merge(&corrupt).is_err());
 }
@@ -553,10 +553,10 @@ fn wrappers() {
     assert_eq!(wrapper.compressed, Some(true));
     assert!(wrapper.compression_passes.is_some_and(|p| p > 1));
     assert_eq!(wrapper.base, Some(7));
-    let gts = wrapper_to_gts(&wrapper, false).unwrap();
+    let gts = wrapper_to_gts(&wrapper, false).expect("wrapper_to_gts should succeed");
     assert_eq!(gts.size(), 128);
     assert_eq!(gts.metadata.labels.len(), 1);
-    let back = wrapper_to_encoder(&wrapper).unwrap();
+    let back = wrapper_to_encoder(&wrapper).expect("wrapper_to_encoder should succeed");
     assert_eq!(back.count(), 128);
     let wrapper = encoder_to_wrapper(&big, true, DEFAULT_COMP_RATIO_THRESHOLD, true);
     assert_eq!(wrapper.compressed, Some(true));
@@ -596,7 +596,7 @@ fn wrappers() {
 #[test]
 fn unwrapping() {
     let invalid = |w: &GtsWrapper| {
-        let e = wrapper_to_gts(w, false).unwrap_err();
+        let e = wrapper_to_gts(w, false).expect_err("wrapper_to_gts should fail");
         assert_eq!(e.message(), "Invalid compressed content.");
     };
     invalid(&GtsWrapper {
@@ -619,21 +619,26 @@ fn unwrapping() {
         lastbucket: Some(9),
         ..GtsWrapper::default()
     };
-    let gts = wrapper_to_gts(&w, false).unwrap();
+    let gts = wrapper_to_gts(&w, false).expect("wrapper_to_gts should succeed");
     assert_eq!(
         (gts.size(), gts.bucketcount, gts.bucketspan, gts.lastbucket),
         (1, 3, 2, 9)
     );
     assert_eq!(gts.name(), None);
-    assert_eq!(wrapper_to_gts(&w, true).unwrap().size(), 0);
+    assert_eq!(
+        wrapper_to_gts(&w, true)
+            .expect("wrapper_to_gts should succeed")
+            .size(),
+        0
+    );
     assert_eq!(
         wrapper_to_gts(&GtsWrapper::default(), false)
-            .unwrap()
+            .expect("the value should succeed")
             .size(),
         0
     );
     // Encoders.
-    let e = wrapper_to_encoder(&GtsWrapper::default()).unwrap_err();
+    let e = wrapper_to_encoder(&GtsWrapper::default()).expect_err("wrapper_to_encoder should fail");
     assert_eq!(
         crate::error::compat::exception_class(&e),
         "java.lang.NullPointerException"
@@ -647,7 +652,7 @@ fn unwrapping() {
         }),
         ..GtsWrapper::default()
     };
-    let e = wrapper_to_encoder(&w).unwrap();
+    let e = wrapper_to_encoder(&w).expect("wrapper_to_encoder should succeed");
     assert_eq!((e.base(), e.metadata.name.as_deref()), (4, Some("x")));
     let w = GtsWrapper {
         encoded: Some(vec![1]),

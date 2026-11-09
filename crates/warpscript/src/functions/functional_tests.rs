@@ -1,7 +1,5 @@
 // Copyright 2026 The influxftl Authors. Licensed under the Apache License, Version 2.0.
 
-#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
-
 use std::cmp::Ordering;
 
 use super::functional::{natural_compare, natural_sort, shuffle_impl, shuffle_with, sort_with};
@@ -39,8 +37,8 @@ fn lmap_and_lflatmap() {
     assert_top("[ ] <% %> LMAP", longs(&[]));
     // A new list is built.
     let mut stack = exec("[ 1 ] DUP <% DROP %> LMAP");
-    let mapped = stack.pop().unwrap();
-    let original = stack.pop().unwrap();
+    let mapped = stack.pop().expect("pop should succeed");
+    let original = stack.pop().expect("pop should succeed");
     assert_eq!(mapped, original);
     assert!(!mapped.same_object(&original));
     assert_eq!(show("[ 1 [ 2 3 ] ] <% DROP %> LMAP"), "[1, [2, 3]]");
@@ -161,8 +159,8 @@ fn nonnull_and_filterby() {
     assert_eq!(show("[ 1 NULL 'a' NULL ] NONNULL"), "[1, a]");
     assert_eq!(show("[ ] NONNULL"), "[]");
     let mut stack = exec("[ 1 ] DUP NONNULL");
-    let filtered = stack.pop().unwrap();
-    let original = stack.pop().unwrap();
+    let filtered = stack.pop().expect("pop should succeed");
+    let original = stack.pop().expect("pop should succeed");
     assert_eq!(filtered, original);
     assert!(!filtered.same_object(&original));
     assert_fails("1 NONNULL", "NONNULL operates on a list.");
@@ -216,7 +214,7 @@ fn natural_ordering() {
     assert_eq!(natural_compare(&Value::Long(1), &Value::Double(1.0)), None);
     assert_eq!(natural_compare(&Value::Null, &Value::Null), None);
     let mut items = vec![Value::Long(2), Value::Long(1)];
-    natural_sort("X", &mut items).unwrap();
+    natural_sort("X", &mut items).expect("natural_sort should succeed");
     assert_eq!(items, vec![Value::Long(1), Value::Long(2)]);
 }
 
@@ -229,8 +227,8 @@ fn lsort() {
     );
     // In place, the list stays on the stack.
     let mut stack = exec("[ 3 1 2 ] DUP LSORT");
-    let sorted = stack.pop().unwrap();
-    let original = stack.pop().unwrap();
+    let sorted = stack.pop().expect("pop should succeed");
+    let original = stack.pop().expect("pop should succeed");
     assert!(sorted.same_object(&original));
     assert_eq!(sorted, longs(&[1, 2, 3]));
     // Doubles: Double.compare order (reference from Collections.sort on JDK 27).
@@ -241,9 +239,9 @@ fn lsort() {
             .map(Value::Double)
             .collect(),
     ));
-    crate::functions::call(&mut stack, "LSORT").unwrap();
+    crate::functions::call(&mut stack, "LSORT").expect("call should succeed");
     assert_eq!(
-        stack.pop().unwrap(),
+        stack.pop().expect("pop should succeed"),
         Value::list(
             [f64::NEG_INFINITY, -0.0, 0.0, 1.0, 3.0, f64::NAN]
                 .into_iter()
@@ -278,8 +276,8 @@ fn msort() {
     assert_eq!(show("{ } MSORT"), "{}");
     assert_eq!(show("{ [ ] 1 } MSORT"), "{[]=1}");
     let mut stack = exec("{ 'b' 1 'a' 2 } DUP MSORT");
-    let sorted = stack.pop().unwrap();
-    let original = stack.pop().unwrap();
+    let sorted = stack.pop().expect("pop should succeed");
+    let original = stack.pop().expect("pop should succeed");
     assert!(sorted.same_object(&original));
     assert_fails(
         "{ 1 'x' 'a' 'y' } MSORT",
@@ -311,8 +309,8 @@ fn sortby() {
     assert_top("[ ] <% %> SORTBY", longs(&[]));
     // In place, pushed back.
     let mut stack = exec("[ 2 1 ] DUP <% %> SORTBY");
-    let sorted = stack.pop().unwrap();
-    let original = stack.pop().unwrap();
+    let sorted = stack.pop().expect("pop should succeed");
+    let original = stack.pop().expect("pop should succeed");
     assert!(sorted.same_object(&original));
     assert_eq!(sorted, longs(&[1, 2]));
     // Maps: the macro gets the key and the value.
@@ -320,8 +318,8 @@ fn sortby() {
     assert_eq!(show("{ 'a' 2 'b' 1 } <% SWAP DROP %> SORTBY"), "{b=1, a=2}");
     assert_eq!(show("{ } <% %> SORTBY"), "{}");
     let mut stack = exec("{ 'b' 1 'a' 2 } DUP <% DROP %> SORTBY");
-    let sorted = stack.pop().unwrap();
-    let original = stack.pop().unwrap();
+    let sorted = stack.pop().expect("pop should succeed");
+    let original = stack.pop().expect("pop should succeed");
     assert!(sorted.same_object(&original));
     let message = "SORTBY expects its macro to return a non null double, long or string in a consistent manner.";
     assert_fails("[ 1 ] <% DROP true %> SORTBY", message);
@@ -351,8 +349,8 @@ fn sortwith_trace(list: &str) -> (String, String) {
     let mut stack = exec(&format!(
         "[ ] 'log' STORE {list} <% 2 DUPN 2 ->LIST 1 ->LIST $log SWAP APPEND DROP - %> SORTWITH $log"
     ));
-    let log = stack.pop().unwrap().to_string();
-    let sorted = stack.pop().unwrap().to_string();
+    let log = stack.pop().expect("pop should succeed").to_string();
+    let sorted = stack.pop().expect("pop should succeed").to_string();
     (sorted, log)
 }
 
@@ -430,8 +428,8 @@ fn sortwith_lists_and_maps() {
         longs(&[11, 12, 21, 22, 23]),
     );
     let mut stack = exec("[ 2 1 ] DUP <% - %> SORTWITH");
-    let sorted = stack.pop().unwrap();
-    let original = stack.pop().unwrap();
+    let sorted = stack.pop().expect("pop should succeed");
+    let original = stack.pop().expect("pop should succeed");
     assert!(sorted.same_object(&original));
     assert_eq!(sorted, longs(&[1, 2]));
     // Maps: the comparator gets key1 value1 key2 value2.
@@ -441,8 +439,8 @@ fn sortwith_lists_and_maps() {
     );
     assert_eq!(show("{ } <% %> SORTWITH"), "{}");
     let mut stack = exec("{ 'a' 3 'b' 1 } DUP <% SWAP DROP ROT DROP - %> SORTWITH");
-    let sorted = stack.pop().unwrap();
-    let original = stack.pop().unwrap();
+    let sorted = stack.pop().expect("pop should succeed");
+    let original = stack.pop().expect("pop should succeed");
     assert!(sorted.same_object(&original));
     assert_fails(
         "[ ] 1 SORTWITH",
@@ -487,7 +485,7 @@ fn sortwith_merge_sort_beyond_31_elements() {
     );
     // Direct check of the merge sort with an inconsistent comparator: it terminates.
     let mut values: Vec<i64> = (0..40).collect();
-    sort_with(&mut values, |_, _| Ok(1)).unwrap();
+    sort_with(&mut values, |_, _| Ok(1)).expect("sort_with should succeed");
     assert_eq!(values.len(), 40);
 }
 
@@ -559,7 +557,10 @@ fn shuffled(seed: i64, n: i64) -> Vec<i64> {
     let mut items: Vec<Value> = (0..n).map(Value::Long).collect();
     let mut rnd = JavaRandom::new(seed);
     shuffle_with(&mut items, &mut rnd);
-    items.iter().map(|v| v.as_i64().unwrap()).collect()
+    items
+        .iter()
+        .map(|v| v.as_i64().expect("as_i64 should succeed"))
+        .collect()
 }
 
 #[test]
@@ -584,13 +585,17 @@ fn shuffle_matches_java_random() {
 fn shuffle_function() {
     // In place, the list stays on the stack, with the same elements.
     let mut stack = exec("[ 1 2 3 4 5 6 7 8 ] DUP SHUFFLE");
-    let shuffled = stack.pop().unwrap();
-    let original = stack.pop().unwrap();
+    let shuffled = stack.pop().expect("pop should succeed");
+    let original = stack.pop().expect("pop should succeed");
     assert!(shuffled.same_object(&original));
     let Value::List(list) = shuffled else {
         panic!("not a list");
     };
-    let mut items: Vec<i64> = list.borrow().iter().map(|v| v.as_i64().unwrap()).collect();
+    let mut items: Vec<i64> = list
+        .borrow()
+        .iter()
+        .map(|v| v.as_i64().expect("as_i64 should succeed"))
+        .collect();
     items.sort_unstable();
     assert_eq!(items, (1..=8).collect::<Vec<_>>());
     assert_top("[ ] SHUFFLE", longs(&[]));
@@ -601,7 +606,7 @@ fn shuffle_function() {
     stack.push(longs(&[1, 2]));
     assert_eq!(
         shuffle_impl(&mut stack, Err(getrandom::Error::UNSUPPORTED))
-            .unwrap_err()
+            .expect_err("the value should fail")
             .to_string(),
         format!(
             "Unable to obtain random data from the operating system ({}).",
@@ -610,7 +615,9 @@ fn shuffle_function() {
     );
     stack.push(Value::Long(1));
     assert_eq!(
-        shuffle_impl(&mut stack, Ok(42)).unwrap_err().to_string(),
+        shuffle_impl(&mut stack, Ok(42))
+            .expect_err("shuffle_impl should fail")
+            .to_string(),
         "SHUFFLE operates on a list."
     );
 }

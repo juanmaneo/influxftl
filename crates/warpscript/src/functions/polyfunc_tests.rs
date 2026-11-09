@@ -1,7 +1,5 @@
 // Copyright 2026 The influxftl Authors. Licensed under the Apache License, Version 2.0.
 
-#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
-
 //! Oracle-checked tests of `POLYFUNC`, `RANDPDF` and `SRANDPDF`.
 //! The expectations are the answers of Warp 10 3.5.0 to the same scripts:
 //! the JSON stack (top first) or the error message (in its JDK 11+ form).
@@ -32,7 +30,7 @@ fn stack_json(script: &str) -> Result<String, String> {
     stack
         .exec_checked(&format!("{script} DEPTH ->LIST REVERSE ->JSON"))
         .map_err(|err| err.to_string())?;
-    match stack.pop().unwrap() {
+    match stack.pop().expect("pop should succeed") {
         Value::String(json) => Ok(json.to_string()),
         other => panic!("not a string: {other:?}"),
     }
@@ -349,18 +347,20 @@ fn randpdf() {
 #[test]
 fn randpdf_entropy() {
     let mut stack = test_stack();
-    stack.exec_checked("{ 'a' 1 'b' 0 } RANDPDF EVAL").unwrap();
-    assert_eq!(stack.pop().unwrap(), Value::from("a"));
+    stack
+        .exec_checked("{ 'a' 1 'b' 0 } RANDPDF EVAL")
+        .expect("exec_checked should succeed");
+    assert_eq!(stack.pop().expect("pop should succeed"), Value::from("a"));
     let error = super::polyfunc::unseeded_draw(&mut stack, || Err(getrandom::Error::UNSUPPORTED))
-        .unwrap_err();
+        .expect_err("the value should fail");
     assert!(error.to_string().contains("random data"), "{error}");
     // An exact match is the index Java's binary search lands on, not the first equal one.
     assert_eq!(
-        super::polyfunc::pick(&[0.5, 0.5, 1.0], 0.5).unwrap(),
+        super::polyfunc::pick(&[0.5, 0.5, 1.0], 0.5).expect("pick should succeed"),
         Value::Long(1)
     );
     assert_eq!(
-        super::polyfunc::pick(&[0.5, 0.5, 1.0], 0.75).unwrap(),
+        super::polyfunc::pick(&[0.5, 0.5, 1.0], 0.75).expect("pick should succeed"),
         Value::Long(2)
     );
 }

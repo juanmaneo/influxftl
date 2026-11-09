@@ -1,7 +1,5 @@
 // Copyright 2026 The influxftl Authors. Licensed under the Apache License, Version 2.0.
 
-#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
-
 //! Tests of the kernel smoothers. The expected values were checked against Warp 10 3.5.0
 //! (`warp10io/warp10:3.5.0-alpine`).
 
@@ -146,7 +144,11 @@ fn transcendental_kernels() {
         )) else {
             panic!("{kernel}: not a list");
         };
-        let actual: Vec<f64> = list.borrow().iter().map(|v| v.as_f64().unwrap()).collect();
+        let actual: Vec<f64> = list
+            .borrow()
+            .iter()
+            .map(|v| v.as_f64().expect("as_f64 should succeed"))
+            .collect();
         for (a, e) in actual.iter().zip(expected) {
             assert!(
                 (a - e).abs() <= 4.0 * f64::EPSILON * e.abs(),
@@ -177,7 +179,13 @@ fn errors_and_edge_cases() {
         weights: Kernel::Uniform.weights(2),
     };
     assert_eq!(smoother.roles(), Roles::MAPPER);
-    assert_eq!(Window::of(&[]).apply(&smoother).unwrap().value, Value::Null);
+    assert_eq!(
+        Window::of(&[])
+            .apply(&smoother)
+            .expect("apply should succeed")
+            .value,
+        Value::Null
+    );
     // A negative distance in steps for a non numeric value is skipped before the lookup.
     let smoother = Smoother {
         step: -1,
@@ -186,7 +194,7 @@ fn errors_and_edge_cases() {
     assert_eq!(
         Window::of(&[Value::string("a"), Value::Boolean(true)])
             .apply(&smoother)
-            .unwrap()
+            .expect("the value should succeed")
             .value,
         Value::Null
     );
