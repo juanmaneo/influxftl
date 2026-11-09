@@ -23,7 +23,7 @@ pub fn to_geoxp_point(lat: f64, lon: f64) -> i64 {
 /// `HHCodeHelper.buildHHCode` at the maximum resolution (32): interleave the latitude (odd
 /// bits) and longitude (even bits) units, wrapping latitudes beyond the pole onto the other
 /// hemisphere.
-fn build_hhcode(mut lat: i64, mut lon: i64) -> i64 {
+pub(crate) fn build_hhcode(mut lat: i64, mut lon: i64) -> i64 {
     if lat & 0x1_0000_0000 != 0 {
         lat ^= 0xFFFF_FFFF;
         lon ^= 0x8000_0000;
@@ -83,7 +83,7 @@ pub fn loxodromic_distance(from: i64, to: i64) -> f64 {
 
 /// `HHCodeHelper.splitHHCode` at the maximum resolution: de-interleave the latitude and
 /// longitude units.
-fn split_hhcode(hhcode: i64) -> (i64, i64) {
+pub(crate) fn split_hhcode(hhcode: i64) -> (i64, i64) {
     let mut lat: i64 = 0;
     let mut lon: i64 = 0;
     for i in (0..32).rev() {

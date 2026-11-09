@@ -22,6 +22,7 @@ use indexmap::{IndexMap, IndexSet};
 use crate::bitset::BitSet;
 use crate::encoder::GtsEncoder;
 use crate::format::java_double_to_string;
+use crate::geoshape::GeoShape;
 use crate::gts::Gts;
 use crate::macros::Macro;
 
@@ -119,6 +120,8 @@ pub enum Value {
     Gts(Gts),
     /// `GTSENCODER`: an encoder of datapoints, shared and mutable like the Java object.
     Encoder(Encoder),
+    /// `GEOSHAPE`: a set of geocells (immutable).
+    GeoShape(Rc<GeoShape>),
 }
 
 /// The kind of a [`Value`], without its content. Failures carry it instead of the value; the
@@ -165,6 +168,8 @@ pub enum ValueKind {
     Gts,
     /// `GTSENCODER`.
     Encoder,
+    /// `GEOSHAPE`.
+    GeoShape,
 }
 
 /// A `GTSENCODER` as held by the stack.
@@ -219,6 +224,7 @@ impl Value {
             Value::Counter(_) => "COUNTER",
             Value::Gts(_) => "GTS",
             Value::Encoder(_) => "GTSENCODER",
+            Value::GeoShape(_) => "GEOSHAPE",
         }
     }
 
@@ -245,6 +251,7 @@ impl Value {
             Value::Counter(_) => ValueKind::Counter,
             Value::Gts(_) => ValueKind::Gts,
             Value::Encoder(_) => ValueKind::Encoder,
+            Value::GeoShape(_) => ValueKind::GeoShape,
         }
     }
 
@@ -311,6 +318,7 @@ impl Value {
             (Value::Counter(a), Value::Counter(b)) => Rc::ptr_eq(a, b),
             (Value::Gts(a), Value::Gts(b)) => Rc::ptr_eq(a, b),
             (Value::Encoder(a), Value::Encoder(b)) => Rc::ptr_eq(a, b),
+            (Value::GeoShape(a), Value::GeoShape(b)) => Rc::ptr_eq(a, b),
             (Value::String(a), Value::String(b)) => Rc::ptr_eq(a, b),
             (Value::Bytes(a), Value::Bytes(b)) => Rc::ptr_eq(a, b),
             _ => false,
@@ -396,6 +404,8 @@ impl PartialEq for Value {
             | (Value::Counter(_), Value::Counter(_))
             | (Value::Gts(_), Value::Gts(_))
             | (Value::Encoder(_), Value::Encoder(_)) => self.same_object(other),
+            // `GeoXPShape` has no `equals`; `EQ` compares the geocells.
+            (Value::GeoShape(a), Value::GeoShape(b)) => a == b,
             _ => false,
         }
     }
@@ -446,6 +456,8 @@ impl Hash for Value {
             Value::Counter(c) => (Rc::as_ptr(c) as usize).hash(state),
             Value::Gts(g) => (Rc::as_ptr(g) as usize).hash(state),
             Value::Encoder(e) => (Rc::as_ptr(e) as usize).hash(state),
+            // `GeoXPShape` overrides `equals` but not `hashCode`: sets tell two shapes apart.
+            Value::GeoShape(s) => (Rc::as_ptr(s) as usize).hash(state),
         }
     }
 }
@@ -506,6 +518,12 @@ impl fmt::Display for Value {
                 "{}@{:x}",
                 crate::error::compat::value_class(ValueKind::Encoder),
                 e.borrow().size()
+            ),
+            Value::GeoShape(s) => write!(
+                f,
+                "{}@{:x}",
+                crate::error::compat::value_class(ValueKind::GeoShape),
+                s.cells().len()
             ),
         }
     }

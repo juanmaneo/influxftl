@@ -324,6 +324,7 @@ impl Error {
     pub fn is_runtime(&self) -> bool {
         match self {
             Error::Aggregator(err) => matches!(err, AggregatorError::NotNumeric(_)),
+            Error::Geo(err) => matches!(err, GeoError::InvalidGeoHash { .. }),
             Error::Thrift(err) => !err.is_malformed_input(),
             Error::Encoder(err) => err.is_runtime(),
             Error::Pickle(err) => err.is_runtime(),
@@ -350,7 +351,6 @@ impl Error {
             | Error::Series(_)
             | Error::Collection(_)
             | Error::Crypto(_)
-            | Error::Geo(_)
             | Error::Platform(_)
             | Error::Io(_)
             | Error::Format(_)

@@ -989,3 +989,12 @@ Java's `PatternSyntaxException` (an unclosed `(` for instance), and a pattern th
 catastrophically fails with the backtrack limit error of `fancy-regex` where Java keeps
 searching. A group name such as `(?<V>…)` fails with the JDK 11 message, where the JDK 8
 oracle gives another one.
+
+## 28. `GEOSHAPE`
+
+A shape is a sorted set of geocells; `==` compares the cells, but the hash of a shape is its
+identity (Warp 10's `GeoXPShape` overrides `equals` and not `hashCode`), so a set keeps two equal
+shapes. `->PICKLE` writes a shape as the dictionary of its class, like Pyrolite does for a bean
+without property. The message of the `NumberFormatException` of a malformed HHCode string is the
+one of JDK 11+ (`For input string: "zz00000000000000" under radix 16`); the JDK 8 oracle reports
+the string without its last character.

@@ -226,6 +226,12 @@ fn append(out: &mut String, value: &Value, depth: usize, readable: bool) -> Resu
             out.push_str(&opb64_encode(&serialize_wrapper(&wrapper)));
             out.push_str("' UNWRAPENCODER ");
         }
+        // `'…' GEOUNPACK`, the `GEOPACK` of the shape.
+        Value::GeoShape(shape) => {
+            out.push('\'');
+            out.push_str(&shape.pack());
+            out.push_str("' GEOUNPACK ");
+        }
     }
     Ok(())
 }

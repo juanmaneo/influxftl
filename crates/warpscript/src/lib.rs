@@ -23,6 +23,9 @@ pub mod bigdecimal;
 mod bigdecimal_tests;
 pub mod bitset;
 pub mod cmath;
+pub mod coverage;
+#[cfg(test)]
+mod coverage_tests;
 pub mod curvefit;
 #[cfg(test)]
 mod curvefit_tests;
@@ -43,6 +46,8 @@ mod filters_tests;
 pub mod finite;
 pub mod format;
 pub mod functions;
+pub mod geohash;
+pub mod geoshape;
 pub mod geoxp;
 pub mod gts;
 pub mod gtsparse;

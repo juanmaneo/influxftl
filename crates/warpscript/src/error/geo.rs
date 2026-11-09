@@ -12,6 +12,14 @@ pub enum GeoError {
     /// A byte array HHCode of more than 8 bytes.
     #[error("Byte array HHCode must be of length <= 8")]
     BytesHhcodeTooLong,
+    /// A GeoHash with a character that is not in the base 32 alphabet.
+    #[error("Invalid GeoHash '{geohash}' at index {index}")]
+    InvalidGeoHash {
+        /// The GeoHash.
+        geohash: String,
+        /// The UTF-16 index of the character.
+        index: usize,
+    },
     /// An HHCode that is neither a long, a string nor a byte array.
     #[error("HHCode must be represented as a long, a string or a byte array.")]
     HhcodeType,

@@ -6,6 +6,7 @@
 
 use super::aggregator::AggregatorError;
 use super::fault::{BoundsError, ResourceError};
+use super::geo::GeoError;
 use super::math::MathError;
 use super::text::ReplacementClass;
 use super::{Class, Error};
@@ -21,7 +22,8 @@ const WARP_SCRIPT_EXCEPTION: &str = "io.warp10.script.WarpScriptException";
 /// The Java class of the exception `err` stands for.
 pub fn exception_class(err: &Error) -> &'static str {
     match err {
-        Error::Aggregator(AggregatorError::NotNumeric(_)) => "java.lang.RuntimeException",
+        Error::Aggregator(AggregatorError::NotNumeric(_))
+        | Error::Geo(GeoError::InvalidGeoHash { .. }) => "java.lang.RuntimeException",
         Error::Context { .. }
         | Error::Usage { .. }
         | Error::Stack(_)
@@ -30,8 +32,8 @@ pub fn exception_class(err: &Error) -> &'static str {
         | Error::Aggregator(_)
         | Error::Collection(_)
         | Error::Crypto(_)
-        | Error::Geo(_)
         | Error::Platform(_)
+        | Error::Geo(_)
         | Error::Format(_)
         | Error::Wrapped { .. }
         | Error::NotFinite(_) => WARP_SCRIPT_EXCEPTION,
@@ -124,6 +126,7 @@ pub fn value_class(kind: ValueKind) -> &'static str {
         ValueKind::Counter => "java.util.concurrent.atomic.AtomicLong",
         ValueKind::Gts => "io.warp10.continuum.gts.GeoTimeSerie",
         ValueKind::Encoder => "io.warp10.continuum.gts.GTSEncoder",
+        ValueKind::GeoShape => "com.geoxp.GeoXPLib$GeoXPShape",
     }
 }
 

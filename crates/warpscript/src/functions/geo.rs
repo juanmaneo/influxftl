@@ -100,7 +100,7 @@ pub const FUNCTIONS: &[(&str, Entry)] = &[
 ];
 
 /// The 16 lowercase hexadecimal digits of an HHCode (`Hex.encodeHexString(Longs.toByteArray)`).
-fn hex16(hhcode: i64) -> String {
+pub(super) fn hex16(hhcode: i64) -> String {
     format!("{hhcode:016x}")
 }
 
@@ -154,7 +154,7 @@ fn hh_and_res(value: &Value) -> Result<(i64, i32)> {
 
 /// [`hh_and_res`] for `name`: its script errors become the cause of `<name> <message>`, the
 /// `NumberFormatException` of a bad hexadecimal string goes through.
-fn hh_and_res_for(name: &str, value: &Value, message: &str) -> Result<(i64, i32)> {
+pub(super) fn hh_and_res_for(name: &str, value: &Value, message: &str) -> Result<(i64, i32)> {
     hh_and_res(value).map_err(|err| {
         if err.is_runtime() {
             err
@@ -234,11 +234,17 @@ fn geocellto(stack: &mut Stack) -> Result<()> {
     let Value::Long(geocell) = stack.pop()? else {
         return Err(fail("GEOCELL->", "expects a LONG geocell."));
     };
+    stack.push(Value::from(geocell_prefix(geocell)));
+    Ok(())
+}
+
+/// `GEOCELLTO.geocellToHHCodePrefix`: the HHCode digits of the cell, as many as its
+/// resolution.
+pub(super) fn geocell_prefix(geocell: i64) -> String {
     let hex = format!("{:x}", geocell as u64);
     // The hexadecimal form of a geocell has 16 digits whenever its resolution is not 0.
     let end = ((geocell as u64) >> 60) as usize + 1;
-    stack.push(Value::from(hex.get(1..end).unwrap_or_default().to_owned()));
-    Ok(())
+    hex.get(1..end).unwrap_or_default().to_owned()
 }
 
 /// `HHCODEFUNC`: a neighbour, the bounding box or the center of the cell of an HHCode, at

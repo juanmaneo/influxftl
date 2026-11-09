@@ -808,6 +808,7 @@ fn size(stack: &mut Stack) -> Result<()> {
             return Ok(());
         }
         Value::Macro(m) => m.len(),
+        Value::GeoShape(shape) => shape.cells().len(),
         _ => {
             return Err(fail(
                 "SIZE",

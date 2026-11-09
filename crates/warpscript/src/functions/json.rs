@@ -232,7 +232,11 @@ impl Serializer {
     fn write_value(&mut self, value: &Value, depth: usize) -> SerializeResult {
         match value {
             // Beans and unknown objects are replaced by `null` (`CustomSerializer`).
-            Value::Null | Value::BitSet(_) | Value::Mark | Value::Context(_) => {
+            Value::Null
+            | Value::BitSet(_)
+            | Value::Mark
+            | Value::Context(_)
+            | Value::GeoShape(_) => {
                 self.out.push_str("null");
             }
             Value::Boolean(b) => self.out.push_str(if *b { "true" } else { "false" }),

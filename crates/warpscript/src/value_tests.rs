@@ -263,3 +263,25 @@ fn context_is_cloneable() {
     let copy = (*ctx).clone();
     assert_eq!(copy.registers.len(), 0);
 }
+
+#[test]
+fn a_shape_is_a_value_of_its_own_kind() {
+    use std::rc::Rc;
+
+    use crate::geoshape::GeoShape;
+    use crate::value::ValueKind;
+
+    let shape = Value::GeoShape(Rc::new(GeoShape::from_cells(vec![
+        5_447_895_397_676_613_632,
+    ])));
+    assert_eq!(shape.kind(), ValueKind::GeoShape);
+    assert_eq!(shape.type_name(), "GEOSHAPE");
+    assert_eq!(shape.to_string(), "com.geoxp.GeoXPLib$GeoXPShape@1");
+    let same = shape.clone();
+    let equal = Value::GeoShape(Rc::new(GeoShape::from_cells(vec![
+        5_447_895_397_676_613_632,
+    ])));
+    assert!(shape.same_object(&same));
+    assert!(!shape.same_object(&equal));
+    assert_eq!(shape, equal);
+}
