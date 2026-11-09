@@ -105,7 +105,12 @@ fn hex16(hhcode: i64) -> String {
 
 /// `Long.parseUnsignedLong(s, 16)` of a 16 character string.
 fn parse_unsigned_hex(s: &str) -> Result<i64> {
-    let invalid = || Error::from(NumberFormatError::InvalidHexInput(s.to_owned()));
+    let invalid = || {
+        Error::from(NumberFormatError::InvalidRadixInput {
+            input: s.to_owned(),
+            radix: 16,
+        })
+    };
     let digits = match s.strip_prefix('+') {
         Some(rest) => rest,
         None if s.starts_with('-') => {

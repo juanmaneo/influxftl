@@ -14,11 +14,12 @@ use super::Entry;
 use super::args::fail;
 use super::math::{ATTRIBUTE_SEEDED_PRNG, entropy_error};
 use crate::bigdecimal::{
-    BigDecimal, RoundingMode, arithmetic, bit_count, bit_length, change_bit, from_byte_array,
+    BigDecimal, RoundingMode, bit_count, bit_length, change_bit, from_byte_array,
     is_probable_prime, lowest_set_bit, mod_inverse, mod_pow, modulo, next_probable_prime,
     parse_bigint, shift_left, test_bit, to_byte_array,
 };
 use crate::error::Result;
+use crate::error::fault::ArithmeticError;
 use crate::jrandom::JavaRandom;
 use crate::stack::Stack;
 use crate::value::Value;
@@ -285,7 +286,7 @@ fn bdto(stack: &mut Stack) -> Result<()> {
 fn binary(
     stack: &mut Stack,
     name: &str,
-    op: fn(BigDecimal, BigDecimal) -> Result<BigDecimal>,
+    op: fn(BigDecimal, BigDecimal) -> core::result::Result<BigDecimal, ArithmeticError>,
 ) -> Result<()> {
     let a = to_big_decimal(name, &stack.pop()?)?;
     let b = to_big_decimal(name, &stack.pop()?)?;
@@ -343,7 +344,7 @@ fn bdpow(stack: &mut Stack) -> Result<()> {
     const NAME: &str = "BDPOW";
     let exponent = match stack.pop()? {
         Value::BigDecimal(bd) => bd.int_value_exact()?,
-        Value::Long(l) => i32::try_from(l).map_err(|_| arithmetic("integer overflow"))?,
+        Value::Long(l) => i32::try_from(l).map_err(|_| ArithmeticError::IntegerOverflow)?,
         _ => return Err(fail(NAME, "only supports LONG or BIGDECIMAL exponent.")),
     };
     let base = to_big_decimal(NAME, &stack.pop()?)?;
@@ -359,7 +360,7 @@ fn bdscale(stack: &mut Stack) -> Result<()> {
             stack.push(Value::Long(i64::from(bd.scale)));
             return Ok(());
         }
-        Value::Long(l) => i32::try_from(l).map_err(|_| arithmetic("integer overflow"))?,
+        Value::Long(l) => i32::try_from(l).map_err(|_| ArithmeticError::IntegerOverflow)?,
         _ => return Err(fail(NAME, "only supports LONG scale.")),
     };
     let value = to_big_decimal(NAME, &stack.pop()?)?;
@@ -368,7 +369,11 @@ fn bdscale(stack: &mut Stack) -> Result<()> {
 }
 
 /// A function of the integers below (`a`) and on top (`b`).
-fn integers(stack: &mut Stack, name: &str, op: fn(BigInt, BigInt) -> Result<BigInt>) -> Result<()> {
+fn integers(
+    stack: &mut Stack,
+    name: &str,
+    op: fn(BigInt, BigInt) -> core::result::Result<BigInt, ArithmeticError>,
+) -> Result<()> {
     let b = to_big_integer(name, &stack.pop()?)?;
     let a = to_big_integer(name, &stack.pop()?)?;
     stack.push(bd_value(BigDecimal::from_bigint(op(a, b)?)));
@@ -376,7 +381,11 @@ fn integers(stack: &mut Stack, name: &str, op: fn(BigInt, BigInt) -> Result<BigI
 }
 
 /// A function of the integer on top.
-fn integer(stack: &mut Stack, name: &str, op: fn(BigInt) -> Result<BigInt>) -> Result<()> {
+fn integer(
+    stack: &mut Stack,
+    name: &str,
+    op: fn(BigInt) -> core::result::Result<BigInt, ArithmeticError>,
+) -> Result<()> {
     let a = to_big_integer(name, &stack.pop()?)?;
     stack.push(bd_value(BigDecimal::from_bigint(op(a)?)));
     Ok(())
@@ -398,7 +407,11 @@ fn pop_bit(stack: &mut Stack, name: &str) -> Result<i32> {
 }
 
 /// A bit operation of the integer below with the bit number on top.
-fn bit(stack: &mut Stack, name: &str, op: fn(BigInt, i32) -> Result<BigInt>) -> Result<()> {
+fn bit(
+    stack: &mut Stack,
+    name: &str,
+    op: fn(BigInt, i32) -> core::result::Result<BigInt, ArithmeticError>,
+) -> Result<()> {
     let n = pop_bit(stack, name)?;
     let a = to_big_integer(name, &stack.pop()?)?;
     stack.push(bd_value(BigDecimal::from_bigint(op(a, n)?)));
@@ -539,7 +552,7 @@ fn bdprobableprime(stack: &mut Stack, name: &str, seeded: bool) -> Result<()> {
     let mut source = Source::new(stack, name, seeded)?;
     let bits = pop_bits(stack, name)?;
     if bits < 2 {
-        return Err(arithmetic("bitLength < 2"));
+        return Err(ArithmeticError::BitLengthTooSmall.into());
     }
     let top = BigInt::from(1u8) << (bits - 1) as usize;
     let prime = loop {

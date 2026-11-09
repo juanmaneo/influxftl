@@ -13,17 +13,12 @@ use num_bigint::{BigInt, Sign};
 use num_integer::Integer;
 use num_traits::{One, Signed, ToPrimitive, Zero};
 
-use crate::error::{Error, Result};
+use crate::error::fault::{ArithmeticError, NumberFormatError};
 
-/// `ArithmeticException` with `message`.
-pub fn arithmetic(message: &str) -> Error {
-    Error::runtime("java.lang.ArithmeticException", message)
-}
-
-/// `NumberFormatException` with `message`.
-fn number_format(message: impl Into<String>) -> Error {
-    Error::runtime("java.lang.NumberFormatException", message)
-}
+/// The result of a decimal or integer operation.
+type ArithResult<T> = Result<T, ArithmeticError>;
+/// The result of reading a decimal or an integer.
+type ParseResult<T> = Result<T, NumberFormatError>;
 
 /// Rounding modes of `setScale` (besides `UNNECESSARY`, see [`BigDecimal::set_scale`]).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -84,9 +79,9 @@ impl BigDecimal {
     }
 
     /// `BigDecimal.valueOf(double)`: `new BigDecimal(Double.toString(d))`.
-    pub fn from_f64(value: f64) -> Result<BigDecimal> {
+    pub fn from_f64(value: f64) -> ParseResult<BigDecimal> {
         if !value.is_finite() {
-            return Err(number_format("Infinite or NaN"));
+            return Err(NumberFormatError::NotFinite);
         }
         Ok(BigDecimal::from_finite_f64(value))
     }
@@ -98,9 +93,9 @@ impl BigDecimal {
     }
 
     /// `new BigDecimal(double)`: the exact binary value of a finite double.
-    pub fn from_f64_exact(value: f64) -> Result<BigDecimal> {
+    pub fn from_f64_exact(value: f64) -> ParseResult<BigDecimal> {
         if !value.is_finite() {
-            return Err(number_format("Infinite or NaN"));
+            return Err(NumberFormatError::NotFinite);
         }
         if value == 0.0 {
             return Ok(BigDecimal::from_i64(0));
@@ -133,8 +128,8 @@ impl BigDecimal {
     /// `new BigDecimal(String)`: an optional sign, digits with an optional decimal point and an
     /// optional exponent (`NumberFormatException` without message for an empty string or
     /// exponent).
-    pub fn parse(text: &str) -> Result<BigDecimal> {
-        let bare = || number_format("NumberFormatException");
+    pub fn parse(text: &str) -> ParseResult<BigDecimal> {
+        let bare = || NumberFormatError::Bare;
         let chars: Vec<char> = text.chars().collect();
         if chars.is_empty() {
             return Err(bare());
@@ -163,22 +158,18 @@ impl BigDecimal {
                 }
             } else if c == '.' {
                 if dot {
-                    return Err(number_format(
-                        "Character array contains more than one decimal point.",
-                    ));
+                    return Err(NumberFormatError::MultipleDecimalPoints);
                 }
                 dot = true;
             } else if c == 'e' || c == 'E' {
                 break;
             } else {
-                return Err(number_format(format!(
-                    "Character {c} is neither a decimal digit number, decimal point, nor \"e\" notation exponential mark."
-                )));
+                return Err(NumberFormatError::InvalidDecimalCharacter(c));
             }
             i += 1;
         }
         if digits.is_empty() {
-            return Err(number_format("No digits found."));
+            return Err(NumberFormatError::NoDigits);
         }
         if i < chars.len() {
             // `parseExp`: a sign, then digits (leading zeros ignored, ten at most).
@@ -191,11 +182,11 @@ impl BigDecimal {
                 return Err(bare());
             }
             if exponent.iter().any(|c| !c.is_ascii_digit()) {
-                return Err(number_format("Not a digit."));
+                return Err(NumberFormatError::NotADigit);
             }
             let significant: String = exponent.iter().skip_while(|c| **c == '0').collect();
             if significant.len() > 10 {
-                return Err(number_format("Too many nonzero exponent digits."));
+                return Err(NumberFormatError::ExponentTooLong);
             }
             let mut value: i64 = significant.parse().unwrap_or_default();
             if negative_exponent {
@@ -203,7 +194,7 @@ impl BigDecimal {
             }
             scale -= value;
         }
-        let scale = i32::try_from(scale).map_err(|_| number_format("Scale out of range."))?;
+        let scale = i32::try_from(scale).map_err(|_| NumberFormatError::ScaleOutOfRange)?;
         let mut unscaled: BigInt = digits.parse().unwrap_or_default();
         if negative {
             unscaled = -unscaled;
@@ -237,7 +228,7 @@ impl BigDecimal {
     }
 
     /// `multiply`: the scales add up.
-    pub fn multiply(&self, other: &BigDecimal) -> Result<BigDecimal> {
+    pub fn multiply(&self, other: &BigDecimal) -> ArithResult<BigDecimal> {
         let scale = self.check_scale(i64::from(self.scale) + i64::from(other.scale))?;
         Ok(BigDecimal::new(&self.unscaled * &other.unscaled, scale))
     }
@@ -252,11 +243,12 @@ impl BigDecimal {
 
     /// `checkScale`: a scale computed in `long`, saturated for zero, `ArithmeticException`
     /// otherwise when it does not fit an `int`.
-    fn check_scale(&self, scale: i64) -> Result<i32> {
+    fn check_scale(&self, scale: i64) -> ArithResult<i32> {
         match i32::try_from(scale) {
             Ok(scale) => Ok(scale),
             Err(_) if self.unscaled.is_zero() => Ok(saturate(scale)),
-            Err(_) => Err(arithmetic(if scale > 0 { "Underflow" } else { "Overflow" })),
+            Err(_) if scale > 0 => Err(ArithmeticError::Underflow),
+            Err(_) => Err(ArithmeticError::Overflow),
         }
     }
 
@@ -310,7 +302,7 @@ impl BigDecimal {
     }
 
     /// `setScale(newScale)` (`UNNECESSARY`): `ArithmeticException` when digits are lost.
-    pub fn set_scale(&self, scale: i32) -> Result<BigDecimal> {
+    pub fn set_scale(&self, scale: i32) -> ArithResult<BigDecimal> {
         if scale >= self.scale {
             return Ok(BigDecimal::new(self.unscaled_at(scale), scale));
         }
@@ -319,7 +311,7 @@ impl BigDecimal {
         if r.is_zero() {
             Ok(BigDecimal::new(q, scale))
         } else {
-            Err(arithmetic("Rounding necessary"))
+            Err(ArithmeticError::RoundingNecessary)
         }
     }
 
@@ -342,11 +334,11 @@ impl BigDecimal {
     }
 
     /// `intValueExact`.
-    pub fn int_value_exact(&self) -> Result<i32> {
+    pub fn int_value_exact(&self) -> ArithResult<i32> {
         let integer = self
             .to_bigint_exact()
-            .ok_or_else(|| arithmetic("Rounding necessary"))?;
-        integer.to_i32().ok_or_else(|| arithmetic("Overflow"))
+            .ok_or(ArithmeticError::RoundingNecessary)?;
+        integer.to_i32().ok_or(ArithmeticError::Overflow)
     }
 
     /// `longValue`: the low 64 bits of the integer part.
@@ -370,9 +362,9 @@ impl BigDecimal {
     }
 
     /// `pow(n)` for `0 <= n <= 999999999`.
-    pub fn pow(&self, n: i32) -> Result<BigDecimal> {
+    pub fn pow(&self, n: i32) -> ArithResult<BigDecimal> {
         if !(0..=999_999_999).contains(&n) {
-            return Err(arithmetic("Invalid operation"));
+            return Err(ArithmeticError::InvalidOperation);
         }
         let scale = self.check_scale(i64::from(self.scale) * i64::from(n))?;
         Ok(BigDecimal::new(
@@ -384,21 +376,19 @@ impl BigDecimal {
     /// `divide(divisor)`: the exact quotient, at the preferred scale `this.scale -
     /// divisor.scale` when that represents it, `ArithmeticException` when it has no
     /// terminating decimal expansion within the precision Java allows.
-    pub fn divide(&self, divisor: &BigDecimal) -> Result<BigDecimal> {
+    pub fn divide(&self, divisor: &BigDecimal) -> ArithResult<BigDecimal> {
         let preferred = saturate(i64::from(self.scale) - i64::from(divisor.scale));
         if divisor.unscaled.is_zero() {
-            return Err(arithmetic(if self.unscaled.is_zero() {
-                "Division undefined"
+            return Err(if self.unscaled.is_zero() {
+                ArithmeticError::DivisionUndefined
             } else {
-                "Division by zero"
-            }));
+                ArithmeticError::DecimalDivisionByZero
+            });
         }
         if self.unscaled.is_zero() {
             return Ok(BigDecimal::new(BigInt::zero(), preferred));
         }
-        let non_terminating = || {
-            arithmetic("Non-terminating decimal expansion; no exact representable decimal result.")
-        };
+        let non_terminating = || ArithmeticError::NonTerminatingExpansion;
         // `self / divisor = (a / b) × 10^(divisor.scale - self.scale)` with `a / b` reduced:
         // exact iff `b` has no prime factor but 2 and 5.
         let gcd = self.unscaled.gcd(&divisor.unscaled);
@@ -439,10 +429,14 @@ impl BigDecimal {
     }
 
     /// `divide(divisor, roundingMode)`: the quotient at the scale of the dividend.
-    pub fn divide_rounded(&self, divisor: &BigDecimal, mode: RoundingMode) -> Result<BigDecimal> {
+    pub fn divide_rounded(
+        &self,
+        divisor: &BigDecimal,
+        mode: RoundingMode,
+    ) -> ArithResult<BigDecimal> {
         // JDK 27 divides the compact (long) values: a zero divisor fails like `long` division.
         if divisor.unscaled.is_zero() {
-            return Err(arithmetic("/ by zero"));
+            return Err(ArithmeticError::DivisionByZero);
         }
         Ok(self.divide_nonzero(divisor, mode))
     }
@@ -471,18 +465,18 @@ impl BigDecimal {
 
     /// `divideToIntegralValue(divisor)`: the integer part of the quotient, its trailing zeros
     /// stripped down to (or padded up to) the preferred scale.
-    pub fn divide_to_integral_value(&self, divisor: &BigDecimal) -> Result<BigDecimal> {
+    pub fn divide_to_integral_value(&self, divisor: &BigDecimal) -> ArithResult<BigDecimal> {
         let preferred = saturate(i64::from(self.scale) - i64::from(divisor.scale));
         // A zero dividend with a non zero divisor is smaller in magnitude.
         if self.abs().compare(&divisor.abs()) == Ordering::Less {
             return Ok(BigDecimal::new(BigInt::zero(), preferred));
         }
         if divisor.unscaled.is_zero() {
-            return Err(arithmetic(if self.unscaled.is_zero() {
-                "Division undefined"
+            return Err(if self.unscaled.is_zero() {
+                ArithmeticError::DivisionUndefined
             } else {
-                "Division by zero"
-            }));
+                ArithmeticError::DecimalDivisionByZero
+            });
         }
         let scale = self.scale.max(divisor.scale);
         let integer = self.unscaled_at(scale) / divisor.unscaled_at(scale);
@@ -506,12 +500,15 @@ impl BigDecimal {
     }
 
     /// `remainder(divisor)`: `this - this.divideToIntegralValue(divisor) × divisor`.
-    pub fn remainder(&self, divisor: &BigDecimal) -> Result<BigDecimal> {
+    pub fn remainder(&self, divisor: &BigDecimal) -> ArithResult<BigDecimal> {
         Ok(self.divide_and_remainder(divisor)?.1)
     }
 
     /// `divideAndRemainder(divisor)`: `divideToIntegralValue` and `remainder`.
-    pub fn divide_and_remainder(&self, divisor: &BigDecimal) -> Result<(BigDecimal, BigDecimal)> {
+    pub fn divide_and_remainder(
+        &self,
+        divisor: &BigDecimal,
+    ) -> ArithResult<(BigDecimal, BigDecimal)> {
         let quotient = self.divide_to_integral_value(divisor)?;
         // `quotient.multiply(divisor)`: the scales add up (and fit, their sum being at most
         // the scale of the dividend).
@@ -642,17 +639,21 @@ pub fn lowest_set_bit(value: &BigInt) -> i64 {
 }
 
 /// `BigInteger.testBit`.
-pub fn test_bit(value: &BigInt, n: i32) -> Result<bool> {
+pub fn test_bit(value: &BigInt, n: i32) -> ArithResult<bool> {
     if n < 0 {
-        return Err(arithmetic("Negative bit address"));
+        return Err(ArithmeticError::NegativeBitAddress);
     }
     Ok(!((value >> n as usize) & BigInt::one()).is_zero())
 }
 
 /// `BigInteger.setBit` / `clearBit` / `flipBit`.
-pub fn change_bit(value: &BigInt, n: i32, op: fn(&BigInt, &BigInt) -> BigInt) -> Result<BigInt> {
+pub fn change_bit(
+    value: &BigInt,
+    n: i32,
+    op: fn(&BigInt, &BigInt) -> BigInt,
+) -> ArithResult<BigInt> {
     if n < 0 {
-        return Err(arithmetic("Negative bit address"));
+        return Err(ArithmeticError::NegativeBitAddress);
     }
     Ok(op(value, &(BigInt::one() << n as usize)))
 }
@@ -667,17 +668,17 @@ pub fn shift_left(value: &BigInt, n: i32) -> BigInt {
 }
 
 /// `BigInteger.mod(m)`.
-pub fn modulo(value: &BigInt, m: &BigInt) -> Result<BigInt> {
+pub fn modulo(value: &BigInt, m: &BigInt) -> ArithResult<BigInt> {
     if !m.is_positive() {
-        return Err(arithmetic("BigInteger: modulus not positive"));
+        return Err(ArithmeticError::ModulusNotPositive);
     }
     Ok(value.mod_floor(m))
 }
 
 /// `BigInteger.modInverse(m)`.
-pub fn mod_inverse(value: &BigInt, m: &BigInt) -> Result<BigInt> {
+pub fn mod_inverse(value: &BigInt, m: &BigInt) -> ArithResult<BigInt> {
     if !m.is_positive() {
-        return Err(arithmetic("BigInteger: modulus not positive"));
+        return Err(ArithmeticError::ModulusNotPositive);
     }
     if m.is_one() {
         return Ok(BigInt::zero());
@@ -685,15 +686,15 @@ pub fn mod_inverse(value: &BigInt, m: &BigInt) -> Result<BigInt> {
     let a = value.mod_floor(m);
     let extended = a.extended_gcd(m);
     if !extended.gcd.is_one() {
-        return Err(arithmetic("BigInteger not invertible."));
+        return Err(ArithmeticError::NotInvertible);
     }
     Ok(extended.x.mod_floor(m))
 }
 
 /// `BigInteger.modPow(exponent, m)` (a negative exponent inverts the base first).
-pub fn mod_pow(value: &BigInt, exponent: &BigInt, m: &BigInt) -> Result<BigInt> {
+pub fn mod_pow(value: &BigInt, exponent: &BigInt, m: &BigInt) -> ArithResult<BigInt> {
     if !m.is_positive() {
-        return Err(arithmetic("BigInteger: modulus not positive"));
+        return Err(ArithmeticError::ModulusNotPositive);
     }
     let base = if exponent.is_negative() {
         mod_inverse(value, m)?
@@ -746,9 +747,9 @@ pub fn is_probable_prime(value: &BigInt, certainty: i32) -> bool {
 }
 
 /// `BigInteger.nextProbablePrime` (`ArithmeticException` for a negative value).
-pub fn next_probable_prime(value: &BigInt) -> Result<BigInt> {
+pub fn next_probable_prime(value: &BigInt) -> ArithResult<BigInt> {
     if value.is_negative() {
-        return Err(arithmetic(&format!("start < 0: {value}")));
+        return Err(ArithmeticError::NegativeStart(value.clone()));
     }
     let mut candidate = value + BigInt::one();
     if candidate <= BigInt::from(2u8) {
@@ -770,23 +771,26 @@ pub fn to_byte_array(value: &BigInt) -> Vec<u8> {
 
 /// `new BigInteger(byte[])`: big-endian two's complement (`NumberFormatException` for no
 /// byte).
-pub fn from_byte_array(bytes: &[u8]) -> Result<BigInt> {
+pub fn from_byte_array(bytes: &[u8]) -> ParseResult<BigInt> {
     if bytes.is_empty() {
-        return Err(number_format("Zero length BigInteger"));
+        return Err(NumberFormatError::ZeroLengthBigInteger);
     }
     Ok(BigInt::from_signed_bytes_be(bytes))
 }
 
 /// `new BigInteger(text, radix)` for the radixes 2 and 16.
-pub fn parse_bigint(text: &str, radix: u32) -> Result<BigInt> {
-    let invalid = || number_format(format!("For input string: \"{text}\" under radix {radix}"));
+pub fn parse_bigint(text: &str, radix: u32) -> ParseResult<BigInt> {
+    let invalid = || NumberFormatError::InvalidRadixInput {
+        input: text.to_owned(),
+        radix,
+    };
     let minus = text.rfind('-');
     let plus = text.rfind('+');
     if matches!(minus, Some(i) if i != 0)
         || matches!(plus, Some(i) if i != 0)
         || (minus.is_some() && plus.is_some())
     {
-        return Err(number_format("Illegal embedded sign character"));
+        return Err(NumberFormatError::EmbeddedSign);
     }
     let negative = minus.is_some();
     let digits = if minus.is_some() || plus.is_some() {
@@ -795,7 +799,7 @@ pub fn parse_bigint(text: &str, radix: u32) -> Result<BigInt> {
         text
     };
     if digits.is_empty() {
-        return Err(number_format("Zero length BigInteger"));
+        return Err(NumberFormatError::ZeroLengthBigInteger);
     }
     // `num-bigint` accepts `_` separators, Java does not.
     if digits.contains('_') {

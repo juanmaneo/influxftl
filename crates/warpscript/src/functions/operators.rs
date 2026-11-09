@@ -20,7 +20,7 @@ use super::matrix::{
 };
 use super::numerical::{self, Binary};
 use crate::bigdecimal::BigDecimal;
-use crate::error::fault::NumberFormatError;
+use crate::error::fault::{ArithmeticError, NumberFormatError};
 use crate::error::{Error, Result};
 use crate::jmath;
 use crate::macros::Macro;
@@ -631,8 +631,7 @@ fn bitwise(stack: &mut Stack, name: &str, op: fn(i64, i64) -> i64) -> Result<()>
             let (x, y) = (to_big_integer(name, a)?, to_big_integer(name, b)?);
             let shift = || {
                 use num_traits::ToPrimitive;
-                y.to_i32()
-                    .ok_or_else(|| crate::bigdecimal::arithmetic("BigInteger out of int range"))
+                y.to_i32().ok_or(ArithmeticError::BigIntegerOutOfIntRange)
             };
             let value = match name {
                 "&" => &x & &y,

@@ -18,6 +18,45 @@ pub enum ArithmeticError {
     /// A value that does not fit the 32 bits it must.
     #[error("integer overflow")]
     IntegerOverflow,
+    /// A decimal whose scale is below what 32 bits hold.
+    #[error("Underflow")]
+    Underflow,
+    /// A decimal whose scale is above what 32 bits hold, or a number too large for its target.
+    #[error("Overflow")]
+    Overflow,
+    /// A rounding that needs a rounding mode.
+    #[error("Rounding necessary")]
+    RoundingNecessary,
+    /// A decimal operation whose operands are out of its domain.
+    #[error("Invalid operation")]
+    InvalidOperation,
+    /// A quotient with no terminating decimal expansion.
+    #[error("Non-terminating decimal expansion; no exact representable decimal result.")]
+    NonTerminatingExpansion,
+    /// A division of zero by zero.
+    #[error("Division undefined")]
+    DivisionUndefined,
+    /// A division of a decimal by zero.
+    #[error("Division by zero")]
+    DecimalDivisionByZero,
+    /// A bit index below zero.
+    #[error("Negative bit address")]
+    NegativeBitAddress,
+    /// A modulus that is zero or negative.
+    #[error("BigInteger: modulus not positive")]
+    ModulusNotPositive,
+    /// A value with no inverse for the modulus.
+    #[error("BigInteger not invertible.")]
+    NotInvertible,
+    /// The search of a prime from a negative value.
+    #[error("start < 0: {0}")]
+    NegativeStart(num_bigint::BigInt),
+    /// An integer too large for 32 bits.
+    #[error("BigInteger out of int range")]
+    BigIntegerOutOfIntRange,
+    /// A bit length below two.
+    #[error("bitLength < 2")]
+    BitLengthTooSmall,
 }
 
 /// A text that is not the number it must be.
@@ -29,15 +68,49 @@ pub enum NumberFormatError {
     /// A text that is not a decimal number.
     #[error("For input string: \"{0}\"")]
     InvalidInput(String),
-    /// A text that is not a hexadecimal number.
-    #[error("For input string: \"{0}\" under radix 16")]
-    InvalidHexInput(String),
+    /// A text that is not a number in `radix`.
+    #[error("For input string: \"{input}\" under radix {radix}")]
+    InvalidRadixInput {
+        /// The text read.
+        input: String,
+        /// The radix it should be written in.
+        radix: u32,
+    },
     /// A negative text where an unsigned number is read.
     #[error("Illegal leading minus sign on unsigned string {0}.")]
     NegativeUnsigned(String),
     /// A decimal built from a NaN or an infinity.
     #[error("Infinite or NaN")]
     NotFinite,
+    /// A decimal text with an empty exponent.
+    #[error("NumberFormatException")]
+    Bare,
+    /// A decimal text with two decimal points.
+    #[error("Character array contains more than one decimal point.")]
+    MultipleDecimalPoints,
+    /// A decimal text with a character it cannot hold.
+    #[error(
+        "Character {0} is neither a decimal digit number, decimal point, nor \"e\" notation exponential mark."
+    )]
+    InvalidDecimalCharacter(char),
+    /// A decimal text without any digit.
+    #[error("No digits found.")]
+    NoDigits,
+    /// A decimal exponent with a character that is not a digit.
+    #[error("Not a digit.")]
+    NotADigit,
+    /// A decimal exponent too large to be read.
+    #[error("Too many nonzero exponent digits.")]
+    ExponentTooLong,
+    /// A decimal whose scale does not fit 32 bits.
+    #[error("Scale out of range.")]
+    ScaleOutOfRange,
+    /// An integer without any byte or digit.
+    #[error("Zero length BigInteger")]
+    ZeroLengthBigInteger,
+    /// An integer text with a sign that is not leading.
+    #[error("Illegal embedded sign character")]
+    EmbeddedSign,
 }
 
 /// A size or an index outside of what it must be.

@@ -295,7 +295,11 @@ fn platform_failures_have_the_wording_and_class_of_warp10() {
             "java.lang.NumberFormatException",
         ),
         (
-            NumberFormatError::InvalidHexInput("g".to_owned()).into(),
+            NumberFormatError::InvalidRadixInput {
+                input: "g".to_owned(),
+                radix: 16,
+            }
+            .into(),
             "For input string: \"g\" under radix 16",
             "java.lang.NumberFormatException",
         ),
@@ -385,6 +389,116 @@ fn platform_failures_have_the_wording_and_class_of_warp10() {
             ResourceError::OutOfMemory.into(),
             "Java heap space",
             "java.lang.OutOfMemoryError",
+        ),
+        (
+            ArithmeticError::Underflow.into(),
+            "Underflow",
+            "java.lang.ArithmeticException",
+        ),
+        (
+            ArithmeticError::Overflow.into(),
+            "Overflow",
+            "java.lang.ArithmeticException",
+        ),
+        (
+            ArithmeticError::RoundingNecessary.into(),
+            "Rounding necessary",
+            "java.lang.ArithmeticException",
+        ),
+        (
+            ArithmeticError::InvalidOperation.into(),
+            "Invalid operation",
+            "java.lang.ArithmeticException",
+        ),
+        (
+            ArithmeticError::NonTerminatingExpansion.into(),
+            "Non-terminating decimal expansion; no exact representable decimal result.",
+            "java.lang.ArithmeticException",
+        ),
+        (
+            ArithmeticError::DivisionUndefined.into(),
+            "Division undefined",
+            "java.lang.ArithmeticException",
+        ),
+        (
+            ArithmeticError::DecimalDivisionByZero.into(),
+            "Division by zero",
+            "java.lang.ArithmeticException",
+        ),
+        (
+            ArithmeticError::NegativeBitAddress.into(),
+            "Negative bit address",
+            "java.lang.ArithmeticException",
+        ),
+        (
+            ArithmeticError::ModulusNotPositive.into(),
+            "BigInteger: modulus not positive",
+            "java.lang.ArithmeticException",
+        ),
+        (
+            ArithmeticError::NotInvertible.into(),
+            "BigInteger not invertible.",
+            "java.lang.ArithmeticException",
+        ),
+        (
+            ArithmeticError::BigIntegerOutOfIntRange.into(),
+            "BigInteger out of int range",
+            "java.lang.ArithmeticException",
+        ),
+        (
+            ArithmeticError::BitLengthTooSmall.into(),
+            "bitLength < 2",
+            "java.lang.ArithmeticException",
+        ),
+        (
+            ArithmeticError::NegativeStart(num_bigint::BigInt::from(-5)).into(),
+            "start < 0: -5",
+            "java.lang.ArithmeticException",
+        ),
+        (
+            NumberFormatError::Bare.into(),
+            "NumberFormatException",
+            "java.lang.NumberFormatException",
+        ),
+        (
+            NumberFormatError::MultipleDecimalPoints.into(),
+            "Character array contains more than one decimal point.",
+            "java.lang.NumberFormatException",
+        ),
+        (
+            NumberFormatError::NoDigits.into(),
+            "No digits found.",
+            "java.lang.NumberFormatException",
+        ),
+        (
+            NumberFormatError::NotADigit.into(),
+            "Not a digit.",
+            "java.lang.NumberFormatException",
+        ),
+        (
+            NumberFormatError::ExponentTooLong.into(),
+            "Too many nonzero exponent digits.",
+            "java.lang.NumberFormatException",
+        ),
+        (
+            NumberFormatError::ScaleOutOfRange.into(),
+            "Scale out of range.",
+            "java.lang.NumberFormatException",
+        ),
+        (
+            NumberFormatError::ZeroLengthBigInteger.into(),
+            "Zero length BigInteger",
+            "java.lang.NumberFormatException",
+        ),
+        (
+            NumberFormatError::EmbeddedSign.into(),
+            "Illegal embedded sign character",
+            "java.lang.NumberFormatException",
+        ),
+        (
+            NumberFormatError::InvalidDecimalCharacter('x').into(),
+            "Character x is neither a decimal digit number, decimal point, nor \"e\" notation exponential mark.",
+            "java.lang.NumberFormatException",
         ),
         (
             Error::Immutable,

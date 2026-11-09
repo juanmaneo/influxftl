@@ -32,7 +32,12 @@ pub const FUNCTIONS: &[(&str, Entry)] = &[
 /// `None` for a series of another type.
 fn decimals(gts: &GeoTimeSerie) -> Option<Result<Vec<BigDecimal>>> {
     match &gts.values {
-        Values::Double(values) => Some(values.iter().map(|&v| BigDecimal::from_f64(v)).collect()),
+        Values::Double(values) => Some(
+            values
+                .iter()
+                .map(|&v| BigDecimal::from_f64(v).map_err(crate::error::Error::from))
+                .collect(),
+        ),
         Values::Long(values) => Some(Ok(values
             .iter()
             .map(|&v| BigDecimal::from_i64(v))
