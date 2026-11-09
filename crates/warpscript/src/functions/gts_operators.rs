@@ -13,6 +13,7 @@
 use std::cmp::Ordering;
 
 use super::args::fail;
+use crate::error::series::SeriesError;
 use crate::error::{Error, Result};
 use crate::gts::{GeoTimeSerie, Gts, NO_ELEVATION, NO_LOCATION, Type, Values};
 use crate::value::Value;
@@ -406,10 +407,7 @@ fn compare_series(cmp: Comparison, a: &Gts, b: &Gts) -> Result<Value> {
         })))
     } else {
         // Sic: no space after the name in Warp 10.
-        Err(Error::new(format!(
-            "{}can only operate on two GTS with NUMBER or STRING values.",
-            cmp.name
-        )))
+        Err(SeriesError::ComparisonOperands(cmp.name.to_string()).into())
     }
 }
 

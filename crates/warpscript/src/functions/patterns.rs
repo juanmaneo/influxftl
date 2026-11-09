@@ -14,6 +14,7 @@ use super::gts::gts_or_list_try;
 use super::gts_points::dedup_gts;
 use crate::encoding::opb64_encode;
 use crate::error::fault::BoundsError;
+use crate::error::series::SeriesError;
 use crate::error::{Error, Result};
 use crate::gts::{GeoTimeSerie, Gts, NO_ELEVATION, NO_LOCATION, Type, Values};
 use crate::jmath;
@@ -58,30 +59,26 @@ fn bsax_gts(gts: &Gts, params: Sax) -> Result<GeoTimeSerie> {
     {
         let g = gts.borrow();
         if !g.is_bucketized() || !matches!(g.type_of(), Type::Long | Type::Double) {
-            return Err(Error::new(
-                "Function can only be applied to numeric, bucketized, filled Geo Time Series.",
-            ));
+            return Err(SeriesError::PatternSeries.into());
         }
     }
     if word_len == 0 {
         return Err(Error::division_by_zero());
     }
     if window_len.wrapping_rem(word_len) != 0 {
-        return Err(Error::new("Wordlen MUST divide windowlen."));
+        return Err(SeriesError::WordlenDivide.into());
     }
     let mut alphabet = alphabet_size as u32;
     if alphabet == 0 {
-        return Err(Error::new("Alphabet size MUST be a power of two."));
+        return Err(SeriesError::AlphabetPowerOfTwo.into());
     }
     let levels = alphabet.trailing_zeros();
     alphabet >>= levels;
     if alphabet != 1 {
-        return Err(Error::new("Alphabet size MUST be a power of two."));
+        return Err(SeriesError::AlphabetPowerOfTwo.into());
     }
     if !(1..=SAX_MAX_LEVELS).contains(&levels) {
-        return Err(Error::new(format!(
-            "Alphabet size MUST be a power of two between 2 and 2^{SAX_MAX_LEVELS}"
-        )));
+        return Err(SeriesError::AlphabetRange(SAX_MAX_LEVELS).into());
     }
     let paa_len = window_len.wrapping_div(word_len);
     gts.borrow_mut().sort(false);

@@ -11,6 +11,7 @@ use std::rc::Rc;
 use super::Entry;
 use super::args::fail;
 use crate::aggregators::{Aggregated, Aggregator, AggregatorArgs, Roles};
+use crate::error::series::SeriesError;
 use crate::error::{Error, Result};
 use crate::gts::{NO_ELEVATION, NO_LOCATION};
 use crate::interpolation::{
@@ -145,9 +146,7 @@ fn interpolator_1d(stack: &mut Stack, name: &'static str, kind: Kind) -> Result<
     };
     let (xval, fval) = (xval.borrow().clone(), fval.borrow().clone());
     if xval.len() != fval.len() {
-        return Err(Error::new(format!(
-            "{name}: incoherent argument sizes, both input LIST should have the same size."
-        )));
+        return Err(SeriesError::InterpolatorSizes(name.to_string()).into());
     }
     let mut xs = Vec::with_capacity(xval.len());
     let mut fs = Vec::with_capacity(fval.len());
@@ -310,9 +309,11 @@ impl Aggregator for Bicube {
 
 /// The incoherent sizes message of `INTERPOLATOR.2D.BICUBIC`.
 fn sizes_2d(d1: usize, d2: usize) -> Error {
-    Error::new(format!(
-        "INTERPOLATOR.2D.BICUBIC: incoherent argument sizes. Up to vector sizes, values should be a LIST (size {d1}) of LIST (size {d2})."
-    ))
+    SeriesError::BicubicSizes {
+        rows: d1,
+        columns: d2,
+    }
+    .into()
 }
 
 /// `INTERPOLATOR.2D.BICUBIC`: the bicubic interpolation of `[ x… ] [ y… ] [ [ f(x, y)… ]… ]`.
@@ -463,9 +464,12 @@ impl Aggregator for Tricube {
 
 /// The incoherent sizes message of `INTERPOLATOR.3D.TRICUBIC`.
 fn sizes_3d(d1: usize, d2: usize, d3: usize) -> Error {
-    Error::new(format!(
-        "INTERPOLATOR.3D.TRICUBIC: incoherent argument sizes. Up to vector sizes, values should be a LIST (size {d1}) of LIST (size {d2}) of LIST (size {d3})."
-    ))
+    SeriesError::TricubicSizes {
+        x: d1,
+        y: d2,
+        z: d3,
+    }
+    .into()
 }
 
 /// `INTERPOLATOR.3D.TRICUBIC`: the tricubic interpolation of

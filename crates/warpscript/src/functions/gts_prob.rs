@@ -14,6 +14,7 @@ use super::args::fail;
 use super::gts::gts_or_list_try;
 use super::gts_stats::value_counts;
 use super::template::java_trim;
+use crate::error::series::SeriesError;
 use crate::error::{Class, Error, Result};
 use crate::gts::{GeoTimeSerie, Gts};
 use crate::macros::{Callable, StackFunction, StackObject};
@@ -75,9 +76,7 @@ fn cprob_values(gts: &GeoTimeSerie) -> Value {
 /// The `given` and `event` parts of a `given<sep>event` value.
 fn split_event<'a>(value: &'a str, separator: &str) -> Result<(&'a str, &'a str)> {
     let Some(lastsep) = value.rfind(separator) else {
-        return Err(Error::new(
-            "Separator not found, unable to isolate given events.",
-        ));
+        return Err(SeriesError::SeparatorNotFound.into());
     };
     Ok((&value[..lastsep], &value[lastsep + separator.len()..]))
 }
@@ -97,9 +96,7 @@ fn cprob_given(gts: &Gts, separator: &str) -> Result<Value> {
         })
         .collect();
     if values.len() < n {
-        return Err(Error::new(
-            "Can only compute conditional probabilities for String Geo Time Series.",
-        ));
+        return Err(SeriesError::ConditionalProbabilityTypes.into());
     }
     let mut idx = 0;
     while idx < n {

@@ -627,7 +627,7 @@ fn assertmsg(stack: &mut Stack) -> Result<()> {
     if pop_bool(stack, "ASSERTMSG", "expects a boolean below the message.")? {
         Ok(())
     } else {
-        Err(Error::new(format!("ASSERTMSG failed '{message}'")))
+        Err(Error::usage("ASSERTMSG", format!("failed '{message}'")))
     }
 }
 
@@ -671,8 +671,9 @@ fn timebox(stack: &mut Stack) -> Result<()> {
                 err,
             ))
         }
-        _ => Err(Error::new(format!(
-            "TIMEBOX reached the execution time limit ({maxtime} MICROSECONDS)."
-        ))),
+        _ => Err(Error::usage(
+            "TIMEBOX",
+            format!("reached the execution time limit ({maxtime} MICROSECONDS)."),
+        )),
     }
 }

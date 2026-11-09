@@ -12,6 +12,7 @@ use super::Entry;
 use super::args::fail;
 use super::gts::{Datapoint, datapoint_from_list};
 use crate::aggregators::{Aggregator, AggregatorArgs, Window, aggregator_of};
+use crate::error::series::SeriesError;
 use crate::error::{Class, Error, Result};
 use crate::geoxp;
 use crate::gts::{GeoTimeSerie, Gts, NO_ELEVATION, NO_LOCATION};
@@ -33,9 +34,7 @@ pub(super) fn datapoint_from_stack(stack: &mut Stack, value: Value) -> Result<Da
     let latitude = stack.pop()?;
     let rtick = stack.pop()?;
     let (Value::Double(longitude), Value::Double(latitude)) = (&longitude, &latitude) else {
-        return Err(Error::new(
-            "Macro MUST return a latitude and a longitude which are of type DOUBLE.",
-        ));
+        return Err(SeriesError::MacroLocation.into());
     };
     let location = if latitude.is_nan() || longitude.is_nan() {
         NO_LOCATION
@@ -46,18 +45,14 @@ pub(super) fn datapoint_from_stack(stack: &mut Stack, value: Value) -> Result<Da
         Value::Long(l) => l,
         Value::Double(d) if d.is_nan() => NO_ELEVATION,
         Value::Double(_) => {
-            return Err(Error::new(
-                "Macro MUST return an elevations which is NaN if it is of type DOUBLE.",
-            ));
+            return Err(SeriesError::MacroElevationNan.into());
         }
         _ => {
-            return Err(Error::new(
-                "Macro MUST return an elevation which is either NaN or LONG.",
-            ));
+            return Err(SeriesError::MacroElevationType.into());
         }
     };
     let Value::Long(tick) = rtick else {
-        return Err(Error::new("Macro MUST return a tick of type LONG."));
+        return Err(SeriesError::MacroTick.into());
     };
     Ok(Datapoint {
         tick,
@@ -112,9 +107,7 @@ fn bucketize_gts(
     }
     if bucketspan == 0 || bucketspan == -1 {
         if bucketcount == 0 {
-            return Err(Error::new(
-                "One of bucketspan or bucketcount must be different from zero.",
-            ));
+            return Err(SeriesError::BucketParameters.into());
         }
         if lastbucket >= firsttick {
             let delta;
@@ -143,7 +136,7 @@ fn bucketize_gts(
             bucketcount = 1;
         } else {
             if bucketspan == 0 {
-                return Err(Error::new("/ by zero"));
+                return Err(Error::division_by_zero());
             }
             bucketcount = 1i32.wrapping_add((delta / bucketspan) as i32);
         }
@@ -157,14 +150,14 @@ fn bucketize_gts(
         }
     }
     if bucketcount < 0 || i64::from(bucketcount) > maxbuckets {
-        return Err(Error::new(format!(
-            "Bucket count ({bucketcount}) would exceed maximum value of {maxbuckets}. Consider raising the limit or using capabilities."
-        )));
+        return Err(SeriesError::BucketLimit {
+            count: bucketcount,
+            max: maxbuckets,
+        }
+        .into());
     }
     if bucketspan == 0 {
-        return Err(Error::new(
-            "Undefined bucket span, check your GTS timestamps.",
-        ));
+        return Err(SeriesError::UndefinedBucketSpan.into());
     }
     let bucketcount = i64::from(bucketcount);
     let Some(bucketizer) = bucketizer else {
@@ -669,7 +662,7 @@ pub(super) fn map_gts(
             }
             _ => {
                 let Some(aggregator) = aggregator_of(mapper).filter(|a| a.roles().mapper) else {
-                    return Err(Error::new("Expected a mapper function."));
+                    return Err(SeriesError::ExpectedMapper.into());
                 };
                 let mut source = gts.borrow_mut();
                 source.sort(false);

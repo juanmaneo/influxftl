@@ -17,6 +17,7 @@ use std::rc::Rc;
 
 use crate::aggregators::double_value;
 use crate::error::fault::IllegalArgumentError;
+use crate::error::series::SeriesError;
 use crate::error::{Error, Result};
 use crate::format::{java_double_to_string, url_encode};
 use crate::functions::Entry;
@@ -703,9 +704,7 @@ impl MacroFiller {
             Value::List(list) => list,
             other => {
                 stack.push(other);
-                return Err(Error::new(
-                    "Expected a [ ts lat lon elev value ] list as result of filler.",
-                ));
+                return Err(SeriesError::FillerResult.into());
             }
         };
         let mut elements = list.borrow_mut();

@@ -9,6 +9,7 @@ use std::rc::Rc;
 use super::Entry;
 use super::args::fail;
 use super::gts::gts_or_list_try;
+use crate::error::series::SeriesError;
 use crate::error::{Error, Result};
 use crate::gts::{GeoTimeSerie, Gts, Type};
 use crate::stack::Stack;
@@ -76,7 +77,7 @@ fn lttb_gts(gts: &Gts, threshold: i32, timebased: bool) -> Result<Value> {
         return Ok(Value::Gts(Rc::clone(gts)));
     }
     if threshold < 3 {
-        return Err(Error::new("Threshold MUST be >= 3."));
+        return Err(SeriesError::ThresholdTooSmall.into());
     }
     let mut threshold = threshold;
     let bucketsize = f64::from(size) / f64::from(threshold - 1);
@@ -187,9 +188,7 @@ fn pop_factor(stack: &mut Stack, missing: impl FnOnce() -> Error, what: &str) ->
 /// Warp 10).
 fn check_factor(factor: f64, what: &str) -> Result<()> {
     if factor <= 0.0 || factor >= 1.0 {
-        return Err(Error::new(format!(
-            "{what} should be strictly between 0.0 and 1.0."
-        )));
+        return Err(SeriesError::FactorOutOfRange(what.to_owned()).into());
     }
     Ok(())
 }
@@ -199,14 +198,10 @@ fn check_factor(factor: f64, what: &str) -> Result<()> {
 fn smoothing_input(gts: &Gts) -> Result<(GeoTimeSerie, GeoTimeSerie)> {
     let kind = gts.borrow().type_of();
     if kind != Type::Long && kind != Type::Double {
-        return Err(Error::new(
-            "Can only perform exponential smoothing on numeric Geo Time Series.",
-        ));
+        return Err(SeriesError::ExponentialNotNumeric.into());
     }
     if gts.borrow().size() < 2 {
-        return Err(Error::new(
-            "Can only perform exponential smoothing on Geo Time Series containing at least two values.",
-        ));
+        return Err(SeriesError::ExponentialTooShort.into());
     }
     gts.borrow_mut().sort(false);
     let input = gts.borrow().clone();

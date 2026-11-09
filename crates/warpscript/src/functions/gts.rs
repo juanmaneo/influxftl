@@ -14,6 +14,7 @@ use super::misc::TIME_UNITS_PER_MS;
 use crate::encoder::{
     DEFAULT_COMP_RATIO_THRESHOLD, EncodedValue, GtsEncoder, encoder_to_wrapper, gts_to_wrapper,
 };
+use crate::error::series::SeriesError;
 use crate::error::{Class, Error, Result};
 use crate::geoxp;
 use crate::gts::{GeoTimeSerie, Gts, Metadata, NO_ELEVATION, NO_LOCATION};
@@ -277,9 +278,7 @@ pub(crate) fn datapoint_from_list(elements: &[Value]) -> Result<Datapoint> {
         2 => (tick(0)?, NO_LOCATION, NO_ELEVATION, &elements[1]),
         1 => (0, NO_LOCATION, NO_ELEVATION, &elements[0]),
         n => {
-            return Err(Error::new(format!(
-                "Expected a list of 1 to 5 elements, got {n}"
-            )));
+            return Err(SeriesError::DatapointListSize(n).into());
         }
     };
     Ok(Datapoint {

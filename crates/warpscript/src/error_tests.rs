@@ -1317,3 +1317,190 @@ fn parse_and_wrapped_failures() {
     assert_eq!(wrapped.root_cause(), &parse);
     assert!(wrapped.source().is_some());
 }
+
+#[test]
+fn series_failures_have_the_wording_of_warp10() {
+    use super::error::series::SeriesError;
+
+    let failures: Vec<(SeriesError, &str)> = vec![
+        (
+            SeriesError::FillArguments,
+            "FILL's argument types do not match the expected ones.",
+        ),
+        (
+            SeriesError::FillLastParameter,
+            "FILLexpects the last parameter of the input LIST to be a LIST",
+        ),
+        (
+            SeriesError::FillTicks {
+                message: "FILL expects a LIST of LONG, but instead the list contains a",
+                found: "STRING",
+            },
+            "FILL expects a LIST of LONG, but instead the list contains a STRING",
+        ),
+        (
+            SeriesError::FillListElement {
+                message: "FILL expects a LIST of GTS, but instead the list contains a",
+                found: "LONG",
+            },
+            "FILL expects a LIST of GTS, but instead the list contains a LONG",
+        ),
+        (
+            SeriesError::FillNotSeries("FILLexpects a GTS"),
+            "FILLexpects a GTS",
+        ),
+        (
+            SeriesError::FillDuplicateTimestamps,
+            "Cannot fill Geo Time Series with duplicate timestamps.",
+        ),
+        (
+            SeriesError::MacroLocation,
+            "Macro MUST return a latitude and a longitude which are of type DOUBLE.",
+        ),
+        (
+            SeriesError::MacroElevationNan,
+            "Macro MUST return an elevations which is NaN if it is of type DOUBLE.",
+        ),
+        (
+            SeriesError::MacroElevationType,
+            "Macro MUST return an elevation which is either NaN or LONG.",
+        ),
+        (
+            SeriesError::MacroTick,
+            "Macro MUST return a tick of type LONG.",
+        ),
+        (
+            SeriesError::BucketParameters,
+            "One of bucketspan or bucketcount must be different from zero.",
+        ),
+        (
+            SeriesError::BucketLimit { count: 9, max: 8 },
+            "Bucket count (9) would exceed maximum value of 8. Consider raising the limit or using capabilities.",
+        ),
+        (
+            SeriesError::UndefinedBucketSpan,
+            "Undefined bucket span, check your GTS timestamps.",
+        ),
+        (SeriesError::ExpectedMapper, "Expected a mapper function."),
+        (
+            SeriesError::LowessNotNumeric,
+            "Can only smooth numeric Geo Time Series.",
+        ),
+        (
+            SeriesError::LowessBandwidth,
+            "Bandwidth parameter must be greater than 0",
+        ),
+        (
+            SeriesError::LowessRobustness,
+            "Robustness parameter must be greater or equal to 0",
+        ),
+        (
+            SeriesError::LowessDegreeTooSmall,
+            "Degree of polynomial fit must be greater than 0",
+        ),
+        (
+            SeriesError::LowessDegreeTooLarge,
+            "Degree of polynomial fit should remain small (lower than 10)",
+        ),
+        (
+            SeriesError::LowessMissingValues,
+            "More than 500000 missing values",
+        ),
+        (
+            SeriesError::DuplicateTicks,
+            "Can't be applied on GTS with duplicate ticks",
+        ),
+        (SeriesError::ThresholdTooSmall, "Threshold MUST be >= 3."),
+        (
+            SeriesError::FactorOutOfRange("Alpha".to_owned()),
+            "Alpha should be strictly between 0.0 and 1.0.",
+        ),
+        (
+            SeriesError::ExponentialNotNumeric,
+            "Can only perform exponential smoothing on numeric Geo Time Series.",
+        ),
+        (
+            SeriesError::ExponentialTooShort,
+            "Can only perform exponential smoothing on Geo Time Series containing at least two values.",
+        ),
+        (
+            SeriesError::NullDeviation { median: true },
+            "Median Absolute Deviation is null",
+        ),
+        (
+            SeriesError::NullDeviation { median: false },
+            "Standard Deviation is null",
+        ),
+        (
+            SeriesError::QuantifyNotNumeric,
+            "Can only quantify numeric Geo Time Series.",
+        ),
+        (
+            SeriesError::SeparatorNotFound,
+            "Separator not found, unable to isolate given events.",
+        ),
+        (
+            SeriesError::ConditionalProbabilityTypes,
+            "Can only compute conditional probabilities for String Geo Time Series.",
+        ),
+        (
+            SeriesError::ComparisonOperands("op.eq".to_owned()),
+            "op.eqcan only operate on two GTS with NUMBER or STRING values.",
+        ),
+        (
+            SeriesError::DatapointListSize(7),
+            "Expected a list of 1 to 5 elements, got 7",
+        ),
+        (
+            SeriesError::FillerResult,
+            "Expected a [ ts lat lon elev value ] list as result of filler.",
+        ),
+        (SeriesError::InvalidClassSelector, "Invalid class selector"),
+        (
+            SeriesError::InvalidLabelsSelector,
+            "Invalid labels/attributes selector",
+        ),
+        (SeriesError::InvalidThresholdType, "Invalid threshold type."),
+        (
+            SeriesError::InterpolatorSizes("INTERPOLATOR.LINEAR".to_owned()),
+            "INTERPOLATOR.LINEAR: incoherent argument sizes, both input LIST should have the same size.",
+        ),
+        (
+            SeriesError::BicubicSizes {
+                rows: 2,
+                columns: 3,
+            },
+            "INTERPOLATOR.2D.BICUBIC: incoherent argument sizes. Up to vector sizes, values should be a LIST (size 2) of LIST (size 3).",
+        ),
+        (
+            SeriesError::TricubicSizes { x: 2, y: 3, z: 4 },
+            "INTERPOLATOR.3D.TRICUBIC: incoherent argument sizes. Up to vector sizes, values should be a LIST (size 2) of LIST (size 3) of LIST (size 4).",
+        ),
+        (
+            SeriesError::NotUnitQuaternion(2.5),
+            "Input does not appear to be a unit quaternion, norm was 2.5.",
+        ),
+        (
+            SeriesError::PatternSeries,
+            "Function can only be applied to numeric, bucketized, filled Geo Time Series.",
+        ),
+        (SeriesError::WordlenDivide, "Wordlen MUST divide windowlen."),
+        (
+            SeriesError::AlphabetPowerOfTwo,
+            "Alphabet size MUST be a power of two.",
+        ),
+        (
+            SeriesError::AlphabetRange(26),
+            "Alphabet size MUST be a power of two between 2 and 2^26",
+        ),
+    ];
+    for (failure, message) in failures {
+        let error = Error::from(failure);
+        assert_eq!(error.to_string(), message);
+        assert_eq!(
+            exception_class(&error),
+            "io.warp10.script.WarpScriptException"
+        );
+        assert!(!error.is_runtime(), "{message}");
+    }
+}

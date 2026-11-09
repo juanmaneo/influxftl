@@ -17,6 +17,7 @@ use crate::error::{Class, Error, Result};
 use crate::functions::Entry;
 use crate::functions::functional::java_double_compare;
 
+use crate::error::series::SeriesError;
 use crate::gts::{GeoTimeSerie, Gts, Metadata, NO_ELEVATION, NO_LOCATION};
 use crate::macros::Macro;
 use crate::selector::{MetadataSelectorMatcher, Selector, build_selector};
@@ -215,7 +216,7 @@ impl Filter for ByClass {
 /// `FilterByClass.Builder`: `'selector' filter.byclass`.
 fn byclass_builder(stack: &mut Stack, name: &'static str) -> Result<()> {
     let Value::String(source) = stack.pop()? else {
-        return Err(Error::new("Invalid class selector"));
+        return Err(SeriesError::InvalidClassSelector.into());
     };
     let selector = Selector::parse(&source)?;
     push(
@@ -298,7 +299,7 @@ fn bylabels_builder(
     attributes: bool,
 ) -> Result<()> {
     let Value::Map(map) = stack.pop()? else {
-        return Err(Error::new("Invalid labels/attributes selector"));
+        return Err(SeriesError::InvalidLabelsSelector.into());
     };
     let mut selectors = Vec::new();
     for (key, value) in map.borrow().iter() {
@@ -476,7 +477,7 @@ fn last_builder(stack: &mut Stack, name: &'static str, comparison: Comparison) -
     match threshold {
         Value::Long(_) | Value::Double(_) | Value::String(_) => {}
         Value::Boolean(_) if boolean => {}
-        _ => return Err(Error::new("Invalid threshold type.")),
+        _ => return Err(SeriesError::InvalidThresholdType.into()),
     }
     push(
         stack,

@@ -11,6 +11,7 @@ use super::Entry;
 use super::args::fail;
 use super::gts::gts_or_list_try;
 use crate::curvefit::{WeightedPoint, coefficient_count, polynomial_fit};
+use crate::error::series::SeriesError;
 use crate::error::{Error, Result};
 use crate::gts::{GeoTimeSerie, Gts, Type, Values, java_binary_search_range};
 use crate::stack::Stack;
@@ -161,38 +162,32 @@ struct Lowess {
 fn rlowess_gts(gts: &Gts, params: Lowess) -> Result<Value> {
     let Lowess { q, r, d, p } = params;
     if !matches!(gts.borrow().type_of(), Type::Long | Type::Double) {
-        return Err(Error::new("Can only smooth numeric Geo Time Series."));
+        return Err(SeriesError::LowessNotNumeric.into());
     }
     if q < 1 {
-        return Err(Error::new("Bandwidth parameter must be greater than 0"));
+        return Err(SeriesError::LowessBandwidth.into());
     }
     if r < 0 {
-        return Err(Error::new(
-            "Robustness parameter must be greater or equal to 0",
-        ));
+        return Err(SeriesError::LowessRobustness.into());
     }
     // Warp 10 also rejects a negative radius here, which its callers never pass.
     if p < 1 {
-        return Err(Error::new(
-            "Degree of polynomial fit must be greater than 0",
-        ));
+        return Err(SeriesError::LowessDegreeTooSmall.into());
     }
     if p > 9 {
-        return Err(Error::new(
-            "Degree of polynomial fit should remain small (lower than 10)",
-        ));
+        return Err(SeriesError::LowessDegreeTooLarge.into());
     }
     gts.borrow_mut().sort(false);
     let g = gts.borrow();
     let n = g.size();
     let bucketized = g.is_bucketized();
     if g.bucketcount - n as i64 > 500_000 {
-        return Err(Error::new("More than 500000 missing values"));
+        return Err(SeriesError::LowessMissingValues.into());
     }
     let mut previous = -1;
     for &tick in &g.ticks {
         if previous == tick {
-            return Err(Error::new("Can't be applied on GTS with duplicate ticks"));
+            return Err(SeriesError::DuplicateTicks.into());
         }
         previous = tick;
     }

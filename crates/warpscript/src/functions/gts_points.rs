@@ -15,6 +15,7 @@ use super::gts::{gts_or_list, long_value, tuple_at_index};
 use super::gts_frameworks::{MapParams, map_gts};
 use super::misc::TIME_UNITS_PER_MS;
 use crate::aggregators::aggregator_of;
+use crate::error::fault::BoundsError;
 use crate::error::{Class, Error, Result};
 use crate::gts::{GeoTimeSerie, Gts, Metadata, Values};
 use crate::stack::Stack;
@@ -350,7 +351,11 @@ fn common_ticks(series: &[Gts]) -> Result<Vec<GeoTimeSerie>> {
             }
         })
     else {
-        return Err(Error::new("Index -1 out of bounds for length 0"));
+        return Err(BoundsError::ArrayIndex {
+            index: -1,
+            length: 0,
+        }
+        .into());
     };
     let mut result: Vec<GeoTimeSerie> = sorted.iter().map(|gts| gts.clone_empty()).collect();
     if minticks == 0 {
@@ -720,7 +725,11 @@ fn compensate_resets(gts: &GeoTimeSerie, reset_higher: bool) -> Result<GeoTimeSe
     match &mut filled.values {
         Values::Long(values) => {
             let Some(&first) = values.first() else {
-                return Err(Error::new("Index 0 out of bounds for length 0"));
+                return Err(BoundsError::ArrayIndex {
+                    index: 0,
+                    length: 0,
+                }
+                .into());
             };
             let mut last = first;
             let mut offset = 0i64;
@@ -735,7 +744,11 @@ fn compensate_resets(gts: &GeoTimeSerie, reset_higher: bool) -> Result<GeoTimeSe
         }
         Values::Double(values) => {
             let Some(&first) = values.first() else {
-                return Err(Error::new("Index 0 out of bounds for length 0"));
+                return Err(BoundsError::ArrayIndex {
+                    index: 0,
+                    length: 0,
+                }
+                .into());
             };
             let mut last = first;
             let mut offset = 0.0;

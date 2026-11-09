@@ -86,10 +86,13 @@ fn store(stack: &mut Stack) -> Result<()> {
             }
             let count = names.len();
             if stack.depth() < count {
-                return Err(Error::new(format!(
-                    "STORE expects {count} elements on the stack, only found {}",
-                    stack.depth()
-                )));
+                return Err(Error::usage(
+                    "STORE",
+                    format!(
+                        "expects {count} elements on the stack, only found {}",
+                        stack.depth()
+                    ),
+                ));
             }
             // Iterate from first to last symbol so that `1 2 3 [ 'a' 'b' 'b' ] STORE $b`
             // pushes 3.
@@ -141,7 +144,10 @@ pub(crate) fn load(stack: &mut Stack) -> Result<()> {
         Value::String(name) => match stack.load(name) {
             Some(value) => value.clone(),
             None => {
-                return Err(Error::new(format!("LOAD symbol '{name}' does not exist.")));
+                return Err(Error::usage(
+                    "LOAD",
+                    format!("symbol '{name}' does not exist."),
+                ));
             }
         },
         Value::Long(index) => stack.load_register(register_index(*index))?.clone(),
@@ -262,9 +268,10 @@ fn definedmacro(stack: &mut Stack) -> Result<()> {
 fn checkmacro(stack: &mut Stack) -> Result<()> {
     let name = pop_string(stack, "CHECKMACRO", "expects a string on top of the stack.")?;
     if stack.find_macro(&name).is_err() {
-        return Err(Error::new(format!(
-            "CHECKMACRO macro '{name}' could not be loaded."
-        )));
+        return Err(Error::usage(
+            "CHECKMACRO",
+            format!("macro '{name}' could not be loaded."),
+        ));
     }
     Ok(())
 }

@@ -15,6 +15,7 @@ pub mod compat;
 pub mod fault;
 pub mod format;
 pub mod math;
+pub mod series;
 pub mod stack;
 pub mod text;
 pub mod time;
@@ -27,6 +28,7 @@ use self::fault::{
 };
 use self::format::FormatError;
 use self::math::MathError;
+use self::series::SeriesError;
 use self::stack::StackError;
 use self::text::TextError;
 use self::time::TimeError;
@@ -207,6 +209,9 @@ pub enum Error {
     /// A failure of a text or binary function.
     #[error(transparent)]
     Text(#[from] TextError),
+    /// A failure of a Geo Time Series function.
+    #[error(transparent)]
+    Series(#[from] SeriesError),
     /// A failure of a time function.
     #[error(transparent)]
     Time(#[from] TimeError),
@@ -340,6 +345,7 @@ impl Error {
             | Error::Usage { .. }
             | Error::Stack(_)
             | Error::Time(_)
+            | Error::Series(_)
             | Error::Text(_)
             | Error::Format(_)
             | Error::Parse { .. }

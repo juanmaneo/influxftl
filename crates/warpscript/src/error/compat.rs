@@ -28,6 +28,7 @@ pub fn exception_class(err: &Error) -> &'static str {
         | Error::Usage { .. }
         | Error::Stack(_)
         | Error::Time(_)
+        | Error::Series(_)
         | Error::Text(_)
         | Error::Format(_)
         | Error::Wrapped { .. }

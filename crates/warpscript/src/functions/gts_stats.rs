@@ -14,6 +14,8 @@ use super::gts::{element_or_list, gts_or_list, gts_or_list_try};
 use super::gts_reduce::java_hash_order;
 use super::stringformat::java_hash;
 use crate::encoder::{Decimal, EncodedValue, GtsEncoder};
+use crate::error::fault::BoundsError;
+use crate::error::series::SeriesError;
 use crate::error::{Class, Error, Result};
 use crate::gts::{GeoTimeSerie, NO_LOCATION, Type, Values};
 use crate::interpolation::java_binary_search_doubles;
@@ -217,7 +219,11 @@ fn zscore_gts(gts: &GeoTimeSerie, use_median: bool) -> Result<GeoTimeSerie> {
     let (m, std) = if use_median {
         // Warp 10 reads the median of an empty series anyway.
         let Some(med) = median(&values) else {
-            return Err(Error::new("Index 0 out of bounds for length 0"));
+            return Err(BoundsError::ArrayIndex {
+                index: 0,
+                length: 0,
+            }
+            .into());
         };
         let deviations: Vec<f64> = values.iter().map(|v| (v - med).abs()).collect();
         let mad = median(&deviations).unwrap_or(f64::NAN);
@@ -231,14 +237,7 @@ fn zscore_gts(gts: &GeoTimeSerie, use_median: bool) -> Result<GeoTimeSerie> {
         musigma(&values, true)
     };
     if std == 0.0 {
-        return Err(Error::new(format!(
-            "{} Deviation is null",
-            if use_median {
-                "Median Absolute"
-            } else {
-                "Standard"
-            }
-        )));
+        return Err(SeriesError::NullDeviation { median: use_median }.into());
     }
     Ok(with_doubles(gts, values.into_iter().map(|v| (v - m) / std)))
 }
@@ -558,7 +557,7 @@ fn quantize_gts(
     values: Option<&[Value]>,
 ) -> Result<GeoTimeSerie> {
     let Some(values_as_doubles) = doubles(gts) else {
-        return Err(Error::new("Can only quantify numeric Geo Time Series."));
+        return Err(SeriesError::QuantifyNotNumeric.into());
     };
     let mut quantified = gts.clone_empty();
     for (i, v) in values_as_doubles.into_iter().enumerate() {

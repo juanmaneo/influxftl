@@ -12,6 +12,7 @@
 use super::Entry;
 use super::gts::{gts_or_list, gts_or_list_try};
 use crate::aggregators::double_value;
+use crate::error::series::SeriesError;
 use crate::error::{Error, Result};
 use crate::fillers::{FillerRef, Roles, Single, Slot, Window, both};
 use crate::geoxp::{from_geoxp_point, to_geoxp_point};
@@ -52,9 +53,7 @@ fn fill(stack: &mut Stack) -> Result<()> {
         }
         other => {
             stack.push(other);
-            Err(Error::new(
-                "FILL's argument types do not match the expected ones.",
-            ))
+            Err(SeriesError::FillArguments.into())
         }
     }
 }
@@ -99,10 +98,13 @@ fn fill_from_map(stack: &mut Stack, map: &Map) -> Result<()> {
         Value::Null => true,
         Value::Boolean(verify) => verify,
         other => {
-            return Err(Error::new(format!(
-                "FILL expects parameter verify to be a BOOLEAN, but instead got a {}",
-                other.type_name()
-            )));
+            return Err(Error::usage(
+                "FILL",
+                format!(
+                    "expects parameter verify to be a BOOLEAN, but instead got a {}",
+                    other.type_name()
+                ),
+            ));
         }
     };
     let ticks = match get("ticks") {
@@ -113,18 +115,24 @@ fn fill_from_map(stack: &mut Stack, map: &Map) -> Result<()> {
             "FILL expects parameter ticks to be a LIST of LONG, but it contains a",
         )?,
         other => {
-            return Err(Error::new(format!(
-                "FILL expects parameter ticks to be a LIST, but instead got a {}",
-                other.type_name()
-            )));
+            return Err(Error::usage(
+                "FILL",
+                format!(
+                    "expects parameter ticks to be a LIST, but instead got a {}",
+                    other.type_name()
+                ),
+            ));
         }
     };
     let filler = get("filler");
     let Some(filler) = FillerRef::of(&filler) else {
-        return Err(Error::new(format!(
-            "FILL expects parameter filler to be a filler or a macro, but instead got a {}",
-            filler.type_name()
-        )));
+        return Err(Error::usage(
+            "FILL",
+            format!(
+                "expects parameter filler to be a filler or a macro, but instead got a {}",
+                filler.type_name()
+            ),
+        ));
     };
     let params = Params {
         filler,
@@ -143,22 +151,31 @@ fn fill_from_map(stack: &mut Stack, map: &Map) -> Result<()> {
 /// `FILL.applyFromList`: `[ gts|[gts…] filler [ticks] ] FILL`.
 fn fill_from_list(stack: &mut Stack, params: &[Value]) -> Result<()> {
     if params.len() < 2 {
-        return Err(Error::new(format!(
-            "FILL expects an input LIST containing at least two parameters, but got only {}",
-            params.len()
-        )));
+        return Err(Error::usage(
+            "FILL",
+            format!(
+                "expects an input LIST containing at least two parameters, but got only {}",
+                params.len()
+            ),
+        ));
     }
     if params.len() > 3 {
-        return Err(Error::new(format!(
-            "FILL expects an input LIST containing at most three parameters, but got {}",
-            params.len()
-        )));
+        return Err(Error::usage(
+            "FILL",
+            format!(
+                "expects an input LIST containing at most three parameters, but got {}",
+                params.len()
+            ),
+        ));
     }
     let Some(filler) = FillerRef::of(&params[1]) else {
-        return Err(Error::new(format!(
-            "FILL expects the second parameter of the input LIST to be a filler or a macro, but instead got a {}",
-            params[1].type_name()
-        )));
+        return Err(Error::usage(
+            "FILL",
+            format!(
+                "expects the second parameter of the input LIST to be a filler or a macro, but instead got a {}",
+                params[1].type_name()
+            ),
+        ));
     };
     let ticks = match params.get(2) {
         None | Some(Value::Null) => None,
@@ -168,9 +185,7 @@ fn fill_from_list(stack: &mut Stack, params: &[Value]) -> Result<()> {
             "FILL expects the last parameter of the input LIST to be a LIST of LONG, but it contains a",
         )?,
         Some(_) => {
-            return Err(Error::new(
-                "FILLexpects the last parameter of the input LIST to be a LIST",
-            ));
+            return Err(SeriesError::FillLastParameter.into());
         }
     };
     let fill_params = Params {
@@ -187,7 +202,7 @@ fn fill_from_list(stack: &mut Stack, params: &[Value]) -> Result<()> {
 
 /// The ticks of a `ticks` parameter: `None` when empty, sorted and deduplicated (`sort`)
 /// like `FILL.sortDedupTicks`.
-fn tick_list(list: &List, sort: bool, not_long: &str) -> Result<Option<Vec<i64>>> {
+fn tick_list(list: &List, sort: bool, not_long: &'static str) -> Result<Option<Vec<i64>>> {
     let ticks = {
         let elements = list.borrow();
         if elements.is_empty() {
@@ -196,7 +211,11 @@ fn tick_list(list: &List, sort: bool, not_long: &str) -> Result<Option<Vec<i64>>
         let mut ticks = Vec::with_capacity(elements.len());
         for element in elements.iter() {
             let Value::Long(tick) = element else {
-                return Err(Error::new(format!("{not_long} {}", element.type_name())));
+                return Err(SeriesError::FillTicks {
+                    message: not_long,
+                    found: element.type_name(),
+                }
+                .into());
             };
             ticks.push(*tick);
         }
@@ -269,11 +288,11 @@ fn fill_target(
             let mut results = Vec::with_capacity(elements.len());
             for element in &elements {
                 let Value::Gts(gts) = element else {
-                    return Err(Error::new(format!(
-                        "{} {}",
-                        form.list_element,
-                        element.type_name()
-                    )));
+                    return Err(SeriesError::FillListElement {
+                        message: form.list_element,
+                        found: element.type_name(),
+                    }
+                    .into());
                 };
                 let Some(role) = univariate_role(params.filler.roles(), params.force) else {
                     return Err(role_error());
@@ -286,7 +305,7 @@ fn fill_target(
             if form.on_stack {
                 stack.push(other);
             }
-            Err(Error::new(form.not_series))
+            Err(SeriesError::FillNotSeries(form.not_series).into())
         }
     }
 }
@@ -542,10 +561,10 @@ fn cross_fill(stack: &mut Stack, filler: &FillerRef<'_>) -> Result<()> {
 fn pop_gts(stack: &mut Stack) -> Result<Gts> {
     match stack.pop()? {
         Value::Gts(gts) => Ok(gts),
-        other => Err(Error::new(format!(
-            "FILL expected a GTS, but instead got a {}",
-            other.type_name()
-        ))),
+        other => Err(Error::usage(
+            "FILL",
+            format!("expected a GTS, but instead got a {}", other.type_name()),
+        )),
     }
 }
 
@@ -564,9 +583,7 @@ fn next_gap(
                 *idxa += 1;
                 *idxb += 1;
                 if a.ticks.get(*idxa) == Some(ta) || b.ticks.get(*idxb) == Some(tb) {
-                    return Err(Error::new(
-                        "Cannot fill Geo Time Series with duplicate timestamps.",
-                    ));
+                    return Err(SeriesError::FillDuplicateTimestamps.into());
                 }
             }
             (Some(ta), Some(tb)) => return Ok(Some(ta > tb)),

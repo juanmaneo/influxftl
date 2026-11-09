@@ -9,8 +9,8 @@
 
 use super::Entry;
 use super::args::{fail, fail_with_cause};
-use crate::error::{Error, Result};
-use crate::format::java_double_to_string;
+use crate::error::Result;
+use crate::error::series::SeriesError;
 use crate::stack::Stack;
 use crate::value::Value;
 
@@ -51,10 +51,7 @@ pub fn from_quaternion(q: i64) -> Result<[f64; 4]> {
     let elements = [component(48), component(32), component(16), component(0)];
     let norm: f64 = elements.iter().map(|c| c * c).sum();
     if (1.0 - norm).abs() > PRECISION {
-        return Err(Error::new(format!(
-            "Input does not appear to be a unit quaternion, norm was {}.",
-            java_double_to_string(norm)
-        )));
+        return Err(SeriesError::NotUnitQuaternion(norm).into());
     }
     Ok(elements)
 }
