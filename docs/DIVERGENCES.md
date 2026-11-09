@@ -980,3 +980,12 @@ Warp 10 pushes opaque Java objects:
 
 Error messages follow JDK 11+ (`Index 1 out of bounds for length 1`, helpful
 `NullPointerException` messages) where the Warp 10 3.5 oracle runs on JDK 8.
+
+## 27. `SMARTPARSE`
+
+The series of the result come in the Java `HashMap` order of their `Metadata.hashCode`, like
+Warp 10. The regular expression is a `fancy-regex` one: its syntax errors do not read like
+Java's `PatternSyntaxException` (an unclosed `(` for instance), and a pattern that backtracks
+catastrophically fails with the backtrack limit error of `fancy-regex` where Java keeps
+searching. A group name such as `(?<V>…)` fails with the JDK 11 message, where the JDK 8
+oracle gives another one.

@@ -53,6 +53,7 @@ pub mod quaternions;
 pub mod runtime;
 pub mod selectors;
 pub mod shape;
+pub mod smartparse;
 pub mod stack_ops;
 pub mod stringformat;
 pub mod strings;
@@ -136,6 +137,7 @@ const TABLES: &[&[(&str, Entry)]] = &[
     platform::FUNCTIONS,
     gts_parse::FUNCTIONS,
     pickle::FUNCTIONS,
+    smartparse::FUNCTIONS,
     selectors::FUNCTIONS,
     crate::aggregators::basic::FUNCTIONS,
     crate::aggregators::stats::FUNCTIONS,
@@ -356,6 +358,10 @@ mod runtime_tests;
 mod selectors_tests;
 #[cfg(test)]
 mod shape_tests;
+#[cfg(test)]
+mod smartparse_error_tests;
+#[cfg(test)]
+mod smartparse_tests;
 #[cfg(test)]
 mod stack_ops_tests;
 #[cfg(test)]

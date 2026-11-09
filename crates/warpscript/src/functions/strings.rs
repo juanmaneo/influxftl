@@ -787,7 +787,7 @@ pub struct CompiledPattern {
 
 /// The message of a regular expression error (`PatternSyntaxException` and the runtime
 /// limits of the backtracking engine).
-fn regex_error(err: &fancy_regex::Error) -> Error {
+pub(crate) fn regex_error(err: &fancy_regex::Error) -> Error {
     Error::new(err.to_string())
 }
 
@@ -820,7 +820,7 @@ fn expand_quoting(source: &str) -> Cow<'_, str> {
 }
 
 /// `Pattern.compile(source)`: a Java pattern compiled by `fancy-regex`.
-fn compile_regex(source: &str) -> fancy_regex::Result<Regex> {
+pub(crate) fn compile_regex(source: &str) -> fancy_regex::Result<Regex> {
     Regex::new(&expand_quoting(source))
 }
 

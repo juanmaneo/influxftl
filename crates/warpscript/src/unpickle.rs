@@ -360,7 +360,7 @@ fn number_format(input: &str) -> Error {
 }
 
 /// `Long.parseLong`.
-fn parse_long(text: &str) -> Result<i64> {
+pub(crate) fn parse_long(text: &str) -> Result<i64> {
     let digits = text.strip_prefix(['+', '-']).unwrap_or(text);
     if digits.is_empty() || !digits.bytes().all(|b| b.is_ascii_digit()) {
         return Err(number_format(text));
