@@ -16,11 +16,14 @@ use num_bigint::{BigInt, Sign};
 use num_traits::Zero;
 
 use crate::bigdecimal::BigDecimal;
-use crate::error::{Error, Result, compat};
+use crate::error::fault::BoundsError;
+use crate::error::fault::NumberFormatError;
+use crate::error::{Result, compat};
 use crate::geoxp::from_geoxp_point;
 use crate::gts::{GeoTimeSerie, NO_LOCATION};
 use crate::javamap::JavaHashMap;
-use crate::value::Value;
+use crate::unpickle::PyKind;
+use crate::value::{Value, ValueKind};
 
 /// `Pickler.MAX_RECURSE_DEPTH`.
 const MAX_RECURSE_DEPTH: usize = 1000;
@@ -54,14 +57,215 @@ mod op {
     pub const NEWFALSE: u8 = 0x89;
 }
 
-/// A `net.razorvine.pickle.PickleException`.
-pub fn pickle_error(message: impl Into<String>) -> Error {
-    Error::runtime("net.razorvine.pickle.PickleException", message)
+/// A failure of the pickle encoder or decoder, worded like Pyrolite's (`PickleException`,
+/// unless the variant says otherwise) because a script reads it.
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+pub enum PickleError {
+    /// The input ends in the middle of an opcode (an `IOException`).
+    #[error("java.io.IOException: premature end of file")]
+    PrematureEof,
+    /// The input ends in the middle of an operand (an `IOException`).
+    #[error("java.io.IOException: expected more bytes in input stream")]
+    ExpectedMoreBytes,
+    /// A self-containing structure was hashed (a `StackOverflowError`).
+    #[error("StackOverflowError")]
+    HashRecursion,
+    /// Objects nested too deep to be converted to a value (a `StackOverflowError`).
+    #[error("StackOverflowError")]
+    ConversionTooDeep,
+    /// Values nested too deep to be pickled (a `StackOverflowError`).
+    #[error("recursion too deep in Pickler.save (>1000)")]
+    SaveRecursion,
+    /// A persistent id instruction that popped nothing (a `NullPointerException`).
+    #[error(
+        "Cannot invoke \"Object.toString()\" because the return value of \"net.razorvine.pickle.UnpickleStack.pop()\" is null"
+    )]
+    PersistentIdNull,
+    /// An array reconstruction without its constructor (a `NullPointerException`).
+    #[error(
+        "Cannot invoke \"net.razorvine.pickle.objects.ArrayConstructor.construct(char, int, byte[])\" because \"constructor\" is null"
+    )]
+    NullArrayConstructor,
+    /// An operand of more than `i32::MAX` bytes.
+    #[error("pickle too large, can't read more than maxint")]
+    TooLarge,
+    /// A memo reference to an index nothing was stored at.
+    #[error("invalid memo key")]
+    InvalidMemoKey,
+    /// A string pickle that is not quoted.
+    #[error("insecure string pickle")]
+    InsecureString,
+    /// A protocol version the decoder does not know.
+    #[error("unsupported pickle protocol: {0}")]
+    UnsupportedProtocol(i16),
+    /// An extension code opcode.
+    #[error(
+        "Unimplemented opcode EXT1/EXT2/EXT4 encountered. Don't use extension codes when pickling via copyreg.add_extension() to avoid this error."
+    )]
+    ExtensionOpcode,
+    /// A `NEWOBJ_EX` with keyword arguments.
+    #[error("newobj_ex with keyword arguments not supported")]
+    KeywordArguments,
+    /// A reference to out-of-band data.
+    #[error(
+        "pickle stream refers to out-of-band data but no user-overridden next_buffer() method is used\n"
+    )]
+    OutOfBandData,
+    /// An opcode the decoder does not know.
+    #[error("invalid pickle opcode: {0}")]
+    InvalidOpcode(u8),
+    /// A persistent id instruction.
+    #[error(
+        "A load persistent id instruction was encountered, but no persistentLoad function was specified. (implement it in custom Unpickler subclass)"
+    )]
+    PersistentLoad,
+    /// A `BUILD` on an object that is not a dictionary.
+    #[error(
+        "failed to __setstate__() ({}.__setstate__({}))",
+        compat::py_class(*target),
+        compat::py_class(*state)
+    )]
+    SetState {
+        /// What the state was set on.
+        target: PyKind,
+        /// What the state was.
+        state: PyKind,
+    },
+    /// A constructor given a null argument.
+    #[error(
+        "problem construction object: java.lang.NullPointerException: Cannot invoke \"Object.getClass()\" because \"args[i]\" is null"
+    )]
+    NullConstructorArgument,
+    /// A constructor given arguments of types it does not take.
+    #[error(
+        "problem construction object: java.lang.NoSuchMethodException: {}.<init>({})",
+        compat::py_class(*class),
+        compat::py_classes(arguments)
+    )]
+    NoSuchConstructor {
+        /// What the constructor builds.
+        class: PyKind,
+        /// The kinds of the arguments given.
+        arguments: Vec<PyKind>,
+    },
+    /// A `ClassDict` constructor given arguments.
+    #[error("expected zero arguments for construction of ClassDict (for {0})")]
+    ClassDictArguments(String),
+    /// An exception constructor given a message that is not a string.
+    #[error(
+        "problem construction object: java.lang.ClassCastException: class {} cannot be cast to class java.lang.String",
+        compat::py_class(*.0)
+    )]
+    ExceptionMessageNotString(PyKind),
+    /// A `BigDecimal` constructor that refused its argument.
+    #[error("problem construction object: java.lang.reflect.InvocationTargetException")]
+    ConstructionFailed(#[source] NumberFormatError),
+    /// A `copy_reg._reconstructor` not given three arguments.
+    #[error("invalid pickle data; expecting 3 args to copy_reg reconstructor but recieved {0}")]
+    ReconstructorArity(usize),
+    /// A `copy_reg._reconstructor` that cannot rebuild its class.
+    #[error(
+        "failed to reconstruct() ({}.reconstruct(java.lang.Object, java.lang.Object))",
+        compat::py_class(*.0)
+    )]
+    Reconstruct(PyKind),
+    /// An `operator.attrgetter` of something else than `localize`.
+    #[error("expected 'localize' string argument for construction of AttrGetter")]
+    AttrGetterArgument,
+    /// An `operator.attrgetter` not given exactly one argument.
+    #[error("expected exactly one string argument for construction of AttrGetter")]
+    AttrGetterArity,
+    /// A calendar localizer not given a time zone.
+    #[error("expected exactly one TimeZone argument for construction of CalendarLocalizer")]
+    LocalizerArgument,
+    /// A calendar localization not given a calendar.
+    #[error("expected exactly one Calendar argument for construction of Calendar with timezone")]
+    CalendarArgument,
+    /// A bytearray in a character set the decoder does not know.
+    #[error("error creating bytearray: java.io.UnsupportedEncodingException: {0}")]
+    UnsupportedEncoding(String),
+    /// A constructor given the wrong number of arguments.
+    #[error("invalid pickle data for {what}; expected {expected}, got {got}")]
+    Arity {
+        /// What was being built.
+        what: &'static str,
+        /// The numbers of arguments it takes.
+        expected: &'static str,
+        /// The number given.
+        got: usize,
+    },
+    /// A packed value of the wrong length.
+    #[error("invalid pickle data for {what}; expected arg of length {expected}, got length {got}")]
+    PackedLength {
+        /// What was being built.
+        what: &'static str,
+        /// The length it takes.
+        expected: usize,
+        /// The length given.
+        got: usize,
+    },
+    /// An array type code that does not exist.
+    #[error("invalid array typecode: {0}")]
+    InvalidTypecode(char),
+    /// A Python 2.6 array.
+    #[error("unsupported Python 2.6 array pickle format")]
+    Python26Array,
+    /// A machine format code that does not exist.
+    #[error("unknown machine type format")]
+    UnknownMachineType,
+    /// A machine format code the array type does not accept.
+    #[error("for {0}")]
+    MachineCode(&'static str),
+    /// A byte count that is not a multiple of the item size.
+    #[error("data size alignment error")]
+    DataAlignment,
+    /// An array of 64-bits unsigned longs.
+    #[error("unsupported datatype: 64-bits unsigned long")]
+    UnsignedLong,
+    /// A UTF-32 character outside of the basic plane.
+    #[error("cannot process UTF-32 character codepoint {0}")]
+    Utf32Codepoint(u32),
+    /// A datetime whose second argument is not a time zone.
+    #[error("invalid pickle data for datetime; expected arg 2 to be a Tzinfo or TimeZone")]
+    DatetimeZoneArgument,
+    /// A pytz time zone whose first argument is not a string.
+    #[error(
+        "invalid pickle data for pytz timezone; expected string argument as first tuple member"
+    )]
+    PytzArgument,
+    /// A zoneinfo path without a time zone identifier.
+    #[error("couldn't parse timezone identifier from zoneinfo path{0}")]
+    ZoneinfoPath(String),
+    /// A string with an escape sequence that does not exist.
+    #[error("invalid escape sequence char '{c}' in string \"{shown} [...]\" (possibly truncated)")]
+    InvalidEscape {
+        /// The character after the backslash.
+        c: char,
+        /// The beginning of the string.
+        shown: String,
+    },
+    /// A matrix, vector or bit set, which Pyrolite introspects as a bean and fails on.
+    #[error(
+        "couldn't introspect javabean: java.lang.IllegalArgumentException: wrong number of arguments: 0 expected: {expected}"
+    )]
+    JavaBean {
+        /// The number of arguments of the constructor Pyrolite looks for.
+        expected: u8,
+    },
+    /// A value of a kind Pyrolite cannot pickle.
+    #[error("couldn't pickle object of type class {}", compat::value_class(*.0))]
+    Unpicklable(ValueKind),
 }
 
-/// The `StackOverflowError` of hashing a self-containing collection, or of nesting too deep.
-fn stack_overflow(message: &str) -> Error {
-    Error::runtime("java.lang.StackOverflowError", message)
+impl PickleError {
+    /// `true` for the failures Warp 10 raises as runtime exceptions, `false` for the
+    /// `IOException`s of a truncated input (which `PICKLE->` wraps).
+    pub fn is_runtime(&self) -> bool {
+        !matches!(
+            self,
+            PickleError::PrematureEof | PickleError::ExpectedMoreBytes
+        )
+    }
 }
 
 /// A stand-in for the Java identity hash code of an object without value semantics.
@@ -130,7 +334,7 @@ fn hash_code(value: &Value, visiting: &mut Vec<usize>) -> Result<i32> {
     fn enter<T: ?Sized>(rc: &Rc<T>, visiting: &mut Vec<usize>) -> Result<()> {
         let address = Rc::as_ptr(rc).cast::<()>() as usize;
         if visiting.contains(&address) {
-            return Err(stack_overflow("StackOverflowError"));
+            return Err(PickleError::HashRecursion.into());
         }
         visiting.push(address);
         Ok(())
@@ -285,7 +489,7 @@ impl Pickler {
     fn save(&mut self, value: &Value) -> Result<()> {
         self.recurse += 1;
         if self.recurse > MAX_RECURSE_DEPTH {
-            return Err(stack_overflow("recursion too deep in Pickler.save (>1000)"));
+            return Err(PickleError::SaveRecursion.into());
         }
         if value.is_null() {
             self.out.push(op::NONE);
@@ -412,10 +616,11 @@ impl Pickler {
                 self.write_memo(value, hash);
             }
             Value::Counter(_) => {
-                return Err(Error::runtime(
-                    "java.lang.StringIndexOutOfBoundsException",
-                    "Index 1 out of bounds for length 0",
-                ));
+                return Err(BoundsError::StringIndex {
+                    index: 1,
+                    length: 0,
+                }
+                .into());
             }
             Value::BitSet(_) | Value::Matrix(_) | Value::Vector(_) => {
                 let expected = if matches!(value, Value::Vector(_)) {
@@ -423,15 +628,10 @@ impl Pickler {
                 } else {
                     2
                 };
-                return Err(pickle_error(format!(
-                    "couldn't introspect javabean: java.lang.IllegalArgumentException: wrong number of arguments: 0 expected: {expected}"
-                )));
+                return Err(PickleError::JavaBean { expected }.into());
             }
             _ => {
-                return Err(pickle_error(format!(
-                    "couldn't pickle object of type class {}",
-                    compat::value_class(value.kind())
-                )));
+                return Err(PickleError::Unpicklable(value.kind()).into());
             }
         }
         Ok(())

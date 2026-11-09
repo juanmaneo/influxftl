@@ -8,7 +8,9 @@ use super::fault::BoundsError;
 use super::math::MathError;
 use super::{Class, Error};
 use crate::encoder::EncoderError;
+use crate::pickle::PickleError;
 use crate::thrift::ThriftError;
+use crate::unpickle::PyKind;
 use crate::value::ValueKind;
 
 /// `WarpScriptException`, the exception of every failure Warp 10 reports itself.
@@ -27,6 +29,7 @@ pub fn exception_class(err: &Error) -> &'static str {
         Error::Thrift(err) => thrift_class(err),
         Error::Encoder(err) => encoder_class(err),
         Error::Math(err) => math_class(err),
+        Error::Pickle(err) => pickle_class(err),
         Error::Arithmetic(_) => "java.lang.ArithmeticException",
         Error::NumberFormat(_) => "java.lang.NumberFormatException",
         Error::Bounds(err) => bounds_class(err),
@@ -68,6 +71,12 @@ pub fn class_name(class: Class) -> &'static str {
         Class::List => "java.util.List",
         Class::Integer => "java.lang.Integer",
         Class::ObjectArray => "[Ljava.lang.Object;",
+        Class::Map => "java.util.Map",
+        Class::HashMap => "java.util.HashMap",
+        Class::TimeZone => "java.util.TimeZone",
+        Class::ObjectConstructor => "net.razorvine.pickle.IObjectConstructor",
+        Class::ArrayConstructor => "net.razorvine.pickle.objects.ArrayConstructor",
+        Class::Pickled(kind) => py_class(kind),
     }
 }
 
@@ -164,8 +173,75 @@ fn bounds_class(err: &BoundsError) -> &'static str {
         BoundsError::ListIndex { .. } | BoundsError::ListEnd(_) => {
             "java.lang.IndexOutOfBoundsException"
         }
-        BoundsError::StringIndex { .. } | BoundsError::StringRange { .. } => {
-            "java.lang.StringIndexOutOfBoundsException"
-        }
+        BoundsError::StringIndex { .. }
+        | BoundsError::StringSlice { .. }
+        | BoundsError::StringRange { .. } => "java.lang.StringIndexOutOfBoundsException",
     }
+}
+
+/// The class of the exception a pickle failure stands for.
+fn pickle_class(err: &PickleError) -> &'static str {
+    match err {
+        PickleError::PrematureEof | PickleError::ExpectedMoreBytes => "java.io.IOException",
+        PickleError::HashRecursion
+        | PickleError::ConversionTooDeep
+        | PickleError::SaveRecursion => "java.lang.StackOverflowError",
+        PickleError::PersistentIdNull | PickleError::NullArrayConstructor => {
+            "java.lang.NullPointerException"
+        }
+        _ => "net.razorvine.pickle.PickleException",
+    }
+}
+
+/// The class of an object Pyrolite unpickled.
+pub fn py_class(kind: PyKind) -> &'static str {
+    match kind {
+        PyKind::Bool => "java.lang.Boolean",
+        PyKind::Int => "java.lang.Integer",
+        PyKind::Long => "java.lang.Long",
+        PyKind::BigInteger => "java.math.BigInteger",
+        PyKind::Float => "java.lang.Double",
+        PyKind::Str => "java.lang.String",
+        PyKind::Bytes => "[B",
+        PyKind::Tuple => "[Ljava.lang.Object;",
+        PyKind::IntArray => "[I",
+        PyKind::List => "java.util.ArrayList",
+        PyKind::Dict => "java.util.HashMap",
+        PyKind::ClassDict => "net.razorvine.pickle.objects.ClassDict",
+        PyKind::Set => "java.util.HashSet",
+        PyKind::Decimal => "java.math.BigDecimal",
+        PyKind::Complex => "net.razorvine.pickle.objects.ComplexNumber",
+        PyKind::Calendar => "java.util.GregorianCalendar",
+        PyKind::Time => "net.razorvine.pickle.objects.Time",
+        PyKind::TimeDelta => "net.razorvine.pickle.objects.TimeDelta",
+        PyKind::Zone => "sun.util.calendar.ZoneInfo",
+        PyKind::Tzinfo => "net.razorvine.pickle.objects.Tzinfo",
+        PyKind::ClassDictConstructor => "net.razorvine.pickle.objects.ClassDictConstructor",
+        PyKind::ExceptionConstructor => "net.razorvine.pickle.objects.ExceptionConstructor",
+        PyKind::AnyClassConstructor => "net.razorvine.pickle.objects.AnyClassConstructor",
+        PyKind::ArrayConstructor => "net.razorvine.pickle.objects.ArrayConstructor",
+        PyKind::ByteArrayConstructor => "net.razorvine.pickle.objects.ByteArrayConstructor",
+        PyKind::SetConstructor => "net.razorvine.pickle.objects.SetConstructor",
+        PyKind::DateTimeConstructor => "net.razorvine.pickle.objects.DateTimeConstructor",
+        PyKind::TimeZoneConstructor => "net.razorvine.pickle.objects.TimeZoneConstructor",
+        PyKind::Reconstructor => "net.razorvine.pickle.objects.Reconstructor",
+        PyKind::AttrGetter => "net.razorvine.pickle.objects.OperatorAttrGetterForCalendarTz",
+        PyKind::AttrGetterForTz => {
+            "net.razorvine.pickle.objects.OperatorAttrGetterForCalendarTz$AttrGetterForTz"
+        }
+        PyKind::CalendarLocalizer => {
+            "net.razorvine.pickle.objects.OperatorAttrGetterForCalendarTz$CalendarLocalizer"
+        }
+        PyKind::Exception => "net.razorvine.pickle.PythonException",
+        PyKind::Object => "java.lang.Object",
+    }
+}
+
+/// The classes of `kinds`, comma separated like a Java signature.
+pub fn py_classes(kinds: &[PyKind]) -> String {
+    kinds
+        .iter()
+        .map(|kind| py_class(*kind))
+        .collect::<Vec<_>>()
+        .join(", ")
 }

@@ -501,6 +501,21 @@ fn platform_failures_have_the_wording_and_class_of_warp10() {
             "java.lang.NumberFormatException",
         ),
         (
+            BoundsError::StringSlice {
+                begin: 9,
+                end: 8,
+                length: 8,
+            }
+            .into(),
+            "begin 9, end 8, length 8",
+            "java.lang.StringIndexOutOfBoundsException",
+        ),
+        (
+            IllegalArgumentError::InvalidCodePoint(0x11_0000).into(),
+            "Not a valid Unicode code point: 0x110000",
+            "java.lang.IllegalArgumentException",
+        ),
+        (
             Error::Immutable,
             "UnsupportedOperationException",
             "java.lang.UnsupportedOperationException",
@@ -644,4 +659,229 @@ fn math_failures_have_the_wording_and_class_of_commons_math() {
         assert_eq!(exception_class(&error), class, "{message}");
         assert!(error.is_runtime(), "{message}");
     }
+}
+
+#[test]
+fn pickle_failures_have_the_wording_and_class_of_pyrolite() {
+    use super::pickle::PickleError;
+    use super::unpickle::PyKind;
+
+    const PICKLE: &str = "net.razorvine.pickle.PickleException";
+    let failures = [
+        (
+            PickleError::PrematureEof,
+            "java.io.IOException: premature end of file",
+            "java.io.IOException",
+            false,
+        ),
+        (
+            PickleError::ExpectedMoreBytes,
+            "java.io.IOException: expected more bytes in input stream",
+            "java.io.IOException",
+            false,
+        ),
+        (
+            PickleError::HashRecursion,
+            "StackOverflowError",
+            "java.lang.StackOverflowError",
+            true,
+        ),
+        (
+            PickleError::ConversionTooDeep,
+            "StackOverflowError",
+            "java.lang.StackOverflowError",
+            true,
+        ),
+        (
+            PickleError::SaveRecursion,
+            "recursion too deep in Pickler.save (>1000)",
+            "java.lang.StackOverflowError",
+            true,
+        ),
+        (
+            PickleError::PersistentIdNull,
+            "Cannot invoke \"Object.toString()\" because the return value of \"net.razorvine.pickle.UnpickleStack.pop()\" is null",
+            "java.lang.NullPointerException",
+            true,
+        ),
+        (
+            PickleError::NullArrayConstructor,
+            "Cannot invoke \"net.razorvine.pickle.objects.ArrayConstructor.construct(char, int, byte[])\" because \"constructor\" is null",
+            "java.lang.NullPointerException",
+            true,
+        ),
+        (
+            PickleError::SetState {
+                target: PyKind::List,
+                state: PyKind::Str,
+            },
+            "failed to __setstate__() (java.util.ArrayList.__setstate__(java.lang.String))",
+            PICKLE,
+            true,
+        ),
+        (
+            PickleError::NoSuchConstructor {
+                class: PyKind::Complex,
+                arguments: vec![PyKind::Int, PyKind::Float],
+            },
+            "problem construction object: java.lang.NoSuchMethodException: net.razorvine.pickle.objects.ComplexNumber.<init>(java.lang.Integer, java.lang.Double)",
+            PICKLE,
+            true,
+        ),
+        (
+            PickleError::ExceptionMessageNotString(PyKind::Bool),
+            "problem construction object: java.lang.ClassCastException: class java.lang.Boolean cannot be cast to class java.lang.String",
+            PICKLE,
+            true,
+        ),
+        (
+            PickleError::Reconstruct(PyKind::Dict),
+            "failed to reconstruct() (java.util.HashMap.reconstruct(java.lang.Object, java.lang.Object))",
+            PICKLE,
+            true,
+        ),
+        (
+            PickleError::Arity {
+                what: "date",
+                expected: "1 arg",
+                got: 2,
+            },
+            "invalid pickle data for date; expected 1 arg, got 2",
+            PICKLE,
+            true,
+        ),
+        (
+            PickleError::PackedLength {
+                what: "time",
+                expected: 6,
+                got: 5,
+            },
+            "invalid pickle data for time; expected arg of length 6, got length 5",
+            PICKLE,
+            true,
+        ),
+        (
+            PickleError::InvalidEscape {
+                c: 'q',
+                shown: "ab".to_owned(),
+            },
+            "invalid escape sequence char 'q' in string \"ab [...]\" (possibly truncated)",
+            PICKLE,
+            true,
+        ),
+        (
+            PickleError::JavaBean { expected: 2 },
+            "couldn't introspect javabean: java.lang.IllegalArgumentException: wrong number of arguments: 0 expected: 2",
+            PICKLE,
+            true,
+        ),
+        (
+            PickleError::Unpicklable(ValueKind::Matrix),
+            "couldn't pickle object of type class org.apache.commons.math3.linear.Array2DRowRealMatrix",
+            PICKLE,
+            true,
+        ),
+    ];
+    for (failure, message, class, runtime) in failures {
+        let error = Error::from(failure);
+        assert_eq!(error.to_string(), message);
+        assert_eq!(exception_class(&error), class, "{message}");
+        assert_eq!(error.is_runtime(), runtime, "{message}");
+    }
+}
+
+#[test]
+fn classes_of_every_kind_of_unpickled_object() {
+    use super::unpickle::PyKind;
+
+    for (kind, class) in [
+        (PyKind::Bool, "java.lang.Boolean"),
+        (PyKind::Int, "java.lang.Integer"),
+        (PyKind::Long, "java.lang.Long"),
+        (PyKind::BigInteger, "java.math.BigInteger"),
+        (PyKind::Float, "java.lang.Double"),
+        (PyKind::Str, "java.lang.String"),
+        (PyKind::Bytes, "[B"),
+        (PyKind::Tuple, "[Ljava.lang.Object;"),
+        (PyKind::IntArray, "[I"),
+        (PyKind::List, "java.util.ArrayList"),
+        (PyKind::Dict, "java.util.HashMap"),
+        (PyKind::ClassDict, "net.razorvine.pickle.objects.ClassDict"),
+        (PyKind::Set, "java.util.HashSet"),
+        (PyKind::Decimal, "java.math.BigDecimal"),
+        (
+            PyKind::Complex,
+            "net.razorvine.pickle.objects.ComplexNumber",
+        ),
+        (PyKind::Calendar, "java.util.GregorianCalendar"),
+        (PyKind::Time, "net.razorvine.pickle.objects.Time"),
+        (PyKind::TimeDelta, "net.razorvine.pickle.objects.TimeDelta"),
+        (PyKind::Zone, "sun.util.calendar.ZoneInfo"),
+        (PyKind::Tzinfo, "net.razorvine.pickle.objects.Tzinfo"),
+        (
+            PyKind::ClassDictConstructor,
+            "net.razorvine.pickle.objects.ClassDictConstructor",
+        ),
+        (
+            PyKind::ExceptionConstructor,
+            "net.razorvine.pickle.objects.ExceptionConstructor",
+        ),
+        (
+            PyKind::AnyClassConstructor,
+            "net.razorvine.pickle.objects.AnyClassConstructor",
+        ),
+        (
+            PyKind::ArrayConstructor,
+            "net.razorvine.pickle.objects.ArrayConstructor",
+        ),
+        (
+            PyKind::ByteArrayConstructor,
+            "net.razorvine.pickle.objects.ByteArrayConstructor",
+        ),
+        (
+            PyKind::SetConstructor,
+            "net.razorvine.pickle.objects.SetConstructor",
+        ),
+        (
+            PyKind::DateTimeConstructor,
+            "net.razorvine.pickle.objects.DateTimeConstructor",
+        ),
+        (
+            PyKind::TimeZoneConstructor,
+            "net.razorvine.pickle.objects.TimeZoneConstructor",
+        ),
+        (
+            PyKind::Reconstructor,
+            "net.razorvine.pickle.objects.Reconstructor",
+        ),
+        (
+            PyKind::AttrGetter,
+            "net.razorvine.pickle.objects.OperatorAttrGetterForCalendarTz",
+        ),
+        (
+            PyKind::AttrGetterForTz,
+            "net.razorvine.pickle.objects.OperatorAttrGetterForCalendarTz$AttrGetterForTz",
+        ),
+        (
+            PyKind::CalendarLocalizer,
+            "net.razorvine.pickle.objects.OperatorAttrGetterForCalendarTz$CalendarLocalizer",
+        ),
+        (PyKind::Exception, "net.razorvine.pickle.PythonException"),
+        (PyKind::Object, "java.lang.Object"),
+    ] {
+        assert_eq!(compat::py_class(kind), class);
+        assert_eq!(compat::class_name(Class::Pickled(kind)), class);
+    }
+    assert_eq!(compat::class_name(Class::Map), "java.util.Map");
+    assert_eq!(compat::class_name(Class::HashMap), "java.util.HashMap");
+    assert_eq!(compat::class_name(Class::TimeZone), "java.util.TimeZone");
+    assert_eq!(
+        compat::class_name(Class::ObjectConstructor),
+        "net.razorvine.pickle.IObjectConstructor"
+    );
+    assert_eq!(
+        compat::class_name(Class::ArrayConstructor),
+        "net.razorvine.pickle.objects.ArrayConstructor"
+    );
+    assert_eq!(compat::py_classes(&[]), "");
 }

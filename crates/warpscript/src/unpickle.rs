@@ -17,13 +17,14 @@ use num_bigint::BigInt;
 use num_traits::ToPrimitive;
 
 use crate::bigdecimal::{BigDecimal, parse_bigint};
-use crate::error::{Error, Result};
+use crate::error::fault::{BoundsError, IllegalArgumentError, NumberFormatError};
+use crate::error::{Class, Error, Result};
 use crate::functions::operators::parse_java_double;
 use crate::javamap::JavaHashMap;
 use crate::pickle::{
-    bigdecimal_hash, bigint_hash, double_hash, long_hash, pickle_error, string_hash,
+    PickleError, bigdecimal_hash, bigint_hash, double_hash, long_hash, string_hash,
 };
-use crate::value::Value;
+use crate::value::{Value, ValueKind};
 
 /// `Unpickler.HIGHEST_PROTOCOL`.
 const HIGHEST_PROTOCOL: i16 = 5;
@@ -67,25 +68,21 @@ enum Ctor {
 }
 
 impl Ctor {
-    /// The Java class of the constructor.
-    fn java_class(&self) -> &'static str {
+    /// What the constructor is, for the failures that name it.
+    fn kind(&self) -> PyKind {
         match self {
-            Ctor::ClassDict(_) => "net.razorvine.pickle.objects.ClassDictConstructor",
-            Ctor::Exception(_) => "net.razorvine.pickle.objects.ExceptionConstructor",
-            Ctor::Complex | Ctor::Decimal => "net.razorvine.pickle.objects.AnyClassConstructor",
-            Ctor::Array => "net.razorvine.pickle.objects.ArrayConstructor",
-            Ctor::ByteArray => "net.razorvine.pickle.objects.ByteArrayConstructor",
-            Ctor::Set => "net.razorvine.pickle.objects.SetConstructor",
-            Ctor::DateTime(_) => "net.razorvine.pickle.objects.DateTimeConstructor",
-            Ctor::Zone(_) => "net.razorvine.pickle.objects.TimeZoneConstructor",
-            Ctor::Reconstructor => "net.razorvine.pickle.objects.Reconstructor",
-            Ctor::AttrGetter => "net.razorvine.pickle.objects.OperatorAttrGetterForCalendarTz",
-            Ctor::AttrGetterForTz => {
-                "net.razorvine.pickle.objects.OperatorAttrGetterForCalendarTz$AttrGetterForTz"
-            }
-            Ctor::Localizer(_) => {
-                "net.razorvine.pickle.objects.OperatorAttrGetterForCalendarTz$CalendarLocalizer"
-            }
+            Ctor::ClassDict(_) => PyKind::ClassDictConstructor,
+            Ctor::Exception(_) => PyKind::ExceptionConstructor,
+            Ctor::Complex | Ctor::Decimal => PyKind::AnyClassConstructor,
+            Ctor::Array => PyKind::ArrayConstructor,
+            Ctor::ByteArray => PyKind::ByteArrayConstructor,
+            Ctor::Set => PyKind::SetConstructor,
+            Ctor::DateTime(_) => PyKind::DateTimeConstructor,
+            Ctor::Zone(_) => PyKind::TimeZoneConstructor,
+            Ctor::Reconstructor => PyKind::Reconstructor,
+            Ctor::AttrGetter => PyKind::AttrGetter,
+            Ctor::AttrGetterForTz => PyKind::AttrGetterForTz,
+            Ctor::Localizer(_) => PyKind::CalendarLocalizer,
         }
     }
 }
@@ -106,6 +103,80 @@ enum ZoneKind {
     DateutilGettz,
     DateutilTzfile,
     Unsupported,
+}
+
+/// What an unpickled object is: the Pyrolite class it stands for. Failures carry it; the class
+/// name a script reads in their message is named in `error::compat`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum PyKind {
+    /// A `Boolean`.
+    Bool,
+    /// An `Integer`.
+    Int,
+    /// A `Long`.
+    Long,
+    /// A `BigInteger`.
+    BigInteger,
+    /// A `Double`.
+    Float,
+    /// A `String`.
+    Str,
+    /// A `byte[]`.
+    Bytes,
+    /// An `Object[]`, a tuple.
+    Tuple,
+    /// A primitive array.
+    IntArray,
+    /// An `ArrayList`.
+    List,
+    /// A `HashMap`.
+    Dict,
+    /// A `ClassDict`, an object of an unknown class.
+    ClassDict,
+    /// A `HashSet`.
+    Set,
+    /// A `BigDecimal`.
+    Decimal,
+    /// A `ComplexNumber`.
+    Complex,
+    /// A `GregorianCalendar`.
+    Calendar,
+    /// A `Time`.
+    Time,
+    /// A `TimeDelta`.
+    TimeDelta,
+    /// A `ZoneInfo`.
+    Zone,
+    /// A `Tzinfo`.
+    Tzinfo,
+    /// The constructor of a `ClassDict`.
+    ClassDictConstructor,
+    /// The constructor of a Python exception.
+    ExceptionConstructor,
+    /// The constructor of a `ComplexNumber` or a `BigDecimal`.
+    AnyClassConstructor,
+    /// The constructor of an array.
+    ArrayConstructor,
+    /// The constructor of a bytearray.
+    ByteArrayConstructor,
+    /// The constructor of a set.
+    SetConstructor,
+    /// The constructor of a date or time.
+    DateTimeConstructor,
+    /// The constructor of a time zone.
+    TimeZoneConstructor,
+    /// `copy_reg._reconstructor`.
+    Reconstructor,
+    /// `operator.attrgetter`.
+    AttrGetter,
+    /// The `attrgetter` of a time zone.
+    AttrGetterForTz,
+    /// The localizer of a calendar.
+    CalendarLocalizer,
+    /// A Python exception.
+    Exception,
+    /// `None` and the mark, which are plain objects.
+    Object,
 }
 
 /// A decoded object: the Java object Pyrolite would have built.
@@ -212,10 +283,7 @@ impl Py {
     /// Java `hashCode`; `depth` guards against self-containing structures.
     fn hash(&self, depth: usize) -> Result<i32> {
         if depth > MAX_DEPTH {
-            return Err(Error::runtime(
-                "java.lang.StackOverflowError",
-                "StackOverflowError",
-            ));
+            return Err(PickleError::HashRecursion.into());
         }
         Ok(match self {
             Py::None | Py::Mark | Py::Tzinfo(_) => 0,
@@ -259,39 +327,39 @@ impl Py {
         })
     }
 
-    /// The Java class name, for the `ClassCastException` messages.
-    fn java_class(&self) -> &'static str {
+    /// What the object is, for the failures that name it.
+    fn kind(&self) -> PyKind {
         match self {
-            Py::Bool(_) => "java.lang.Boolean",
-            Py::Int(_) => "java.lang.Integer",
-            Py::Long(_) => "java.lang.Long",
-            Py::Big(_) => "java.math.BigInteger",
-            Py::Float(_) => "java.lang.Double",
-            Py::Str(_) => "java.lang.String",
-            Py::Bytes(_) => "[B",
-            Py::Tuple(_) => "[Ljava.lang.Object;",
-            Py::Array(_) => "[I",
-            Py::List(_) => "java.util.ArrayList",
-            Py::Dict(_, None) => "java.util.HashMap",
-            Py::Dict(_, Some(_)) => "net.razorvine.pickle.objects.ClassDict",
-            Py::Set(_) => "java.util.HashSet",
-            Py::Decimal(_) => "java.math.BigDecimal",
-            Py::Complex(..) => "net.razorvine.pickle.objects.ComplexNumber",
-            Py::Calendar(_) => "java.util.GregorianCalendar",
-            Py::Time(_) => "net.razorvine.pickle.objects.Time",
-            Py::TimeDelta(_) => "net.razorvine.pickle.objects.TimeDelta",
-            Py::Zone(_) => "sun.util.calendar.ZoneInfo",
-            Py::Tzinfo(_) => "net.razorvine.pickle.objects.Tzinfo",
-            Py::Ctor(ctor) => ctor.java_class(),
-            Py::Exception(_) => "net.razorvine.pickle.PythonException",
-            Py::None | Py::Mark => "java.lang.Object",
+            Py::Bool(_) => PyKind::Bool,
+            Py::Int(_) => PyKind::Int,
+            Py::Long(_) => PyKind::Long,
+            Py::Big(_) => PyKind::BigInteger,
+            Py::Float(_) => PyKind::Float,
+            Py::Str(_) => PyKind::Str,
+            Py::Bytes(_) => PyKind::Bytes,
+            Py::Tuple(_) => PyKind::Tuple,
+            Py::Array(_) => PyKind::IntArray,
+            Py::List(_) => PyKind::List,
+            Py::Dict(_, None) => PyKind::Dict,
+            Py::Dict(_, Some(_)) => PyKind::ClassDict,
+            Py::Set(_) => PyKind::Set,
+            Py::Decimal(_) => PyKind::Decimal,
+            Py::Complex(..) => PyKind::Complex,
+            Py::Calendar(_) => PyKind::Calendar,
+            Py::Time(_) => PyKind::Time,
+            Py::TimeDelta(_) => PyKind::TimeDelta,
+            Py::Zone(_) => PyKind::Zone,
+            Py::Tzinfo(_) => PyKind::Tzinfo,
+            Py::Ctor(ctor) => ctor.kind(),
+            Py::Exception(_) => PyKind::Exception,
+            Py::None | Py::Mark => PyKind::Object,
         }
     }
 
     fn as_int(&self) -> Result<i32> {
         match self {
             Py::Int(i) => Ok(*i),
-            other => Err(cast_error(other, "java.lang.Integer")),
+            other => Err(cast_error(other, Class::Integer)),
         }
     }
 
@@ -303,7 +371,7 @@ impl Py {
             Py::Big(b) => Ok(b.to_f64().unwrap_or(f64::NAN)),
             Py::Float(d) => Ok(*d),
             Py::Decimal(d) => Ok(d.double_value()),
-            other => Err(cast_error(other, "java.lang.Number")),
+            other => Err(cast_error(other, Class::Number)),
         }
     }
 
@@ -323,46 +391,33 @@ impl Py {
 
 /// The `ClassCastException` of casting `value` to `class`; Java casts `null` silently and
 /// fails on its use instead.
-fn cast_error(value: &Py, class: &str) -> Error {
+fn cast_error(value: &Py, class: impl Into<Class>) -> Error {
     if *value == Py::None {
         return Error::null_pointer();
     }
-    Error::runtime(
-        "java.lang.ClassCastException",
-        format!(
-            "class {} cannot be cast to class {class}",
-            value.java_class()
-        ),
-    )
+    Error::class_cast(Class::Pickled(value.kind()), class)
 }
 
 /// A `(String)` cast.
 fn str_of(value: Py) -> Result<Rc<str>> {
     match value {
         Py::Str(s) => Ok(s),
-        other => Err(cast_error(&other, "java.lang.String")),
+        other => Err(cast_error(&other, ValueKind::String)),
     }
-}
-
-/// An `IOException`, which `PICKLE->` wraps.
-fn io_error(message: &str) -> Error {
-    Error::new(format!("java.io.IOException: {message}"))
 }
 
 /// `ArrayList.get(-1)` on the empty unpickling stack.
 fn empty_stack() -> Error {
-    Error::runtime(
-        "java.lang.IndexOutOfBoundsException",
-        "Index -1 out of bounds for length 0",
-    )
+    BoundsError::ListIndex {
+        index: -1,
+        length: 0,
+    }
+    .into()
 }
 
-/// `NumberFormatException` with `For input string: "…"`.
+/// A `NumberFormatException` with `For input string: "…"`.
 fn number_format(input: &str) -> Error {
-    Error::runtime(
-        "java.lang.NumberFormatException",
-        format!("For input string: \"{input}\""),
-    )
+    NumberFormatError::InvalidInput(input.to_owned()).into()
 }
 
 /// `Long.parseLong`.
@@ -407,7 +462,7 @@ impl Unpickler<'_> {
         loop {
             let key = self.readbyte();
             if key == -1 {
-                return Err(io_error("premature end of file"));
+                return Err(Error::from(PickleError::PrematureEof));
             }
             if let Some(value) = self.dispatch(key as u8)? {
                 return Ok(value);
@@ -428,20 +483,15 @@ impl Unpickler<'_> {
 
     fn readbytes(&mut self, n: i64) -> Result<&[u8]> {
         if n < 0 {
-            return Err(Error::runtime(
-                "java.lang.NegativeArraySizeException",
-                n.to_string(),
-            ));
+            return Err(BoundsError::NegativeSize(n).into());
         }
         if n > i64::from(i32::MAX) {
-            return Err(pickle_error(
-                "pickle too large, can't read more than maxint",
-            ));
+            return Err(PickleError::TooLarge.into());
         }
         let start = self.pos;
         let end = start.saturating_add(n as usize);
         if end > self.input.len() {
-            return Err(io_error("expected more bytes in input stream"));
+            return Err(Error::from(PickleError::ExpectedMoreBytes));
         }
         self.pos = end;
         Ok(&self.input[start..end])
@@ -466,7 +516,7 @@ impl Unpickler<'_> {
             let c = self.readbyte();
             if c == -1 {
                 if line.is_empty() {
-                    return Err(io_error("premature end of file"));
+                    return Err(Error::from(PickleError::PrematureEof));
                 }
                 break;
             }
@@ -510,7 +560,7 @@ impl Unpickler<'_> {
             .memo
             .get(&index)
             .cloned()
-            .ok_or_else(|| pickle_error("invalid memo key"))?;
+            .ok_or(PickleError::InvalidMemoKey)?;
         self.stack.push(value);
         Ok(())
     }
@@ -524,14 +574,14 @@ impl Unpickler<'_> {
     fn list_target(&self) -> Result<Rc<RefCell<Vec<Py>>>> {
         match self.peek()? {
             Py::List(list) => Ok(list.clone()),
-            other => Err(cast_error(other, "java.util.ArrayList")),
+            other => Err(cast_error(other, ValueKind::List)),
         }
     }
 
     fn dict_target(&self) -> Result<Dict> {
         match self.peek()? {
             Py::Dict(dict, _) => Ok(dict.clone()),
-            other => Err(cast_error(other, "java.util.Map")),
+            other => Err(cast_error(other, Class::Map)),
         }
     }
 
@@ -553,7 +603,7 @@ impl Unpickler<'_> {
                 let d = parse_java_double(&line).map_err(|_| {
                     let trimmed = line.trim_matches(|c: char| c <= ' ');
                     if trimmed.is_empty() {
-                        Error::runtime("java.lang.NumberFormatException", "empty String")
+                        NumberFormatError::Empty.into()
                     } else {
                         number_format(trimmed)
                     }
@@ -618,10 +668,7 @@ impl Unpickler<'_> {
             }
             b'Q' => {
                 if self.pop()? == Py::None {
-                    return Err(Error::runtime(
-                        "java.lang.NullPointerException",
-                        "Cannot invoke \"Object.toString()\" because the return value of \"net.razorvine.pickle.UnpickleStack.pop()\" is null",
-                    ));
+                    return Err(PickleError::PersistentIdNull.into());
                 }
                 return Err(Self::persistent());
             }
@@ -632,15 +679,17 @@ impl Unpickler<'_> {
                     .iter()
                     .find(|q| rep.starts_with(**q))
                     .map_or_else(
-                        || Err(pickle_error("insecure string pickle")),
+                        || Err(Error::from(PickleError::InsecureString)),
                         |q| {
                             if !rep.ends_with(*q) {
-                                Err(pickle_error("insecure string pickle"))
+                                Err(PickleError::InsecureString.into())
                             } else if rep.len() < 2 {
-                                Err(Error::runtime(
-                                    "java.lang.StringIndexOutOfBoundsException",
-                                    "Range [1, 0) out of bounds for length 1",
-                                ))
+                                Err(BoundsError::StringRange {
+                                    start: 1,
+                                    end: 0,
+                                    length: 1,
+                                }
+                                .into())
                             } else {
                                 Ok(rep[1..rep.len() - 1].to_owned())
                             }
@@ -713,10 +762,11 @@ impl Unpickler<'_> {
                 let mut map = JavaHashMap::with_capacity(items.len());
                 for pair in items.chunks(2) {
                     let [k, v] = pair else {
-                        return Err(Error::runtime(
-                            "java.lang.IndexOutOfBoundsException",
-                            format!("Index {0} out of bounds for length {0}", items.len()),
-                        ));
+                        return Err(BoundsError::ListIndex {
+                            index: items.len() as i64,
+                            length: items.len(),
+                        }
+                        .into());
                     };
                     map.put(k.hash(0)?, k.clone(), v.clone());
                 }
@@ -776,19 +826,17 @@ impl Unpickler<'_> {
             b'o' => {
                 let mut args = self.pop_all_since_marker()?;
                 if args.is_empty() {
-                    return Err(Error::runtime(
-                        "java.lang.IndexOutOfBoundsException",
-                        "Index 0 out of bounds for length 0",
-                    ));
+                    return Err(BoundsError::ListIndex {
+                        index: 0,
+                        length: 0,
+                    }
+                    .into());
                 }
                 let ctor = args.remove(0);
                 let object = match ctor {
                     Py::Ctor(ctor) => construct(&ctor, &args)?,
                     other => {
-                        return Err(cast_error(
-                            &other,
-                            "net.razorvine.pickle.IObjectConstructor",
-                        ));
+                        return Err(cast_error(&other, Class::ObjectConstructor));
                     }
                 };
                 self.stack.push(object);
@@ -840,15 +888,11 @@ impl Unpickler<'_> {
             0x80 => {
                 let proto = self.readbyte();
                 if !(0..=HIGHEST_PROTOCOL).contains(&proto) {
-                    return Err(pickle_error(format!(
-                        "unsupported pickle protocol: {proto}"
-                    )));
+                    return Err(PickleError::UnsupportedProtocol(proto).into());
                 }
             }
             0x82..=0x84 => {
-                return Err(pickle_error(
-                    "Unimplemented opcode EXT1/EXT2/EXT4 encountered. Don't use extension codes when pickling via copyreg.add_extension() to avoid this error.",
-                ));
+                return Err(PickleError::ExtensionOpcode.into());
             }
             0x88 => self.stack.push(Py::Bool(true)),
             0x89 => self.stack.push(Py::Bool(false)),
@@ -861,7 +905,7 @@ impl Unpickler<'_> {
                 let set = match self.pop()? {
                     Py::Set(set) => set,
                     other => {
-                        return Err(cast_error(&other, "java.util.HashSet"));
+                        return Err(cast_error(&other, ValueKind::Set));
                     }
                 };
                 for item in items {
@@ -882,15 +926,13 @@ impl Unpickler<'_> {
                 let empty = match self.pop()? {
                     Py::Dict(dict, _) => dict.borrow().is_empty(),
                     other => {
-                        return Err(cast_error(&other, "java.util.HashMap"));
+                        return Err(cast_error(&other, Class::HashMap));
                     }
                 };
                 let args = self.pop()?;
                 let ctor = self.pop()?;
                 if !empty {
-                    return Err(pickle_error(
-                        "newobj_ex with keyword arguments not supported",
-                    ));
+                    return Err(PickleError::KeywordArguments.into());
                 }
                 self.stack.push(ctor);
                 self.stack.push(args);
@@ -900,22 +942,18 @@ impl Unpickler<'_> {
                 self.readbytes(8)?;
             }
             0x97 => {
-                return Err(pickle_error(
-                    "pickle stream refers to out-of-band data but no user-overridden next_buffer() method is used\n",
-                ));
+                return Err(PickleError::OutOfBandData.into());
             }
             0x98 => {}
             _ => {
-                return Err(pickle_error(format!("invalid pickle opcode: {key}")));
+                return Err(PickleError::InvalidOpcode(key).into());
             }
         }
         Ok(None)
     }
 
     fn persistent() -> Error {
-        pickle_error(
-            "A load persistent id instruction was encountered, but no persistentLoad function was specified. (implement it in custom Unpickler subclass)",
-        )
+        PickleError::PersistentLoad.into()
     }
 
     fn global(&mut self, module: &str, name: &str) {
@@ -943,14 +981,14 @@ impl Unpickler<'_> {
         let args = match self.pop()? {
             Py::Tuple(args) => Some(args),
             Py::None => None,
-            other => return Err(cast_error(&other, "[Ljava.lang.Object;")),
+            other => return Err(cast_error(&other, Class::ObjectArray)),
         };
         let ctor = self.pop()?;
         let (Some(args), false) = (args, ctor == Py::None) else {
             return Err(Error::null_pointer());
         };
         let Py::Ctor(ctor) = ctor else {
-            return Err(cast_error(&ctor, "net.razorvine.pickle.IObjectConstructor"));
+            return Err(cast_error(&ctor, Class::ObjectConstructor));
         };
         let object = construct(&ctor, &args)?;
         self.stack.push(object);
@@ -976,11 +1014,11 @@ impl Unpickler<'_> {
                 *dict.borrow_mut() = state;
                 Ok(())
             }
-            (target, _) => Err(pickle_error(format!(
-                "failed to __setstate__() ({}.__setstate__({}))",
-                target.java_class(),
-                args.java_class()
-            ))),
+            (target, _) => Err(PickleError::SetState {
+                target: target.kind(),
+                state: args.kind(),
+            }
+            .into()),
         }
     }
 }
@@ -1011,19 +1049,17 @@ fn known_ctor(module: &str, name: &str) -> Option<Ctor> {
     })
 }
 
-/// `"problem construction object: java.lang.NoSuchMethodException: …"` of
-/// `AnyClassConstructor`.
-fn no_such_constructor(class: &str, args: &[Py]) -> Error {
+/// The failure of `AnyClassConstructor` building a `class` from `args`: a `null` argument, or
+/// arguments of types no constructor takes.
+fn no_such_constructor(class: PyKind, args: &[Py]) -> Error {
     if args.contains(&Py::None) {
-        return pickle_error(
-            "problem construction object: java.lang.NullPointerException: Cannot invoke \"Object.getClass()\" because \"args[i]\" is null",
-        );
+        return PickleError::NullConstructorArgument.into();
     }
-    let types: Vec<&str> = args.iter().map(Py::java_class).collect();
-    pickle_error(format!(
-        "problem construction object: java.lang.NoSuchMethodException: {class}.<init>({})",
-        types.join(", ")
-    ))
+    PickleError::NoSuchConstructor {
+        class,
+        arguments: args.iter().map(Py::kind).collect(),
+    }
+    .into()
 }
 
 #[allow(clippy::too_many_lines)]
@@ -1031,9 +1067,7 @@ fn construct(ctor: &Ctor, args: &[Py]) -> Result<Py> {
     match ctor {
         Ctor::ClassDict(name) => {
             if !args.is_empty() {
-                return Err(pickle_error(format!(
-                    "expected zero arguments for construction of ClassDict (for {name})"
-                )));
+                return Err(PickleError::ClassDictArguments(name.clone()).into());
             }
             let mut map = JavaHashMap::new();
             map.put(
@@ -1051,30 +1085,20 @@ fn construct(ctor: &Ctor, args: &[Py]) -> Result<Py> {
                 None => format!("[{name}]"),
                 Some(Py::Str(s)) => format!("[{name}] {s}"),
                 Some(other) => {
-                    return Err(pickle_error(format!(
-                        "problem construction object: java.lang.ClassCastException: class {} cannot be cast to class java.lang.String",
-                        other.java_class()
-                    )));
+                    return Err(PickleError::ExceptionMessageNotString(other.kind()).into());
                 }
             };
             Ok(Py::Exception(Rc::from(message)))
         }
         Ctor::Complex => match args {
             [Py::Float(r), Py::Float(i)] => Ok(Py::Complex(*r, *i)),
-            _ => Err(no_such_constructor(
-                "net.razorvine.pickle.objects.ComplexNumber",
-                args,
-            )),
+            _ => Err(no_such_constructor(PyKind::Complex, args)),
         },
         Ctor::Decimal => match args {
             [Py::Str(s)] => BigDecimal::parse(s)
                 .map(|d| Py::Decimal(Rc::new(d)))
-                .map_err(|_| {
-                    pickle_error(
-                        "problem construction object: java.lang.reflect.InvocationTargetException",
-                    )
-                }),
-            _ => Err(no_such_constructor("java.math.BigDecimal", args)),
+                .map_err(|cause| PickleError::ConstructionFailed(cause).into()),
+            _ => Err(no_such_constructor(PyKind::Decimal, args)),
         },
         Ctor::Set => match args.first() {
             Some(Py::List(list)) => {
@@ -1085,11 +1109,12 @@ fn construct(ctor: &Ctor, args: &[Py]) -> Result<Py> {
                 }
                 Ok(Py::Set(Rc::new(RefCell::new(set))))
             }
-            Some(other) => Err(cast_error(other, "java.util.ArrayList")),
-            None => Err(Error::runtime(
-                "java.lang.ArrayIndexOutOfBoundsException",
-                "Index 0 out of bounds for length 0",
-            )),
+            Some(other) => Err(cast_error(other, ValueKind::List)),
+            None => Err(BoundsError::ArrayIndex {
+                index: 0,
+                length: 0,
+            }
+            .into()),
         },
         Ctor::ByteArray => byte_array(args),
         Ctor::Array => array(args),
@@ -1097,36 +1122,22 @@ fn construct(ctor: &Ctor, args: &[Py]) -> Result<Py> {
         Ctor::Zone(kind) => zone(*kind, args),
         Ctor::Reconstructor => {
             if args.len() != 3 {
-                return Err(pickle_error(format!(
-                    "invalid pickle data; expecting 3 args to copy_reg reconstructor but recieved {}",
-                    args.len()
-                )));
+                return Err(PickleError::ReconstructorArity(args.len()).into());
             }
-            Err(pickle_error(format!(
-                "failed to reconstruct() ({}.reconstruct(java.lang.Object, java.lang.Object))",
-                args[0].java_class()
-            )))
+            Err(PickleError::Reconstruct(args[0].kind()).into())
         }
         Ctor::AttrGetter => match args {
             [Py::Str(s)] if &**s == "localize" => Ok(Py::Ctor(Rc::new(Ctor::AttrGetterForTz))),
-            [_] => Err(pickle_error(
-                "expected 'localize' string argument for construction of AttrGetter",
-            )),
-            _ => Err(pickle_error(
-                "expected exactly one string argument for construction of AttrGetter",
-            )),
+            [_] => Err(PickleError::AttrGetterArgument.into()),
+            _ => Err(PickleError::AttrGetterArity.into()),
         },
         Ctor::AttrGetterForTz => match args {
             [Py::Zone(id)] => Ok(Py::Ctor(Rc::new(Ctor::Localizer(id.to_string())))),
-            _ => Err(pickle_error(
-                "expected exactly one TimeZone argument for construction of CalendarLocalizer",
-            )),
+            _ => Err(PickleError::LocalizerArgument.into()),
         },
         Ctor::Localizer(zone_id) => match args {
             [Py::Calendar(ms)] => Ok(Py::Calendar(local_to_utc(*ms, Some(zone_id)))),
-            _ => Err(pickle_error(
-                "expected exactly one Calendar argument for construction of Calendar with timezone",
-            )),
+            _ => Err(PickleError::CalendarArgument.into()),
         },
     }
 }
@@ -1143,7 +1154,7 @@ fn byte_array(args: &[Py]) -> Result<Py> {
                 .collect::<Result<_>>()?;
             Ok(Py::Bytes(Rc::from(data)))
         }
-        [other] => Err(cast_error(other, "java.util.ArrayList")),
+        [other] => Err(cast_error(other, ValueKind::List)),
         [data, encoding] => {
             let (Py::Str(data), Py::Str(encoding)) = (data, encoding) else {
                 let culprit = if matches!(data, Py::Str(_)) {
@@ -1151,7 +1162,7 @@ fn byte_array(args: &[Py]) -> Result<Py> {
                 } else {
                     data
                 };
-                return Err(cast_error(culprit, "java.lang.String"));
+                return Err(cast_error(culprit, ValueKind::String));
             };
             let encoding = match encoding.strip_prefix("latin-") {
                 Some(n) => format!("ISO-8859-{n}"),
@@ -1168,17 +1179,17 @@ fn byte_array(args: &[Py]) -> Result<Py> {
                     .map(|c| if c.is_ascii() { c as u8 } else { b'?' })
                     .collect(),
                 _ => {
-                    return Err(pickle_error(format!(
-                        "error creating bytearray: java.io.UnsupportedEncodingException: {encoding}"
-                    )));
+                    return Err(PickleError::UnsupportedEncoding(encoding).into());
                 }
             };
             Ok(Py::Bytes(Rc::from(bytes)))
         }
-        _ => Err(pickle_error(format!(
-            "invalid pickle data for bytearray; expected 1 or 2 args, got {}",
-            args.len()
-        ))),
+        _ => Err(PickleError::Arity {
+            what: "bytearray",
+            expected: "1 or 2 args",
+            got: args.len(),
+        }
+        .into()),
     }
 }
 
@@ -1190,12 +1201,13 @@ fn typed_elements(typecode: char, values: &[Py]) -> Result<Py> {
                 .iter()
                 .map(|v| match v {
                     Py::Str(s) => s.chars().next().ok_or_else(|| {
-                        Error::runtime(
-                            "java.lang.StringIndexOutOfBoundsException",
-                            "Index 0 out of bounds for length 0",
-                        )
+                        BoundsError::StringIndex {
+                            index: 0,
+                            length: 0,
+                        }
+                        .into()
                     }),
-                    other => Err(cast_error(other, "java.lang.String")),
+                    other => Err(cast_error(other, ValueKind::String)),
                 })
                 .collect::<Result<_>>()?;
             return Ok(Py::Str(Rc::from(s)));
@@ -1227,7 +1239,7 @@ fn typed_elements(typecode: char, values: &[Py]) -> Result<Py> {
             .iter()
             .map(|v| v.number().map(Py::Float))
             .collect::<Result<_>>()?,
-        _ => return Err(pickle_error(format!("invalid array typecode: {typecode}"))),
+        _ => return Err(PickleError::InvalidTypecode(typecode).into()),
     };
     Ok(Py::Array(Rc::from(items)))
 }
@@ -1240,10 +1252,11 @@ fn widen(f: f32) -> f64 {
 /// `String.charAt(0)` of a type code.
 fn first_char(typecode: &str) -> Result<char> {
     typecode.chars().next().ok_or_else(|| {
-        Error::runtime(
-            "java.lang.StringIndexOutOfBoundsException",
-            "Index 0 out of bounds for length 0",
-        )
+        BoundsError::StringIndex {
+            index: 0,
+            length: 0,
+        }
+        .into()
     })
 }
 
@@ -1252,53 +1265,49 @@ fn array(args: &[Py]) -> Result<Py> {
     match args {
         [constructor, typecode, machine, data] => {
             if !matches!(constructor, Py::None | Py::Ctor(_)) {
-                return Err(cast_error(
-                    constructor,
-                    "net.razorvine.pickle.objects.ArrayConstructor",
-                ));
+                return Err(cast_error(constructor, Class::ArrayConstructor));
             }
             let Py::Str(typecode) = typecode else {
-                return Err(cast_error(typecode, "java.lang.String"));
+                return Err(cast_error(typecode, ValueKind::String));
             };
             let machine = machine.as_int()?;
             let Py::Bytes(data) = data else {
-                return Err(cast_error(data, "[B"));
+                return Err(cast_error(data, ValueKind::Bytes));
             };
             let typecode = first_char(typecode)?;
             if *constructor == Py::None {
-                return Err(Error::runtime(
-                    "java.lang.NullPointerException",
-                    "Cannot invoke \"net.razorvine.pickle.objects.ArrayConstructor.construct(char, int, byte[])\" because \"constructor\" is null",
-                ));
+                return Err(PickleError::NullArrayConstructor.into());
             }
             machine_array(typecode, machine, data)
         }
         [typecode, values] => {
             let Py::Str(typecode) = typecode else {
-                return Err(cast_error(typecode, "java.lang.String"));
+                return Err(cast_error(typecode, ValueKind::String));
             };
             let values = match values {
                 Py::Str(_) => {
-                    return Err(pickle_error("unsupported Python 2.6 array pickle format"));
+                    return Err(PickleError::Python26Array.into());
                 }
                 Py::List(values) => values.borrow().clone(),
                 other => {
-                    return Err(cast_error(other, "java.util.ArrayList"));
+                    return Err(cast_error(other, ValueKind::List));
                 }
             };
             typed_elements(first_char(typecode)?, &values)
         }
-        _ => Err(pickle_error(format!(
-            "invalid pickle data for array; expected 2 args, got {}",
-            args.len()
-        ))),
+        _ => Err(PickleError::Arity {
+            what: "array",
+            expected: "2 args",
+            got: args.len(),
+        }
+        .into()),
     }
 }
 
 /// `ArrayConstructor.construct(typecode, machinecode, data)` (`array._array_reconstructor`).
 fn machine_array(typecode: char, machine: i32, data: &[u8]) -> Result<Py> {
     if machine < 0 {
-        return Err(pickle_error("unknown machine type format"));
+        return Err(PickleError::UnknownMachineType.into());
     }
     // The machine codes each type code accepts, as Pyrolite words them.
     let (allowed, codes): (&[i32], &str) = match typecode {
@@ -1313,16 +1322,16 @@ fn machine_array(typecode: char, machine: i32, data: &[u8]) -> Result<Py> {
         'L' => (&[6, 7, 10, 11], "L type must be 6/7/10/11"),
         'f' => (&[14, 15], "f type must be 14/15"),
         'd' => (&[16, 17], "d type must be 16/17"),
-        _ => return Err(pickle_error(format!("invalid array typecode: {typecode}"))),
+        _ => return Err(PickleError::InvalidTypecode(typecode).into()),
     };
     if !allowed.contains(&machine) {
-        return Err(pickle_error(format!("for {codes}")));
+        return Err(PickleError::MachineCode(codes).into());
     }
     if typecode == 'L' && machine >= 10 {
         if !data.len().is_multiple_of(8) {
-            return Err(pickle_error("data size alignment error"));
+            return Err(PickleError::DataAlignment.into());
         }
-        return Err(pickle_error("unsupported datatype: 64-bits unsigned long"));
+        return Err(PickleError::UnsignedLong.into());
     }
     // (item size, signed, big endian, floating point) of the Python machine format.
     let (size, signed, big, float) = match machine {
@@ -1342,7 +1351,7 @@ fn machine_array(typecode: char, machine: i32, data: &[u8]) -> Result<Py> {
         return Ok(Py::Bytes(Rc::from(data)));
     }
     if !data.len().is_multiple_of(size) {
-        return Err(pickle_error("data size alignment error"));
+        return Err(PickleError::DataAlignment.into());
     }
     let raws = data.chunks(size).map(|c| {
         if big {
@@ -1359,15 +1368,10 @@ fn machine_array(typecode: char, machine: i32, data: &[u8]) -> Result<Py> {
         for code in raws {
             let code = code as u32;
             if code > 0x10_ffff {
-                return Err(Error::runtime(
-                    "java.lang.IllegalArgumentException",
-                    format!("Not a valid Unicode code point: 0x{code:X}"),
-                ));
+                return Err(IllegalArgumentError::InvalidCodePoint(code).into());
             }
             if code > 0xffff {
-                return Err(pickle_error(format!(
-                    "cannot process UTF-32 character codepoint {code}"
-                )));
+                return Err(PickleError::Utf32Codepoint(code).into());
             }
             units.push(code as u16);
         }
@@ -1438,17 +1442,19 @@ fn local_to_utc(local: i64, zone: Option<&str>) -> i64 {
 
 /// `DateTimeConstructor`.
 fn date_time(kind: DateKind, args: &[Py]) -> Result<Py> {
-    let packed = |arg: &Py, len: usize, what: &str| -> Result<Vec<i64>> {
+    let packed = |arg: &Py, len: usize, what: &'static str| -> Result<Vec<i64>> {
         let codes: Vec<i64> = match arg {
             Py::Str(s) => s.encode_utf16().map(i64::from).collect(),
             Py::Bytes(b) => b.iter().map(|x| i64::from(*x)).collect(),
-            other => return Err(cast_error(other, "[B")),
+            other => return Err(cast_error(other, ValueKind::Bytes)),
         };
         if codes.len() != len {
-            return Err(pickle_error(format!(
-                "invalid pickle data for {what}; expected arg of length {len}, got length {}",
-                codes.len()
-            )));
+            return Err(PickleError::PackedLength {
+                what,
+                expected: len,
+                got: codes.len(),
+            }
+            .into());
         }
         Ok(codes)
     };
@@ -1458,10 +1464,12 @@ fn date_time(kind: DateKind, args: &[Py]) -> Result<Py> {
     match kind {
         DateKind::TimeDelta => {
             if args.len() != 3 {
-                return Err(pickle_error(format!(
-                    "invalid pickle data for timedelta; expected 3 args, got {}",
-                    args.len()
-                )));
+                return Err(PickleError::Arity {
+                    what: "timedelta",
+                    expected: "3 args",
+                    got: args.len(),
+                }
+                .into());
             }
             let parts: Vec<i32> = args
                 .iter()
@@ -1480,10 +1488,12 @@ fn date_time(kind: DateKind, args: &[Py]) -> Result<Py> {
                 ]));
             }
             if args.len() != 1 {
-                return Err(pickle_error(format!(
-                    "invalid pickle data for time; expected 1 or 4 args, got {}",
-                    args.len()
-                )));
+                return Err(PickleError::Arity {
+                    what: "time",
+                    expected: "1 or 4 args",
+                    got: args.len(),
+                }
+                .into());
             }
             let what = if matches!(args[0], Py::Str(_)) {
                 "time"
@@ -1508,10 +1518,12 @@ fn date_time(kind: DateKind, args: &[Py]) -> Result<Py> {
                 )));
             }
             if args.len() != 1 {
-                return Err(pickle_error(format!(
-                    "invalid pickle data for date; expected 1 arg, got {}",
-                    args.len()
-                )));
+                return Err(PickleError::Arity {
+                    what: "date",
+                    expected: "1 arg",
+                    got: args.len(),
+                }
+                .into());
             }
             let p = packed(&args[0], 4, "date")?;
             Ok(Py::Calendar(calendar_millis(
@@ -1525,7 +1537,7 @@ fn date_time(kind: DateKind, args: &[Py]) -> Result<Py> {
                 let zone = match args.get(7) {
                     Some(Py::Zone(id)) => Some(id.to_string()),
                     Some(other) => {
-                        return Err(cast_error(other, "java.util.TimeZone"));
+                        return Err(cast_error(other, Class::TimeZone));
                     }
                     None => None,
                 };
@@ -1536,10 +1548,12 @@ fn date_time(kind: DateKind, args: &[Py]) -> Result<Py> {
                 )));
             }
             if args.len() != 1 && args.len() != 2 {
-                return Err(pickle_error(format!(
-                    "invalid pickle data for datetime; expected 1, 2, 7 or 8 args, got {}",
-                    args.len()
-                )));
+                return Err(PickleError::Arity {
+                    what: "datetime",
+                    expected: "1, 2, 7 or 8 args",
+                    got: args.len(),
+                }
+                .into());
             }
             let p = packed(&args[0], 10, "datetime")?;
             let micro = ((p[7] << 8) | p[8]) << 8 | p[9];
@@ -1548,9 +1562,7 @@ fn date_time(kind: DateKind, args: &[Py]) -> Result<Py> {
                 Some(Py::Zone(id)) => Some(id.to_string()),
                 Some(Py::Tzinfo(id)) => id.as_deref().map(str::to_owned),
                 Some(_) => {
-                    return Err(pickle_error(
-                        "invalid pickle data for datetime; expected arg 2 to be a Tzinfo or TimeZone",
-                    ));
+                    return Err(PickleError::DatetimeZoneArgument.into());
                 }
             };
             let fields = [
@@ -1572,16 +1584,18 @@ fn date_time(kind: DateKind, args: &[Py]) -> Result<Py> {
 
 /// `TimeZoneConstructor`.
 fn zone(kind: ZoneKind, args: &[Py]) -> Result<Py> {
-    let one_string = |what: &str| -> Result<Rc<str>> {
+    let one_string = |what: &'static str| -> Result<Rc<str>> {
         if args.len() != 1 {
-            return Err(pickle_error(format!(
-                "invalid pickle data for {what}; expected 1 args, got {}",
-                args.len()
-            )));
+            return Err(PickleError::Arity {
+                what,
+                expected: "1 args",
+                got: args.len(),
+            }
+            .into());
         }
         match &args[0] {
             Py::Str(s) => Ok(s.clone()),
-            other => Err(cast_error(other, "java.lang.String")),
+            other => Err(cast_error(other, ValueKind::String)),
         }
     };
     match kind {
@@ -1590,35 +1604,27 @@ fn zone(kind: ZoneKind, args: &[Py]) -> Result<Py> {
         ZoneKind::DateutilGettz => Ok(Py::Tzinfo(Some(one_string("dateutil gettz call")?))),
         ZoneKind::Pytz => {
             if args.len() != 4 && args.len() != 1 {
-                return Err(pickle_error(format!(
-                    "invalid pickle data for pytz timezone; expected 1 or 4 args, got {}",
-                    args.len()
-                )));
+                return Err(PickleError::Arity {
+                    what: "pytz timezone",
+                    expected: "1 or 4 args",
+                    got: args.len(),
+                }
+                .into());
             }
             match &args[0] {
                 Py::Str(s) => Ok(Py::Zone(s.clone())),
-                _ => Err(pickle_error(
-                    "invalid pickle data for pytz timezone; expected string argument as first tuple member",
-                )),
+                _ => Err(PickleError::PytzArgument.into()),
             }
         }
         ZoneKind::DateutilTzfile => {
             let path = one_string("dateutil tzfile timezone")?;
-            let index = path.find("zoneinfo").ok_or_else(|| {
-                pickle_error(format!(
-                    "couldn't parse timezone identifier from zoneinfo path{path}"
-                ))
-            })?;
-            let id = path.get(index + 9..).ok_or_else(|| {
-                Error::runtime(
-                    "java.lang.StringIndexOutOfBoundsException",
-                    format!(
-                        "begin {}, end {}, length {}",
-                        index + 9,
-                        path.len(),
-                        path.len()
-                    ),
-                )
+            let index = path
+                .find("zoneinfo")
+                .ok_or_else(|| PickleError::ZoneinfoPath(path.to_string()))?;
+            let id = path.get(index + 9..).ok_or(BoundsError::StringSlice {
+                begin: index + 9,
+                end: path.len(),
+                length: path.len(),
             })?;
             Ok(Py::Tzinfo(Some(Rc::from(id))))
         }
@@ -1633,11 +1639,9 @@ fn decode_escaped(s: &str, unicode: bool) -> Result<String> {
     }
     let chars: Vec<char> = s.chars().collect();
     let mut out: Vec<u16> = Vec::new();
-    let out_of_range = |i: usize| {
-        Error::runtime(
-            "java.lang.StringIndexOutOfBoundsException",
-            format!("Index {i} out of bounds for length {}", chars.len()),
-        )
+    let out_of_range = |i: usize| BoundsError::StringIndex {
+        index: i,
+        length: chars.len(),
     };
     let mut i = 0;
     while i < chars.len() {
@@ -1668,9 +1672,7 @@ fn decode_escaped(s: &str, unicode: bool) -> Result<String> {
             }
             _ => {
                 let shown: String = s.chars().take(80).collect();
-                return Err(pickle_error(format!(
-                    "invalid escape sequence char '{c2}' in string \"{shown} [...]\" (possibly truncated)"
-                )));
+                return Err(PickleError::InvalidEscape { c: c2, shown }.into());
             }
         }
         i += 1;
@@ -1682,10 +1684,7 @@ fn decode_escaped(s: &str, unicode: bool) -> Result<String> {
 /// value, so that sharing (and cycles) survive the conversion.
 fn to_value(py: &Py, seen: &mut HashMap<usize, Value>, depth: usize) -> Result<Value> {
     if depth > MAX_DEPTH {
-        return Err(Error::runtime(
-            "java.lang.StackOverflowError",
-            "StackOverflowError",
-        ));
+        return Err(PickleError::ConversionTooDeep.into());
     }
     let key = |rc_ptr: *const ()| rc_ptr as usize;
     Ok(match py {

@@ -24,7 +24,9 @@ use self::fault::{
 use self::math::MathError;
 use crate::encoder::EncoderError;
 use crate::finite::NotFinite;
+use crate::pickle::PickleError;
 use crate::thrift::ThriftError;
+use crate::unpickle::PyKind;
 use crate::value::ValueKind;
 
 /// Tail of the message of a `BREAK` / `CONTINUE` that escaped every loop.
@@ -75,6 +77,18 @@ pub enum Class {
     Integer,
     /// An array of objects, the shape of a datapoint.
     ObjectArray,
+    /// Any map (the interface).
+    Map,
+    /// A hash map.
+    HashMap,
+    /// A time zone.
+    TimeZone,
+    /// What Pyrolite builds an object with.
+    ObjectConstructor,
+    /// What Pyrolite builds an array with.
+    ArrayConstructor,
+    /// The class of an unpickled object.
+    Pickled(PyKind),
 }
 
 impl From<ValueKind> for Class {
@@ -155,6 +169,9 @@ pub enum Error {
     /// A failure of a Commons Math routine.
     #[error(transparent)]
     Math(#[from] MathError),
+    /// A failure of the pickle encoder or decoder.
+    #[error(transparent)]
+    Pickle(#[from] PickleError),
     /// A failure of the binary encoding of datapoints.
     #[error(transparent)]
     Encoder(#[from] EncoderError),
@@ -233,6 +250,7 @@ impl Error {
             Error::Legacy { runtime, .. } => runtime.is_some(),
             Error::Thrift(err) => !err.is_malformed_input(),
             Error::Encoder(err) => err.is_runtime(),
+            Error::Pickle(err) => err.is_runtime(),
             Error::Math(_)
             | Error::Arithmetic(_)
             | Error::NumberFormat(_)

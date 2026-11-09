@@ -146,6 +146,16 @@ pub enum BoundsError {
         /// The number of characters.
         length: usize,
     },
+    /// A slice outside of a string.
+    #[error("begin {begin}, end {end}, length {length}")]
+    StringSlice {
+        /// The first index of the slice.
+        begin: usize,
+        /// The end of the slice.
+        end: usize,
+        /// The number of characters.
+        length: usize,
+    },
     /// A range outside of a string.
     #[error("Range [{start}, {end}) out of bounds for length {length}")]
     StringRange {
@@ -177,6 +187,9 @@ pub enum IllegalArgumentError {
         /// Its UTF-16 code unit (the lead one for a supplementary character).
         code: u16,
     },
+    /// A number that is not a Unicode code point.
+    #[error("Not a valid Unicode code point: 0x{0:X}")]
+    InvalidCodePoint(u32),
     /// A `%` ending a URL encoded text.
     #[error("URLDecoder: Incomplete trailing escape (%) pattern")]
     IncompleteEscape,
