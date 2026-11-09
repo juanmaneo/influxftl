@@ -102,12 +102,25 @@ pub enum JsonError {
 
 type SerializeResult = std::result::Result<(), JsonError>;
 
+/// The value of the number `text`, as Jackson reads it: a `LONG`, or a `DOUBLE` for a float or
+/// for an integer beyond the `long` range (Jackson yields a `BigInteger`, which has no closer
+/// value here). The scanner has checked that `text` follows the JSON number grammar, which
+/// `f64` parsing accepts whole.
+pub(super) fn number_value(text: &str, is_float: bool) -> Value {
+    let double = || Value::Double(text.parse().unwrap_or(f64::NAN));
+    if is_float {
+        return double();
+    }
+    text.parse()
+        .map_or_else(|_beyond_long| double(), Value::Long)
+}
+
 /// Serialise `value` like `JsonUtils.objectToJson`.
 pub fn to_json(value: &Value, options: JsonOptions) -> std::result::Result<String, JsonError> {
     let max_size = if options.max_size == i64::MAX {
         None
     } else {
-        Some(usize::try_from(options.max_size).unwrap_or(0))
+        Some(usize::try_from(options.max_size.max(0)).unwrap_or(usize::MAX))
     };
     let mut serializer = Serializer {
         out: String::new(),
@@ -141,13 +154,18 @@ fn gts_entries(gts: &GeoTimeSerie) -> IndexMap<Value, Value> {
 fn encoder_entries(encoder: &GtsEncoder) -> IndexMap<Value, Value> {
     let mut decoder = encoder.decoder();
     let mut datapoints = Vec::new();
-    while let Ok(true) = decoder.next() {
-        datapoints.push((
-            decoder.timestamp(),
-            decoder.location(),
-            decoder.elevation(),
-            decoder.value().to_value(),
-        ));
+    loop {
+        match decoder.next() {
+            Ok(true) => datapoints.push((
+                decoder.timestamp(),
+                decoder.location(),
+                decoder.elevation(),
+                decoder.value().to_value(),
+            )),
+            Ok(false) => break,
+            // Warp 10's serializer stops at a corrupt datapoint and keeps the ones before it.
+            Err(_corrupt) => break,
+        }
     }
     series_entries(&encoder.metadata, datapoints.into_iter())
 }
@@ -794,16 +812,7 @@ impl Parser<'_> {
             }
         }
         let text = self.input.get(start..self.pos).unwrap_or("");
-        let value = if is_float {
-            Value::Double(text.parse().unwrap_or(f64::NAN))
-        } else {
-            // Beyond the `long` range Jackson yields a `BigInteger`; the closest value here
-            // is a `DOUBLE`.
-            text.parse().map_or_else(
-                |_| Value::Double(text.parse().unwrap_or(f64::NAN)),
-                Value::Long,
-            )
-        };
+        let value = number_value(text, is_float);
         // `_verifyRootSpace`: a root-level number must be followed by white space.
         if root
             && let Some(c) = self.peek_char()

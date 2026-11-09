@@ -7,7 +7,6 @@
 
 use std::cell::RefCell;
 use std::collections::HashSet;
-use std::fmt::Write as _;
 use std::rc::Rc;
 
 use base64::Engine;
@@ -116,33 +115,32 @@ fn wrapper_to_string(out: &mut String, wrapper: &GtsWrapper) -> Result<()> {
             (decoder.timestamp(), decoder.location(), decoder.elevation());
         let latlon = (location != NO_LOCATION).then(|| from_geoxp_point(location));
         if ts != 0 || latlon.is_some() || elevation != NO_ELEVATION {
-            let _ = write!(out, "{ts}/");
+            out.push_str(&format!("{ts}/"));
         }
         if let Some((lat, lon)) = latlon {
-            let _ = write!(
-                out,
+            out.push_str(&format!(
                 "{}:{}/",
                 java_double_to_string(lat),
                 java_double_to_string(lon)
-            );
+            ));
         } else if elevation != NO_ELEVATION {
             out.push('/');
         }
         if elevation != NO_ELEVATION {
-            let _ = write!(out, "{elevation}/");
+            out.push_str(&format!("{elevation}/"));
         }
         match decoder.binary_value() {
             EncodedValue::Bytes(bytes) => bytes_to_string(out, &bytes)?,
             EncodedValue::String(s) => {
-                let _ = write!(out, "'{}'", url_encode(&s));
+                out.push_str(&format!("'{}'", url_encode(&s)));
             }
             EncodedValue::Boolean(b) => out.push(if b { 'T' } else { 'F' }),
             EncodedValue::Decimal(d) => {
-                let _ = write!(out, "{d}");
+                out.push_str(&format!("{d}"));
             }
             // `LONG`s and `DOUBLE`s (a decoded datapoint is never `null`).
             other => {
-                let _ = write!(out, "{}", other.to_value());
+                out.push_str(&format!("{}", other.to_value()));
             }
         }
         out.push(' ');

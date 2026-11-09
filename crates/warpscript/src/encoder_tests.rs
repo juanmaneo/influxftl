@@ -762,3 +762,33 @@ fn a_corrupt_deflate_stream_is_the_source_of_the_invalid_content() {
         .expect("the failure of the inflater is the source");
     assert_ne!(source.to_string(), "");
 }
+
+#[test]
+fn series_values_are_encoded_by_type() {
+    let mut gts = GeoTimeSerie::default();
+    assert_eq!(EncodedValue::of_series(&gts, 0), EncodedValue::Null);
+    gts.set_value(1, NO_LOCATION, NO_ELEVATION, &Value::Long(7), false);
+    assert_eq!(EncodedValue::of_series(&gts, 0), EncodedValue::Long(7));
+    assert_eq!(EncodedValue::of_series(&gts, 1), EncodedValue::Null);
+    let mut doubles = GeoTimeSerie::default();
+    doubles.set_value(1, NO_LOCATION, NO_ELEVATION, &Value::Double(1.5), false);
+    assert_eq!(
+        EncodedValue::of_series(&doubles, 0),
+        EncodedValue::Double(1.5)
+    );
+    assert_eq!(EncodedValue::of_series(&doubles, 1), EncodedValue::Null);
+    let mut booleans = GeoTimeSerie::default();
+    booleans.set_value(1, NO_LOCATION, NO_ELEVATION, &Value::Boolean(true), false);
+    assert_eq!(
+        EncodedValue::of_series(&booleans, 0),
+        EncodedValue::Boolean(true)
+    );
+    assert_eq!(EncodedValue::of_series(&booleans, 1), EncodedValue::Null);
+    let mut strings = GeoTimeSerie::default();
+    strings.set_value(1, NO_LOCATION, NO_ELEVATION, &Value::string("s"), false);
+    assert_eq!(
+        EncodedValue::of_series(&strings, 0),
+        EncodedValue::String(Rc::from("s"))
+    );
+    assert_eq!(EncodedValue::of_series(&strings, 1), EncodedValue::Null);
+}

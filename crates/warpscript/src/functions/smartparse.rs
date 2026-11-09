@@ -56,8 +56,8 @@ fn smartparse(stack: &mut Stack) -> Result<()> {
     };
     let parser = parser(stack)?;
     if let Some(text) = text {
-        // The text sits right under the regexp that `parser` popped, so this cannot fail.
-        let _ = stack.pop();
+        // The text sat right under the regexp that `parser` popped.
+        stack.discard_top(1);
         let mut results = Vec::new();
         parser.parse(&text, 0, &mut results)?;
         stack.push(series_list(results));
@@ -76,8 +76,8 @@ fn smartparse(stack: &mut Stack) -> Result<()> {
 
 /// `retrieveParameters`: the regular expression on top of the stack.
 fn parser(stack: &mut Stack) -> Result<Parser> {
-    // `smartparse` checked that two elements are on the stack, so the pop cannot fail.
-    let Value::String(source) = stack.pop().unwrap_or(Value::Null) else {
+    // `smartparse` checked that two elements are on the stack.
+    let Some(Value::String(source)) = stack.take_top(1).pop() else {
         return Err(fail(NAME, "expects a STRING regexp."));
     };
     let regex = compile_regex(&source).map_err(|err| regex_error(&err))?;

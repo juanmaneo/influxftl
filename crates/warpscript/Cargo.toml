@@ -21,6 +21,7 @@ chrono-tz = { workspace = true }
 digest = { workspace = true }
 fancy-regex = { workspace = true }
 flate2 = { workspace = true }
+miniz_oxide = { workspace = true }
 getrandom = { workspace = true }
 gost94 = { workspace = true }
 indexmap = { workspace = true }

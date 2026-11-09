@@ -25,6 +25,7 @@ use super::runtime::current_time;
 use crate::error::fault::{BoundsError, NumberFormatError};
 use crate::error::time::TimeError;
 use crate::error::{Class, Error, Result};
+use crate::format::decimal_value;
 use crate::stack::Stack;
 use crate::value::Value;
 
@@ -187,7 +188,7 @@ fn parse_offset(id: &str) -> Result<i32> {
             .get(at..at + 2)
             .filter(|d| d.bytes().all(|b| b.is_ascii_digit()))
             .ok_or_else(|| malformed(id, body.get(at..).unwrap_or_default()))?;
-        let value = digits.parse::<i32>().unwrap_or_default();
+        let value = decimal_value(digits) as i32;
         if value > max {
             return Err(malformed(id, body.get(at..).unwrap_or_default()));
         }
@@ -518,7 +519,7 @@ fn plus_months(local: NaiveDateTime, months: i32) -> Option<NaiveDateTime> {
 }
 
 /// `ADDDAYS` / `ADDMONTHS` / `ADDYEARS` on a tselements list: the Warp 10 field arithmetic.
-fn add_to_elements(name: &str, mut elements: Vec<Value>, unit: Unit, count: i32) -> Result<Value> {
+fn add_to_elements(mut elements: Vec<Value>, unit: Unit, count: i32) -> Result<Value> {
     let mut year = int_element(&elements, 0)?;
     let mut month = int_element(&elements, 1)?;
     match unit {
@@ -568,7 +569,6 @@ fn add_to_elements(name: &str, mut elements: Vec<Value>, unit: Unit, count: i32)
             elements[2] = Value::Long(i64::from(max));
         }
     }
-    let _ = name;
     Ok(Value::list(elements))
 }
 
@@ -593,7 +593,7 @@ fn add_unit(stack: &mut Stack, name: &str, unit: Unit, what: &str) -> Result<()>
             Unit::Months => plus_months(local, count),
             Unit::Years => plus_months(local, count.saturating_mul(12)),
         })?),
-        Target::Elements(elements) => add_to_elements(name, elements, unit, count)?,
+        Target::Elements(elements) => add_to_elements(elements, unit, count)?,
     };
     stack.push(result);
     Ok(())
@@ -718,7 +718,7 @@ pub fn parse_period(text: &str, period: &mut Period) -> i32 {
                 fraction_end += 1;
             }
             let digits = &text[fraction_start..(fraction_start + 3).min(fraction_end)];
-            millis = format!("{digits:0<3}").parse::<i64>().unwrap_or_default();
+            millis = decimal_value(&format!("{digits:0<3}"));
             if seconds < 0 || text[pos..end].starts_with('-') {
                 millis = -millis;
             }

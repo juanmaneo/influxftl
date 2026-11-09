@@ -9,7 +9,7 @@ use indexmap::IndexMap;
 
 use super::error::Error;
 use super::macros::Macro;
-use super::stack::{Limits, SecureCodec, SecureScript, Stack};
+use super::stack::{DEFAULT_REGISTERS, Limits, SecureCodec, SecureScript, Stack};
 use super::tests::{assert_fails, assert_stack, assert_top, exec, fail, fail_msg, top};
 use super::value::Value;
 
@@ -661,4 +661,21 @@ fn exec_line_recursion_is_released() {
     assert_eq!(stack.recursion_level(), 0);
     let _ = stack.exec_line("DROP DROP");
     assert_eq!(stack.recursion_level(), 0);
+}
+
+#[test]
+fn registers_are_cleared_when_they_exist() {
+    let mut stack = Stack::new();
+    stack
+        .store_register(3, Value::Long(1))
+        .expect("register 3 exists");
+    stack.clear_register(3);
+    assert_eq!(
+        stack.load_register(3).expect("register 3 exists"),
+        &Value::Null
+    );
+    // An index that is no register is ignored.
+    stack.clear_register(-1);
+    stack.clear_register(DEFAULT_REGISTERS as i64);
+    assert_eq!(stack.registers().len(), DEFAULT_REGISTERS);
 }

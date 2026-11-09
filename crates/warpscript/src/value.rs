@@ -503,7 +503,8 @@ impl fmt::Display for Value {
             // `Object.toString`, with the size standing for the identity hash.
             Value::Encoder(e) => write!(
                 f,
-                "io.warp10.continuum.gts.GTSEncoder@{:x}",
+                "{}@{:x}",
+                crate::error::compat::value_class(ValueKind::Encoder),
                 e.borrow().size()
             ),
         }

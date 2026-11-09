@@ -85,6 +85,20 @@ pub(crate) fn gzip_bytes(data: &[u8]) -> std::io::Result<Vec<u8>> {
     gzip_into(&mut compressed, data).map(|()| compressed)
 }
 
+/// `GZIPOutputStream` over a byte array, which cannot fail: the gzip member of `data` at the
+/// default level (header with the operating system byte of Java, 0, the raw deflate stream and
+/// the CRC-32 and size trailer).
+pub(crate) fn gzip_vec(data: &[u8]) -> Vec<u8> {
+    const DEFAULT_LEVEL: u8 = 6;
+    let mut crc = flate2::Crc::new();
+    crc.update(data);
+    let mut member = vec![0x1f, 0x8b, 0x08, 0, 0, 0, 0, 0, 0, 0];
+    member.extend(miniz_oxide::deflate::compress_to_vec(data, DEFAULT_LEVEL));
+    member.extend(crc.sum().to_le_bytes());
+    member.extend((data.len() as u32).to_le_bytes());
+    member
+}
+
 /// `GZIPInputStream`: every member of a gzip stream. Like Java, trailing bytes that do not
 /// start another member are ignored, while a member that starts and then turns out corrupt
 /// (or truncated) is an error.

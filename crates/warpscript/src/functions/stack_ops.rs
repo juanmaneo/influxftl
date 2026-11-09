@@ -248,9 +248,8 @@ fn end_collection(stack: &mut Stack, collection: &str) -> Result<Vec<Value>> {
             err,
         )
     })?;
-    // `count` elements sit above the mark, so neither call can fail.
-    let items = stack.popn(count).unwrap_or_default();
-    let _ = stack.pop();
+    let items = stack.take_top(count);
+    stack.discard_top(1);
     Ok(items)
 }
 
@@ -300,7 +299,7 @@ fn tolist(stack: &mut Stack) -> Result<()> {
         Value::List(_) => Ok(()),
         Value::Set(set) => {
             let items: Vec<Value> = set.borrow().iter().cloned().collect();
-            let _ = stack.pop();
+            stack.discard_top(1);
             stack.push(Value::list(items));
             Ok(())
         }

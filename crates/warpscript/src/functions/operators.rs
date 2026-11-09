@@ -963,7 +963,7 @@ fn to_bin(stack: &mut Stack, name: &str) -> Result<()> {
         Value::Long(v) => format!("{:064b}", v as u64),
         Value::BigDecimal(bd) => integral_radix(name, &bd, 2, "0b")?,
         Value::BitSet(bits) => {
-            let length = usize::try_from(bits.length()).unwrap_or_default();
+            let length = bits.length().max(0) as usize;
             let set: std::collections::BTreeSet<usize> = bits.set_bits().collect();
             (0..length)
                 .map(|i| if set.contains(&i) { '1' } else { '0' })
@@ -982,9 +982,8 @@ fn to_bin(stack: &mut Stack, name: &str) -> Result<()> {
 
 /// Eight binary digits per byte, most significant bit first.
 fn bytes_to_bin(data: &[u8]) -> String {
-    use std::fmt::Write;
     data.iter().fold(String::new(), |mut text, b| {
-        let _ = write!(text, "{b:08b}");
+        text.push_str(&format!("{b:08b}"));
         text
     })
 }

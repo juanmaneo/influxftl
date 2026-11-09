@@ -388,8 +388,7 @@ fn guard(stack: &mut Stack) -> Result<()> {
                 match symbol {
                     Value::String(name) => stack.forget(name),
                     Value::Long(register) => {
-                        // Out of range registers are ignored like `store(int, null)` failures.
-                        let _ = stack.store_register(i64::from(*register as i32), Value::Null);
+                        stack.clear_register(i64::from(*register as i32));
                     }
                     _ => {}
                 }
@@ -861,9 +860,12 @@ fn peekn(stack: &mut Stack) -> Result<()> {
     if stack.interactive_writer().is_none() {
         return Ok(());
     }
-    // The top was just peeked: it is there.
-    let level = stack.pop().unwrap_or(Value::Null);
-    let level = super::args::int_value(&level).unwrap_or_default();
+    // The top was just peeked: it is there, and it is a number.
+    let level = stack
+        .take_top(1)
+        .first()
+        .and_then(super::args::int_value)
+        .unwrap_or_default();
     let level = usize::try_from(level).map_err(|_| StackError::InvalidLevel)?;
     print_levels(stack, std::iter::once(level))
 }
@@ -1004,9 +1006,7 @@ fn rtfm(stack: &mut Stack) -> Result<()> {
 /// documentation when the stack is empty or its top is not a string).
 fn man(stack: &mut Stack) -> Result<()> {
     let mut function_name: Option<String> = None;
-    if stack.depth() > 0
-        && let Value::String(name) = stack.pop().unwrap_or(Value::Null)
-    {
+    if let Some(Value::String(name)) = stack.take_top(1).pop() {
         function_name = Some(if super::lookup(&name).is_some() {
             name.to_string()
         } else {
@@ -1137,12 +1137,9 @@ fn snapshot_impl(stack: &mut Stack, name: &str, flags: SnapshotFlags) -> Result<
     if flags.pop {
         if stack.depth() as i64 - 1 == last {
             stack.clear();
-        } else {
-            while last >= 0 {
-                // There are at least `last + 1` elements.
-                let _ = stack.pop();
-                last -= 1;
-            }
+        } else if last >= 0 {
+            // There are at least `last + 1` elements.
+            stack.discard_top(last as usize + 1);
         }
     }
     stack.push(Value::from(out));

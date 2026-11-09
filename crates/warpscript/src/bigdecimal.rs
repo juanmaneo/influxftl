@@ -14,6 +14,7 @@ use num_integer::Integer;
 use num_traits::{One, Signed, ToPrimitive, Zero};
 
 use crate::error::fault::{ArithmeticError, NumberFormatError};
+use crate::format::decimal_value;
 
 /// The result of a decimal or integer operation.
 type ArithResult<T> = Result<T, ArithmeticError>;
@@ -188,7 +189,7 @@ impl BigDecimal {
             if significant.len() > 10 {
                 return Err(NumberFormatError::ExponentTooLong);
             }
-            let mut value: i64 = significant.parse().unwrap_or_default();
+            let mut value = decimal_value(&significant);
             if negative_exponent {
                 value = -value;
             }

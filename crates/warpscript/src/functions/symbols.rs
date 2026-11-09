@@ -124,9 +124,9 @@ fn cstore(stack: &mut Stack) -> Result<()> {
         Value::Long(index) => {
             let value = stack.pop()?;
             let index = register_index(index);
-            if stack.load_register(index)?.is_null() {
-                // The register index was just validated by `load_register`.
-                let _ = stack.store_register(index, value);
+            let slot = stack.register_slot(index)?;
+            if slot.is_null() {
+                *slot = value;
             }
             Ok(())
         }

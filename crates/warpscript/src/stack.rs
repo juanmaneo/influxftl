@@ -289,7 +289,20 @@ impl Stack {
         if self.depth() == 0 {
             return Err(Error::empty_stack());
         }
-        Ok(self.elements.pop().unwrap_or(Value::Null))
+        self.elements.pop().ok_or_else(Error::empty_stack)
+    }
+
+    /// Remove and return the `n` top values (fewer when the stack is shallower), bottom-most
+    /// first. It cannot fail: it is for the callers that have just measured the depth.
+    pub fn take_top(&mut self, n: usize) -> Vec<Value> {
+        let at = self.elements.len().saturating_sub(n);
+        self.elements.split_off(at)
+    }
+
+    /// Remove the `n` top values (fewer when the stack is shallower), like [`Stack::take_top`].
+    pub fn discard_top(&mut self, n: usize) {
+        let at = self.elements.len().saturating_sub(n);
+        self.elements.truncate(at);
     }
 
     /// Pop `n` values, bottom-most first (`popn`).
@@ -457,14 +470,28 @@ impl Stack {
 
     /// Set register `index`.
     pub fn store_register(&mut self, index: i64, value: Value) -> Result<()> {
-        let slot = usize::try_from(index)
+        *self.register_slot(index)? = value;
+        Ok(())
+    }
+
+    /// Register `index`, for the callers that read and write it.
+    pub fn register_slot(&mut self, index: i64) -> Result<&mut Value> {
+        let max = DEFAULT_REGISTERS - 1;
+        usize::try_from(index)
             .ok()
             .and_then(|i| self.registers.get_mut(i))
-            .ok_or(StackError::InvalidRegister {
-                max: DEFAULT_REGISTERS - 1,
-            })?;
-        *slot = value;
-        Ok(())
+            .ok_or(StackError::InvalidRegister { max }.into())
+    }
+
+    /// Set register `index` to `null`; an index that is not a register is ignored, as
+    /// `store(int, null)` failures are where Warp 10 forgets symbols.
+    pub fn clear_register(&mut self, index: i64) {
+        if let Some(slot) = usize::try_from(index)
+            .ok()
+            .and_then(|i| self.registers.get_mut(i))
+        {
+            *slot = Value::Null;
+        }
     }
 
     fn invalid_register(&self) -> Error {

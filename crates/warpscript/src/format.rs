@@ -27,7 +27,7 @@ pub fn java_double_to_string(d: f64) -> String {
     // `{:e}` yields the shortest round-tripping digits as `d[.ddd]e[-]x`.
     let sci = format!("{:e}", d.abs());
     let (mantissa, exponent) = sci.split_once('e').unwrap_or((sci.as_str(), "0"));
-    let exponent: i32 = exponent.parse().unwrap_or(0);
+    let exponent = decimal_value(exponent) as i32;
     let digits: String = mantissa.chars().filter(|c| *c != '.').collect();
     let (digits, exponent) = match digits.parse::<u32>() {
         Ok(digit) if digits.len() == 1 && d.abs() < f64::MIN_POSITIVE => {
@@ -265,4 +265,23 @@ pub fn url_decode(input: &str) -> Result<String> {
         return Ok(input.to_owned());
     }
     crate::functions::strings::java_url_decode(&input.replace('+', "%2B"))
+}
+
+/// The value of a text of ASCII decimal digits, optionally signed, such as the exponents the
+/// number formatters of this crate print. It cannot fail: a character that is not a digit
+/// counts as zero and the arithmetic wraps, as Java's does.
+pub(crate) fn decimal_value(text: &str) -> i64 {
+    let (negative, digits) = match text.strip_prefix('-') {
+        Some(rest) => (true, rest),
+        None => (false, text.strip_prefix('+').unwrap_or(text)),
+    };
+    let magnitude = digits.bytes().fold(0i64, |acc, byte| {
+        acc.wrapping_mul(10)
+            .wrapping_add(i64::from(byte.wrapping_sub(b'0')))
+    });
+    if negative {
+        magnitude.wrapping_neg()
+    } else {
+        magnitude
+    }
 }

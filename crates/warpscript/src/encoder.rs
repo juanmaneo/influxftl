@@ -14,10 +14,10 @@ use std::fmt;
 use std::rc::Rc;
 
 use crate::error::{Error, IoFailure, Result, compat};
-use crate::format::java_double_to_string;
-use crate::functions::compression::{gzip_bytes, ungzip_bytes};
+use crate::format::{decimal_value, java_double_to_string};
+use crate::functions::compression::{gzip_vec, ungzip_bytes};
 use crate::functions::strings::decode_utf8_java;
-use crate::gts::{GeoTimeSerie, Metadata, NO_ELEVATION, NO_LOCATION, Type};
+use crate::gts::{GeoTimeSerie, Metadata, NO_ELEVATION, NO_LOCATION, Type, Values};
 use crate::thrift::GtsWrapper;
 use crate::value::{Value, ValueKind};
 
@@ -93,7 +93,7 @@ impl Decimal {
     pub fn from_double(d: f64) -> Decimal {
         let text = java_double_to_string(d);
         let (mantissa, exponent) = match text.split_once('E') {
-            Some((mantissa, exponent)) => (mantissa, exponent.parse::<i32>().unwrap_or_default()),
+            Some((mantissa, exponent)) => (mantissa, decimal_value(exponent) as i32),
             None => (text.as_str(), 0),
         };
         let (negative, mantissa) = match mantissa.strip_prefix('-') {
@@ -268,6 +268,25 @@ pub enum EncodedValue {
 }
 
 impl EncodedValue {
+    /// The value at `idx` of a series, which holds only the types an encoder holds.
+    pub fn of_series(gts: &GeoTimeSerie, idx: usize) -> EncodedValue {
+        match &gts.values {
+            Values::Long(values) => values
+                .get(idx)
+                .map_or(EncodedValue::Null, |value| EncodedValue::Long(*value)),
+            Values::Double(values) => values
+                .get(idx)
+                .map_or(EncodedValue::Null, |value| EncodedValue::Double(*value)),
+            Values::Boolean(values) => values
+                .get(idx)
+                .map_or(EncodedValue::Null, |value| EncodedValue::Boolean(*value)),
+            Values::String(values) => values.get(idx).map_or(EncodedValue::Null, |value| {
+                EncodedValue::String(Rc::clone(value))
+            }),
+            Values::Undefined => EncodedValue::Null,
+        }
+    }
+
     /// The value of a stack object, failing like `addValue` for the unsupported types.
     pub fn from_value(value: &Value) -> Result<EncodedValue> {
         Ok(match value {
@@ -764,7 +783,7 @@ impl GtsEncoder {
                 Value::Double(d) if optimized && d.is_finite() => {
                     EncodedValue::Decimal(Decimal::from_double(d))
                 }
-                other => EncodedValue::from_value(&other).unwrap_or(EncodedValue::Null),
+                _ => EncodedValue::of_series(gts, idx),
             };
             self.add_value(
                 gts.tick_at(idx),
@@ -830,6 +849,18 @@ impl GtsEncoder {
         encoder.stream = content.to_vec();
         encoder.safe_delta();
         encoder
+    }
+
+    /// An encoder whose stream is `stream`, whatever it holds: for the tests of corrupt content.
+    #[cfg(test)]
+    pub(crate) fn with_stream(stream: &[u8]) -> GtsEncoder {
+        GtsEncoder::with_content(0, stream, Initial::default())
+    }
+
+    /// The encoded datapoints, for the tests of corrupt content.
+    #[cfg(test)]
+    pub(crate) fn stream_bytes(&self) -> &[u8] {
+        &self.stream
     }
 
     /// `setCount`.
@@ -1175,7 +1206,7 @@ pub fn fullsort_encoder(encoder: &GtsEncoder, reversed: bool, base: i64) -> Resu
             let value = match part.value_at(k) {
                 Value::String(s) if i == 4 => EncodedValue::Bytes(Rc::from(latin1_bytes(&s))),
                 Value::Double(d) if d.is_finite() => EncodedValue::Decimal(Decimal::from_double(d)),
-                other => EncodedValue::from_value(&other).unwrap_or(EncodedValue::Null),
+                _ => EncodedValue::of_series(part, k),
             };
             sorted.add_value(ts, part.location_at(k), part.elevation_at(k), &value);
             idx[i] += 1;
@@ -1206,11 +1237,7 @@ pub fn encoder_to_wrapper(
         let mut pass = 0i32;
         let (encoded, ratio) = loop {
             let encoded = bytes;
-            let mut gzipped = gzip_bytes(&encoded).unwrap_or_default();
-            // The OS byte of the header, which Java writes as 0.
-            for os in gzipped.iter_mut().skip(9).take(1) {
-                *os = 0;
-            }
+            let gzipped = gzip_vec(&encoded);
             let ratio = encoded.len() as f64 / gzipped.len() as f64;
             bytes = gzipped;
             pass += 1;

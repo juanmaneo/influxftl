@@ -17,6 +17,7 @@ use super::Entry;
 use super::args::{fail, fail_with_cause};
 use crate::error::format::FormatError;
 use crate::error::{Error, Result};
+use crate::format::decimal_value;
 use crate::format::java_double_to_string;
 use crate::stack::Stack;
 use crate::value::Value;
@@ -656,7 +657,7 @@ impl Decimal {
     fn shortest(value: f64) -> Decimal {
         let text = java_double_to_string(value);
         let (mantissa, exponent) = text.split_once('E').unwrap_or((&text, "0"));
-        let exponent: i32 = exponent.parse().unwrap_or_default();
+        let exponent = decimal_value(exponent) as i32;
         let (integer, fraction) = mantissa.split_once('.').unwrap_or((mantissa, ""));
         let mut digits: Vec<u8> = integer
             .bytes()

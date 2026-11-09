@@ -87,7 +87,7 @@ fn set_long_limit(
 /// Java `(int) limit` for the limits that are `int` attributes: the low 32 bits, and a
 /// negative result (which lets nothing through) becomes 0.
 fn int_limit(limit: i64) -> usize {
-    usize::try_from(limit as i32).unwrap_or_default()
+    (limit as i32).max(0) as usize
 }
 
 /// A hard limit as a `LONG` (saturating: `Limits::unlimited` uses values beyond `i64`).
@@ -129,7 +129,7 @@ fn maxops(stack: &mut Stack) -> Result<()> {
         hard,
         "expects a numeric (long) limit.",
     )?;
-    stack.limits.max_ops = u64::try_from(limit).unwrap_or_default();
+    stack.limits.max_ops = limit.max(0) as u64;
     Ok(())
 }
 

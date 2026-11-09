@@ -4,7 +4,9 @@
 
 use indexmap::{IndexMap, IndexSet};
 
-use super::json::{ATTRIBUTE_JSON_PRETTY, JsonError, JsonOptions, from_json, to_json};
+use super::json::{
+    ATTRIBUTE_JSON_PRETTY, JsonError, JsonOptions, from_json, number_value, to_json,
+};
 use super::misc::ATTRIBUTE_JSON_STRICT;
 use crate::stack::Stack;
 use crate::tests::{assert_fails, assert_top, exec, top};
@@ -1317,4 +1319,41 @@ fn options_default() {
     assert_eq!(options.max_size, i64::MAX);
     assert_eq!(to_json(&Value::Null, options).unwrap(), "null");
     assert_ne!(JsonError::TooBig, JsonError::TooDeep);
+}
+
+#[test]
+fn numbers_are_read_as_jackson_reads_them() {
+    assert_eq!(number_value("12", false), Value::Long(12));
+    assert_eq!(number_value("1.5", true), Value::Double(1.5));
+    // Beyond the `long` range Jackson yields a `BigInteger`: the closest value is a `DOUBLE`.
+    assert_eq!(
+        number_value("9223372036854775808", false),
+        Value::Double(9_223_372_036_854_775_808.0)
+    );
+}
+
+#[test]
+fn an_encoder_is_written_up_to_its_corrupt_datapoint() {
+    use std::cell::RefCell;
+    use std::rc::Rc;
+
+    use crate::encoder::{EncodedValue, GtsEncoder};
+    use crate::gts::{NO_ELEVATION, NO_LOCATION};
+
+    let mut whole = GtsEncoder::new(0);
+    whole.add_value(1, NO_LOCATION, NO_ELEVATION, &EncodedValue::Long(5));
+    whole.add_value(2, NO_LOCATION, NO_ELEVATION, &EncodedValue::Long(6));
+    let stream = whole.stream_bytes();
+    // The second datapoint is cut short.
+    let cut = GtsEncoder::with_stream(&stream[..stream.len() - 1]);
+    let mut stack = Stack::default();
+    stack.push(Value::Encoder(Rc::new(RefCell::new(cut))));
+    stack
+        .exec("->JSON")
+        .expect("the corrupt datapoint is not an error");
+    let json = stack.pop().expect("the JSON is on the stack");
+    assert_eq!(
+        json,
+        Value::from(r#"{"c":"","l":{},"a":{},"la":0,"v":[[1,5]]}"#)
+    );
 }

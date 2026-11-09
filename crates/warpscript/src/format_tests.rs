@@ -3,8 +3,8 @@
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
 use super::format::{
-    is_double, is_long, java_double_to_string, parse_double, parse_long, parse_radix_wrapping,
-    snapshot_encode_readable, url_decode, url_encode,
+    decimal_value, is_double, is_long, java_double_to_string, parse_double, parse_long,
+    parse_radix_wrapping, snapshot_encode_readable, url_decode, url_encode,
 };
 
 #[test]
@@ -203,4 +203,15 @@ fn url_decoding() {
             .to_string()
             .contains("Illegal hex characters in escape (%) pattern")
     );
+}
+
+#[test]
+fn decimal_values_are_signed_digits_that_wrap() {
+    assert_eq!(decimal_value("0"), 0);
+    assert_eq!(decimal_value("42"), 42);
+    assert_eq!(decimal_value("+7"), 7);
+    assert_eq!(decimal_value("-308"), -308);
+    assert_eq!(decimal_value(""), 0);
+    assert_eq!(decimal_value("9223372036854775808"), i64::MIN);
+    assert_eq!(decimal_value("-9223372036854775808"), i64::MIN);
 }

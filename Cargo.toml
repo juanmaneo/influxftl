@@ -44,6 +44,8 @@ keccak = "0.2"
 aes = "0.9"
 # `GZIP` / `UNGZIP` / `DEFLATE` / `INFLATE` (pure Rust `miniz_oxide` backend).
 flate2 = { version = "1", default-features = false, features = ["rust_backend"] }
+# The raw deflate of the wrappers (`GZIPOutputStream` of a `Vec`, which cannot fail).
+miniz_oxide = { version = "0.9", default-features = false }
 # Calendar computations and the IANA time zone database (Joda-Time in Warp 10) for
 # `ISO8601`, `TSELEMENTS`, `ADDDAYS`…
 chrono = { version = "0.4", default-features = false, features = ["std"] }

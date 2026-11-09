@@ -13,7 +13,6 @@
 //! members (see `DIVERGENCES.md` §16).
 
 use std::collections::VecDeque;
-use std::fmt::Write as _;
 
 use super::Entry;
 use super::args::fail;
@@ -626,7 +625,7 @@ fn html_escape(value: &str, out: &mut String) {
         match c {
             '\0'..='\r' => {
                 // Writing to a `String` cannot fail.
-                let _ = write!(out, "&#{};", c as u32);
+                out.push_str(&format!("&#{};", c as u32));
             }
             '&' => out.push_str("&amp;"),
             '<' => out.push_str("&lt;"),

@@ -244,17 +244,20 @@ fn put<T>(v: &mut Vec<T>, idx: usize, item: T) {
 /// A string stored into a `LONG` series: `Long.parseLong`, else the truncated
 /// `Double.parseDouble`, else `0`.
 fn string_to_long(s: &str) -> i64 {
-    s.parse::<i64>().unwrap_or_else(|_| {
-        crate::functions::operators::parse_java_double(s)
-            .map(crate::value::double_to_long)
-            .unwrap_or_default()
-    })
+    match s.parse::<i64>() {
+        Ok(long) => long,
+        // Warp 10 stores what a `LONG` series cannot read as a number as 0.
+        Err(_not_a_long) => match crate::functions::operators::parse_java_double(s) {
+            Ok(double) => crate::value::double_to_long(double),
+            Err(_not_a_number) => 0,
+        },
+    }
 }
 
 /// A string stored into a `DOUBLE` series: `Double.parseDouble`, else `Long.parseLong`
 /// (which `parseDouble` already accepts), else `0.0`.
 fn string_to_double(s: &str) -> f64 {
-    crate::functions::operators::parse_java_double(s).unwrap_or_default()
+    crate::functions::operators::parse_java_double(s).unwrap_or(0.0)
 }
 
 /// The metadata of a series (`io.warp10.continuum.store.thrift.data.Metadata`).

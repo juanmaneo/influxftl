@@ -123,13 +123,12 @@ fn goldwrap_element(element: &Value, reversed: bool) -> Result<Value> {
 
 /// `GOLDWRAP`: a canonical (`[ reversed ]`) wrapper of series, encoders or wrappers.
 fn goldwrap(stack: &mut Stack) -> Result<()> {
-    let reversed = match stack.peek()? {
-        Value::Boolean(b) => {
-            let b = *b;
-            stack.pop().ok();
-            b
+    let reversed = match stack.pop()? {
+        Value::Boolean(b) => b,
+        other => {
+            stack.push(other);
+            false
         }
-        _ => false,
     };
     let top = stack.pop()?;
     let result = goldwrap_element(&top, reversed)?;
