@@ -349,10 +349,7 @@ pub fn is_frozen<T: 'static>(rc: &Rc<T>) -> bool {
 /// The `UnsupportedOperationException` a Java unmodifiable collection throws when modified.
 pub fn ensure_mutable<T: 'static>(rc: &Rc<T>) -> crate::error::Result<()> {
     if is_frozen(rc) {
-        Err(crate::error::Error::runtime(
-            "java.lang.UnsupportedOperationException",
-            "UnsupportedOperationException",
-        ))
+        Err(crate::error::Error::Immutable)
     } else {
         Ok(())
     }

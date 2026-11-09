@@ -14,6 +14,7 @@ use crate::encoder::{
 };
 use crate::encoding::hex_decode;
 use crate::error::Error;
+use crate::error::fault::{BoundsError, NumberFormatError};
 use crate::format::{is_long, parse_long, url_decode};
 use crate::functions::operators::parse_java_double;
 use crate::functions::quaternions::to_quaternion;
@@ -41,11 +42,11 @@ impl ParseError {
         }
     }
 
-    fn caused(message: &str, offset: usize, cause: Error) -> Self {
+    fn caused(message: &str, offset: usize, cause: impl Into<Error>) -> Self {
         ParseError {
             message: message.to_owned(),
             offset,
-            cause: Some(cause),
+            cause: Some(cause.into()),
         }
     }
 
@@ -74,6 +75,12 @@ impl From<ParseError> for Failure {
 impl From<Error> for Failure {
     fn from(error: Error) -> Self {
         Failure::Other(error)
+    }
+}
+
+impl From<NumberFormatError> for Failure {
+    fn from(error: NumberFormatError) -> Self {
+        Failure::Other(error.into())
     }
 }
 
@@ -114,10 +121,11 @@ fn at(s: &[u16], i: usize) -> u16 {
 /// `charAt(i)`, failing like Java past the end.
 fn char_at(s: &[u16], i: usize) -> Result<u16, Error> {
     s.get(i).copied().ok_or_else(|| {
-        Error::runtime(
-            "java.lang.StringIndexOutOfBoundsException",
-            format!("Index {i} out of bounds for length {}", s.len()),
-        )
+        BoundsError::StringIndex {
+            index: i,
+            length: s.len(),
+        }
+        .into()
     })
 }
 
@@ -148,11 +156,14 @@ fn parse(s: &[u16]) -> Result<EncodedValue, Failure> {
     let is = |c: u16, ascii: u8| c == u16::from(ascii);
     if (is(first, b'\'') && is(last, b'\'')) || (is(first, b'"') && is(last, b'"')) {
         if s.len() == 1 {
-            return Err(Error::runtime(
-                "java.lang.StringIndexOutOfBoundsException",
-                "Range [1, 0) out of bounds for length 1",
-            )
-            .into());
+            return Err(Failure::Other(
+                BoundsError::StringRange {
+                    start: 1,
+                    end: 0,
+                    length: 1,
+                }
+                .into(),
+            ));
         }
         let decoded = url_decode(&text(sub(s, 1, s.len() - 1)))?;
         return Ok(EncodedValue::String(decoded.into()));

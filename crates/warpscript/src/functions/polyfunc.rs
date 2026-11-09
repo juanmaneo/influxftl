@@ -14,6 +14,7 @@ use super::math::{ATTRIBUTE_SEEDED_PRNG, secure_double};
 use crate::aggregators::{Aggregated, Aggregator, AggregatorArgs, Roles};
 use crate::curvefit::polynomial_value;
 use crate::encoder::EncodedValue;
+use crate::error::math::MathError;
 use crate::error::{Class, Error, Result};
 use crate::gts::{GeoTimeSerie, NO_ELEVATION, NO_LOCATION, java_binary_search};
 use crate::jrandom::JavaRandom;
@@ -223,10 +224,7 @@ fn polyfunc(stack: &mut Stack) -> Result<()> {
         coefficients.push(c);
     }
     if coefficients.is_empty() {
-        return Err(Error::runtime(
-            "org.apache.commons.math3.exception.NoDataException",
-            "empty polynomials coefficients array",
-        ));
+        return Err(MathError::EmptyPolynomialCoefficients.into());
     }
     // `PolynomialFunction` drops the trailing zero coefficients.
     while coefficients.len() > 1 && coefficients[coefficients.len() - 1] == 0.0 {

@@ -33,6 +33,7 @@ use super::args::{compute_and_check_index, fail, fail_with_cause, pop_list, pop_
 use super::math::entropy_error;
 use crate::bitset::BitSet;
 use crate::encoding::{hex_decode, hex_encode, opb64_decode, opb64_encode};
+use crate::error::fault::IllegalArgumentError;
 use crate::error::{Error, Result};
 use crate::format::url_encode;
 use crate::stack::Stack;
@@ -299,18 +300,14 @@ fn urldecode(stack: &mut Stack) -> Result<()> {
     Ok(())
 }
 
-const ILLEGAL_ARGUMENT: &str = "java.lang.IllegalArgumentException";
-
 /// A hexadecimal digit of a `%xx` escape (`HexFormat.fromHexDigit`).
 fn url_hex_digit(c: char) -> Result<u8> {
     c.to_digit(16).map(|d| d as u8).ok_or_else(|| {
-        Error::runtime(
-            ILLEGAL_ARGUMENT,
-            format!(
-                "URLDecoder: Illegal hex characters in escape (%) pattern - not a hexadecimal digit: \"{c}\" = {}",
-                utf16_lead(c)
-            ),
-        )
+        IllegalArgumentError::EscapeNotHexadecimal {
+            digit: c,
+            code: utf16_lead(c),
+        }
+        .into()
     })
 }
 
@@ -337,10 +334,7 @@ pub(crate) fn java_url_decode(input: &str) -> Result<String> {
                             i += 3;
                         }
                         Some(['%', ..]) => {
-                            return Err(Error::runtime(
-                                ILLEGAL_ARGUMENT,
-                                "URLDecoder: Incomplete trailing escape (%) pattern",
-                            ));
+                            return Err(IllegalArgumentError::IncompleteEscape.into());
                         }
                         _ => break,
                     }
@@ -1503,12 +1497,9 @@ fn torlp(stack: &mut Stack) -> Result<()> {
 
 /// The byte at `index`, or the Java `ArrayIndexOutOfBoundsException` message.
 fn rlp_byte(data: &[u8], index: usize) -> Result<u8> {
-    data.get(index).copied().ok_or_else(|| {
-        Error::new(format!(
-            "Index {index} out of bounds for length {}",
-            data.len()
-        ))
-    })
+    data.get(index)
+        .copied()
+        .ok_or_else(|| Error::index_out_of_bounds(index as i64, data.len()))
 }
 
 /// Read a big endian size of `sizebytes` bytes at `offset`.

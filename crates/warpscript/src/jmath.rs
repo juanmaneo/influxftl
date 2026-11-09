@@ -12,6 +12,7 @@
 //! the sign of zero, `NaN` propagation, overflow behaviour), so each one implements the
 //! contract documented for the Java method rather than calling the nearest Rust method.
 
+use crate::error::fault::ArithmeticError;
 use crate::error::{Error, Result};
 
 const EXP_BIT_MASK: u64 = 0x7FF0_0000_0000_0000;
@@ -23,13 +24,6 @@ pub const MAX_EXPONENT: i32 = 1023;
 pub const MIN_EXPONENT: i32 = -1022;
 /// `Double.MIN_VALUE`, the smallest positive subnormal.
 pub const MIN_VALUE: f64 = f64::from_bits(1);
-
-/// Message of the `ArithmeticException` thrown by `Math.addExact` and friends.
-pub const LONG_OVERFLOW: &str = "long overflow";
-/// Message of the `ArithmeticException` thrown by `Math.toIntExact`.
-pub const INTEGER_OVERFLOW: &str = "integer overflow";
-/// Message of the `ArithmeticException` thrown by an integer division by zero.
-pub const DIVISION_BY_ZERO: &str = "/ by zero";
 
 /// `Math.round(double)`: the closest `long` to `a`, ties rounding towards positive infinity;
 /// `NaN` gives 0 and out of range values saturate.
@@ -255,7 +249,7 @@ pub fn ieee_remainder(x: f64, p: f64) -> f64 {
 /// `Math.floorDiv(long, long)`: division rounding towards negative infinity.
 pub fn floor_div(x: i64, y: i64) -> Result<i64> {
     if y == 0 {
-        return Err(Error::new(DIVISION_BY_ZERO));
+        return Err(Error::division_by_zero());
     }
     let q = x.wrapping_div(y);
     // Different signs and a non-zero remainder: round down.
@@ -269,7 +263,7 @@ pub fn floor_div(x: i64, y: i64) -> Result<i64> {
 /// `Math.floorMod(long, long)`: the remainder of [`floor_div`], which has the sign of `y`.
 pub fn floor_mod(x: i64, y: i64) -> Result<i64> {
     if y == 0 {
-        return Err(Error::new(DIVISION_BY_ZERO));
+        return Err(Error::division_by_zero());
     }
     let m = x.wrapping_rem(y);
     if (m ^ y) < 0 && m != 0 {
@@ -281,37 +275,43 @@ pub fn floor_mod(x: i64, y: i64) -> Result<i64> {
 
 /// `Math.addExact(long, long)`.
 pub fn add_exact(x: i64, y: i64) -> Result<i64> {
-    x.checked_add(y).ok_or_else(|| Error::new(LONG_OVERFLOW))
+    x.checked_add(y)
+        .ok_or_else(|| ArithmeticError::LongOverflow.into())
 }
 
 /// `Math.subtractExact(long, long)`.
 pub fn subtract_exact(x: i64, y: i64) -> Result<i64> {
-    x.checked_sub(y).ok_or_else(|| Error::new(LONG_OVERFLOW))
+    x.checked_sub(y)
+        .ok_or_else(|| ArithmeticError::LongOverflow.into())
 }
 
 /// `Math.multiplyExact(long, long)`.
 pub fn multiply_exact(x: i64, y: i64) -> Result<i64> {
-    x.checked_mul(y).ok_or_else(|| Error::new(LONG_OVERFLOW))
+    x.checked_mul(y)
+        .ok_or_else(|| ArithmeticError::LongOverflow.into())
 }
 
 /// `Math.incrementExact(long)`.
 pub fn increment_exact(x: i64) -> Result<i64> {
-    x.checked_add(1).ok_or_else(|| Error::new(LONG_OVERFLOW))
+    x.checked_add(1)
+        .ok_or_else(|| ArithmeticError::LongOverflow.into())
 }
 
 /// `Math.decrementExact(long)`.
 pub fn decrement_exact(x: i64) -> Result<i64> {
-    x.checked_sub(1).ok_or_else(|| Error::new(LONG_OVERFLOW))
+    x.checked_sub(1)
+        .ok_or_else(|| ArithmeticError::LongOverflow.into())
 }
 
 /// `Math.negateExact(long)`.
 pub fn negate_exact(x: i64) -> Result<i64> {
-    x.checked_neg().ok_or_else(|| Error::new(LONG_OVERFLOW))
+    x.checked_neg()
+        .ok_or_else(|| ArithmeticError::LongOverflow.into())
 }
 
 /// `Math.toIntExact(long)`: the value when it fits in 32 bits.
 pub fn to_int_exact(x: i64) -> Result<i64> {
     i32::try_from(x)
         .map(i64::from)
-        .map_err(|_| Error::new(INTEGER_OVERFLOW))
+        .map_err(|_| ArithmeticError::IntegerOverflow.into())
 }

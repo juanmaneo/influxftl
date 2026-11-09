@@ -13,6 +13,7 @@ use super::args::fail;
 use super::gts::gts_or_list_try;
 use super::gts_points::dedup_gts;
 use crate::encoding::opb64_encode;
+use crate::error::fault::BoundsError;
 use crate::error::{Error, Result};
 use crate::gts::{GeoTimeSerie, Gts, NO_ELEVATION, NO_LOCATION, Type, Values};
 use crate::jmath;
@@ -63,7 +64,7 @@ fn bsax_gts(gts: &Gts, params: Sax) -> Result<GeoTimeSerie> {
         }
     }
     if word_len == 0 {
-        return Err(Error::runtime("java.lang.ArithmeticException", "/ by zero"));
+        return Err(Error::division_by_zero());
     }
     if window_len.wrapping_rem(word_len) != 0 {
         return Err(Error::new("Wordlen MUST divide windowlen."));
@@ -88,10 +89,7 @@ fn bsax_gts(gts: &Gts, params: Sax) -> Result<GeoTimeSerie> {
     let mut sax_gts = GeoTimeSerie::with_buckets(g.lastbucket, g.bucketcount, g.bucketspan);
     sax_gts.metadata = g.metadata.clone();
     let Ok(word_size) = usize::try_from(word_len) else {
-        return Err(Error::runtime(
-            "java.lang.NegativeArraySizeException",
-            word_len.to_string(),
-        ));
+        return Err(BoundsError::NegativeSize(i64::from(word_len)).into());
     };
     let n = g.size() as i64;
     if window_len < 1 {
@@ -265,10 +263,7 @@ struct Discords {
 
 /// `ArrayList` index errors (`Objects.checkIndex`).
 fn index_error(index: i64, length: usize) -> Error {
-    Error::runtime(
-        "java.lang.IndexOutOfBoundsException",
-        format!("Index {index} out of bounds for length {length}"),
-    )
+    BoundsError::ListIndex { index, length }.into()
 }
 
 /// `DISCORDS.discords`: the windows farthest from their nearest non overlapping neighbour,
@@ -427,7 +422,7 @@ fn discords_impl(stack: &mut Stack, name: &str, standardize: bool) -> Result<()>
     };
     let (word_len, window_len) = (word_len as i32, window_len as i32);
     if word_len == 0 {
-        return Err(Error::runtime("java.lang.ArithmeticException", "/ by zero"));
+        return Err(Error::division_by_zero());
     }
     if window_len.wrapping_rem(word_len) != 0 {
         return Err(fail(

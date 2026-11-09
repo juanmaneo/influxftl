@@ -12,7 +12,7 @@ use crate::format::java_double_to_string;
 use crate::functions::Entry;
 use crate::functions::stringformat::Locale;
 use crate::gts::{NO_ELEVATION, NO_LOCATION};
-use crate::jmath::{self, DIVISION_BY_ZERO};
+use crate::jmath;
 use crate::snapshot::value_snapshot;
 use crate::stack::Stack;
 use crate::value::{Value, double_to_long};
@@ -119,10 +119,7 @@ impl Arithmetic {
             (Op::Mul, Num::Double(d)) => Value::Double(d * value.as_f64()),
             (Op::Mod, Num::Long(l)) => match value {
                 Num::Long(_) if l == 0 => {
-                    return Err(Error::runtime(
-                        "java.lang.ArithmeticException",
-                        DIVISION_BY_ZERO,
-                    ));
+                    return Err(Error::division_by_zero());
                 }
                 Num::Long(v) => Value::Long(v.wrapping_rem(l)),
                 Num::Double(v) => Value::Double(v % l as f64),

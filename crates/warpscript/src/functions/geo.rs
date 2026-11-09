@@ -10,6 +10,7 @@ use std::rc::Rc;
 use super::Entry;
 use super::args::{fail, fail_with_cause};
 use super::gts::gts_or_list_try;
+use crate::error::fault::NumberFormatError;
 use crate::error::{Error, Result};
 use crate::geoxp::{
     delta_hhcode, from_geoxp_point, hhcode_bbox, hhcode_center, hhcode_to_string, to_geocell,
@@ -104,19 +105,11 @@ fn hex16(hhcode: i64) -> String {
 
 /// `Long.parseUnsignedLong(s, 16)` of a 16 character string.
 fn parse_unsigned_hex(s: &str) -> Result<i64> {
-    let invalid = || {
-        Error::runtime(
-            "java.lang.NumberFormatException",
-            format!("For input string: \"{s}\" under radix 16"),
-        )
-    };
+    let invalid = || Error::from(NumberFormatError::InvalidHexInput(s.to_owned()));
     let digits = match s.strip_prefix('+') {
         Some(rest) => rest,
         None if s.starts_with('-') => {
-            return Err(Error::runtime(
-                "java.lang.NumberFormatException",
-                format!("Illegal leading minus sign on unsigned string {s}."),
-            ));
+            return Err(NumberFormatError::NegativeUnsigned(s.to_owned()).into());
         }
         None => s,
     };

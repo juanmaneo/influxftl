@@ -47,7 +47,7 @@ fn time_buckets(ticks: &[i64], timebucket: i64) -> Result<Vec<i32>> {
     let mut lastbucket = 0i64;
     for (i, tick) in ticks.iter().enumerate().take(n - 1).skip(1) {
         if timebucket == 0 {
-            return Err(Error::runtime("java.lang.ArithmeticException", "/ by zero"));
+            return Err(Error::division_by_zero());
         }
         let bucket = 1i64.wrapping_add(tick.wrapping_sub(lowerts).wrapping_div(timebucket));
         if bucket != lastbucket {

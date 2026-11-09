@@ -11,8 +11,9 @@ use std::rc::Rc;
 
 use super::Entry;
 use super::args::fail;
-use crate::error::{Error, Result};
-use crate::interpolation::message_number;
+use crate::error::Result;
+use crate::error::fault::BoundsError;
+use crate::error::math::{MathError, message_number};
 use crate::stack::Stack;
 use crate::value::Value;
 
@@ -97,35 +98,6 @@ pub fn vector_string(v: &[f64]) -> String {
     format!("{{{}}}", entries.join("; "))
 }
 
-/// A Commons Math exception.
-fn math_error(class: &'static str, message: String) -> Error {
-    Error::runtime(class, message)
-}
-
-/// `DimensionMismatchException`: `{wrong} != {expected}`.
-fn dimension_mismatch(wrong: usize, expected: usize) -> Error {
-    math_error(
-        "org.apache.commons.math3.exception.DimensionMismatchException",
-        format!(
-            "{} != {}",
-            message_number(wrong as f64),
-            message_number(expected as f64)
-        ),
-    )
-}
-
-/// `NonSquareMatrixException`.
-fn non_square(m: &Matrix) -> Error {
-    math_error(
-        "org.apache.commons.math3.linear.NonSquareMatrixException",
-        format!(
-            "non square ({}x{}) matrix",
-            message_number(m.rows as f64),
-            message_number(m.cols as f64)
-        ),
-    )
-}
-
 /// A matrix value.
 pub fn matrix_value(m: Matrix) -> Value {
     Value::Matrix(Rc::new(m))
@@ -139,16 +111,13 @@ pub fn vector_value(v: Vec<f64>) -> Value {
 /// `add` / `subtract` of two matrices of the same dimensions.
 pub fn add_matrices(a: &Matrix, b: &Matrix, sign: f64) -> Result<Matrix> {
     if a.rows != b.rows || a.cols != b.cols {
-        return Err(math_error(
-            "org.apache.commons.math3.linear.MatrixDimensionMismatchException",
-            format!(
-                "got {}x{} but expected {}x{}",
-                message_number(a.rows as f64),
-                message_number(a.cols as f64),
-                message_number(b.rows as f64),
-                message_number(b.cols as f64)
-            ),
-        ));
+        return Err(MathError::MatrixDimensionMismatch {
+            rows: a.rows,
+            cols: a.cols,
+            expected_rows: b.rows,
+            expected_cols: b.cols,
+        }
+        .into());
     }
     Ok(Matrix {
         rows: a.rows,
@@ -174,7 +143,11 @@ pub fn map_matrix(m: &Matrix, f: impl Fn(f64) -> f64) -> Matrix {
 /// `Array2DRowRealMatrix.multiply`.
 pub fn multiply(a: &Matrix, b: &Matrix) -> Result<Matrix> {
     if a.cols != b.rows {
-        return Err(dimension_mismatch(a.cols, b.rows));
+        return Err(MathError::DimensionMismatch {
+            wrong: a.cols,
+            expected: b.rows,
+        }
+        .into());
     }
     let mut data = vec![0.0; a.rows * b.cols];
     for col in 0..b.cols {
@@ -196,7 +169,11 @@ pub fn multiply(a: &Matrix, b: &Matrix) -> Result<Matrix> {
 /// `operate`: the matrix times a column vector.
 pub fn operate(m: &Matrix, v: &[f64]) -> Result<Vec<f64>> {
     if v.len() != m.cols {
-        return Err(dimension_mismatch(v.len(), m.cols));
+        return Err(MathError::DimensionMismatch {
+            wrong: v.len(),
+            expected: m.cols,
+        }
+        .into());
     }
     Ok((0..m.rows)
         .map(|row| (0..m.cols).fold(0.0, |sum, i| sum + m.get(row, i) * v[i]))
@@ -206,7 +183,11 @@ pub fn operate(m: &Matrix, v: &[f64]) -> Result<Vec<f64>> {
 /// `preMultiply`: a row vector times the matrix.
 pub fn pre_multiply(m: &Matrix, v: &[f64]) -> Result<Vec<f64>> {
     if v.len() != m.rows {
-        return Err(dimension_mismatch(v.len(), m.rows));
+        return Err(MathError::DimensionMismatch {
+            wrong: v.len(),
+            expected: m.rows,
+        }
+        .into());
     }
     Ok((0..m.cols)
         .map(|col| (0..m.rows).fold(0.0, |sum, i| sum + m.get(i, col) * v[i]))
@@ -216,7 +197,11 @@ pub fn pre_multiply(m: &Matrix, v: &[f64]) -> Result<Vec<f64>> {
 /// `ArrayRealVector.add` / `subtract`.
 pub fn add_vectors(a: &[f64], b: &[f64], sign: f64) -> Result<Vec<f64>> {
     if a.len() != b.len() {
-        return Err(dimension_mismatch(a.len(), b.len()));
+        return Err(MathError::DimensionMismatch {
+            wrong: a.len(),
+            expected: b.len(),
+        }
+        .into());
     }
     Ok(a.iter()
         .zip(b)
@@ -243,10 +228,11 @@ fn tomat(stack: &mut Stack) -> Result<()> {
     let rows = match stack.pop()? {
         Value::Vector(v) => {
             if v.is_empty() {
-                return Err(math_error(
-                    "org.apache.commons.math3.exception.NotStrictlyPositiveException",
-                    "0 is smaller than, or equal to, the minimum (0)".to_owned(),
-                ));
+                return Err(MathError::NotStrictlyPositive {
+                    value: 0,
+                    minimum: 0,
+                }
+                .into());
             }
             stack.push(matrix_value(Matrix {
                 rows: v.len(),
@@ -279,7 +265,7 @@ fn tomat(stack: &mut Stack) -> Result<()> {
     }
     let Some(cols) = cols else {
         // `new double[0][-1]`.
-        return Err(Error::runtime("java.lang.NegativeArraySizeException", "-1"));
+        return Err(BoundsError::NegativeSize(-1).into());
     };
     let mut data = Vec::with_capacity(rows.len() * cols);
     for row in &lists {
@@ -291,10 +277,7 @@ fn tomat(stack: &mut Stack) -> Result<()> {
         }
     }
     if cols == 0 {
-        return Err(math_error(
-            "org.apache.commons.math3.exception.NoDataException",
-            "matrix must have at least one column".to_owned(),
-        ));
+        return Err(MathError::MatrixWithoutColumn.into());
     }
     stack.push(matrix_value(Matrix {
         rows: rows.len(),
@@ -326,7 +309,11 @@ fn matto(stack: &mut Stack) -> Result<()> {
 fn tr(stack: &mut Stack) -> Result<()> {
     let m = pop_matrix(stack, "TR")?;
     if m.rows != m.cols {
-        return Err(non_square(&m));
+        return Err(MathError::NonSquareMatrix {
+            rows: m.rows,
+            cols: m.cols,
+        }
+        .into());
     }
     let trace = (0..m.rows).fold(0.0, |sum, i| sum + m.get(i, i));
     stack.push(Value::Double(trace));
@@ -362,7 +349,11 @@ impl Lu {
     #[allow(clippy::needless_range_loop)] // the loops of Commons Math
     fn new(m: &Matrix) -> Result<Lu> {
         if m.rows != m.cols {
-            return Err(non_square(m));
+            return Err(MathError::NonSquareMatrix {
+                rows: m.rows,
+                cols: m.cols,
+            }
+            .into());
         }
         let n = m.cols;
         let mut lu: Vec<Vec<f64>> = (0..n)
@@ -429,10 +420,7 @@ impl Lu {
     #[allow(clippy::needless_range_loop)] // the loops of Commons Math
     fn inverse(&self) -> Result<Matrix> {
         if self.singular {
-            return Err(math_error(
-                "org.apache.commons.math3.linear.SingularMatrixException",
-                "matrix is singular".to_owned(),
-            ));
+            return Err(MathError::SingularMatrix.into());
         }
         let n = self.pivot.len();
         let mut bp: Vec<Vec<f64>> = (0..n)

@@ -8,11 +8,12 @@
 use std::f64::consts::PI;
 
 use super::{Aggregated, Aggregator, AggregatorArgs, Named, Num, Roles};
+use crate::error::fault::{BoundsError, ResourceError};
 use crate::error::{Error, Result};
 use crate::functions::Entry;
 use crate::geoxp;
 use crate::gts::{NO_ELEVATION, NO_LOCATION};
-use crate::jmath::{self, DIVISION_BY_ZERO};
+use crate::jmath;
 use crate::stack::Stack;
 use crate::value::{Value, double_to_long};
 
@@ -142,10 +143,7 @@ impl Aggregator for Smoother {
         let (mut value_weight, mut location_weight, mut elevation_weight) = (0.0, 0.0, 0.0);
         for (i, &tick) in args.ticks.iter().enumerate() {
             if self.step == 0 {
-                return Err(Error::runtime(
-                    "java.lang.ArithmeticException",
-                    DIVISION_BY_ZERO,
-                ));
+                return Err(Error::division_by_zero());
             }
             // `(int) (Math.abs(ticks[i] - tick) / step)`
             let distance = tick
@@ -222,19 +220,16 @@ fn kernel_builder(stack: &mut Stack, name: &'static str, kernel: Kernel) -> Resu
     // `new double[1 + (width >>> 1)]`
     let count = 1i32.wrapping_add((width as u32 >> 1) as i32);
     let Ok(count) = usize::try_from(count) else {
-        return Err(Error::runtime(
-            "java.lang.NegativeArraySizeException",
-            count.to_string(),
-        ));
+        return Err(BoundsError::NegativeSize(i64::from(count)).into());
     };
     if count > MAX_WEIGHTS {
         // HotSpot arrays hold at most `Integer.MAX_VALUE - 2` elements.
-        let message = if count > (i32::MAX - 2) as usize {
-            "Requested array size exceeds VM limit"
+        return Err(if count > (i32::MAX - 2) as usize {
+            ResourceError::ArrayTooLong
         } else {
-            "Java heap space"
-        };
-        return Err(Error::runtime("java.lang.OutOfMemoryError", message));
+            ResourceError::OutOfMemory
+        }
+        .into());
     }
     stack.push(Value::Function(Named::object(
         name,

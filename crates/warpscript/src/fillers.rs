@@ -16,6 +16,7 @@ use std::any::Any;
 use std::rc::Rc;
 
 use crate::aggregators::double_value;
+use crate::error::fault::IllegalArgumentError;
 use crate::error::{Error, Result};
 use crate::format::{java_double_to_string, url_encode};
 use crate::functions::Entry;
@@ -712,10 +713,7 @@ impl MacroFiller {
 /// `new ArrayList(capacity)`.
 fn capacity(capacity: i32) -> Result<()> {
     if capacity < 0 {
-        return Err(Error::runtime(
-            "java.lang.IllegalArgumentException",
-            format!("Illegal Capacity: {capacity}"),
-        ));
+        return Err(IllegalArgumentError::Capacity(i64::from(capacity)).into());
     }
     Ok(())
 }

@@ -12,10 +12,16 @@
 //! The Java exception class names a script can read live in [`compat`] and nowhere else.
 
 pub mod compat;
+pub mod fault;
+pub mod math;
 
 use std::sync::Arc;
 use std::{fmt, io};
 
+use self::fault::{
+    ArithmeticError, BoundsError, IllegalArgumentError, NumberFormatError, ResourceError,
+};
+use self::math::MathError;
 use crate::encoder::EncoderError;
 use crate::finite::NotFinite;
 use crate::thrift::ThriftError;
@@ -78,7 +84,7 @@ impl From<ValueKind> for Class {
 }
 
 /// A WarpScript error or control-flow signal.
-#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+#[derive(Debug, Clone, PartialEq, thiserror::Error)]
 pub enum Error {
     /// `RETURN` / `NRETURN`: leave the current macro(s).
     #[error("RETURN")]
@@ -121,14 +127,6 @@ pub enum Error {
         /// The class expected.
         to: Class,
     },
-    /// An access to `index` in an array of `length` elements.
-    #[error("Index {index} out of bounds for length {length}")]
-    IndexOutOfBounds {
-        /// The index accessed.
-        index: i64,
-        /// The number of elements.
-        length: usize,
-    },
     /// A dereference of a missing value. Warp 10 renders its message-less exception as the
     /// simple name of its class.
     #[error("NullPointerException")]
@@ -136,6 +134,27 @@ pub enum Error {
     /// A number which is not finite entered where only finite numbers are accepted.
     #[error(transparent)]
     NotFinite(#[from] NotFinite),
+    /// An arithmetic failure.
+    #[error(transparent)]
+    Arithmetic(#[from] ArithmeticError),
+    /// A text that is not the number it must be.
+    #[error(transparent)]
+    NumberFormat(#[from] NumberFormatError),
+    /// A size or an index outside of what it must be.
+    #[error(transparent)]
+    Bounds(#[from] BoundsError),
+    /// An argument a platform routine refuses.
+    #[error(transparent)]
+    IllegalArgument(#[from] IllegalArgumentError),
+    /// A limit of the machine a request exceeds.
+    #[error(transparent)]
+    ResourceExhausted(#[from] ResourceError),
+    /// A modification of a collection that was frozen (`IMMUTABLE`).
+    #[error("UnsupportedOperationException")]
+    Immutable,
+    /// A failure of a Commons Math routine.
+    #[error(transparent)]
+    Math(#[from] MathError),
     /// A failure of the binary encoding of datapoints.
     #[error(transparent)]
     Encoder(#[from] EncoderError),
@@ -193,11 +212,6 @@ impl Error {
         }
     }
 
-    /// The failure of reading `index` in an array of `length`.
-    pub fn index_out_of_bounds(index: i64, length: usize) -> Self {
-        Error::IndexOutOfBounds { index, length }
-    }
-
     /// The failure of dereferencing a missing value.
     pub fn null_pointer() -> Self {
         Error::NullPointer
@@ -219,9 +233,15 @@ impl Error {
             Error::Legacy { runtime, .. } => runtime.is_some(),
             Error::Thrift(err) => !err.is_malformed_input(),
             Error::Encoder(err) => err.is_runtime(),
-            Error::EmptyStack
+            Error::Math(_)
+            | Error::Arithmetic(_)
+            | Error::NumberFormat(_)
+            | Error::Bounds(_)
+            | Error::IllegalArgument(_)
+            | Error::ResourceExhausted(_)
+            | Error::Immutable
+            | Error::EmptyStack
             | Error::ClassCast { .. }
-            | Error::IndexOutOfBounds { .. }
             | Error::NullPointer => true,
             Error::Return
             | Error::Stop(_)

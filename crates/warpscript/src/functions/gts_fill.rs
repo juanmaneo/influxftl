@@ -499,7 +499,7 @@ fn fill_single(
                 (g.bucketspan, g.lastbucket, first_bucket(&g))
             };
             if span == 0 {
-                return Err(Error::runtime("java.lang.ArithmeticException", "/ by zero"));
+                return Err(Error::division_by_zero());
             }
             let mut i = 0;
             while i < gts.borrow().size() {

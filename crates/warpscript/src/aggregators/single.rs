@@ -8,6 +8,7 @@
 use chrono::{Datelike, Timelike};
 
 use super::{Aggregated, Aggregator, AggregatorArgs, Named, Roles};
+use crate::error::fault::IllegalArgumentError;
 use crate::error::{Error, Result};
 use crate::format::url_encode;
 use crate::functions::Entry;
@@ -303,10 +304,7 @@ impl TimeZone {
     pub fn for_offset_millis(millis: i32) -> Result<TimeZone> {
         const MAX_OFFSET: u32 = 86_399_999;
         if millis.unsigned_abs() > MAX_OFFSET {
-            return Err(Error::runtime(
-                "java.lang.IllegalArgumentException",
-                format!("Millis out of range: {millis}"),
-            ));
+            return Err(IllegalArgumentError::MillisOutOfRange(millis).into());
         }
         Ok(if millis == 0 {
             TimeZone::Zone(Zone::UTC)

@@ -261,3 +261,273 @@ fn io_failures_compare_by_kind_and_message() {
     assert_eq!(a.to_string(), "short");
     assert!(a.source().is_none());
 }
+
+#[test]
+fn platform_failures_have_the_wording_and_class_of_warp10() {
+    use super::error::fault::{
+        ArithmeticError, BoundsError, IllegalArgumentError, NumberFormatError, ResourceError,
+    };
+
+    let failures: Vec<(Error, &str, &str)> = vec![
+        (
+            ArithmeticError::DivisionByZero.into(),
+            "/ by zero",
+            "java.lang.ArithmeticException",
+        ),
+        (
+            ArithmeticError::LongOverflow.into(),
+            "long overflow",
+            "java.lang.ArithmeticException",
+        ),
+        (
+            ArithmeticError::IntegerOverflow.into(),
+            "integer overflow",
+            "java.lang.ArithmeticException",
+        ),
+        (
+            NumberFormatError::Empty.into(),
+            "empty String",
+            "java.lang.NumberFormatException",
+        ),
+        (
+            NumberFormatError::InvalidInput("x".to_owned()).into(),
+            "For input string: \"x\"",
+            "java.lang.NumberFormatException",
+        ),
+        (
+            NumberFormatError::InvalidHexInput("g".to_owned()).into(),
+            "For input string: \"g\" under radix 16",
+            "java.lang.NumberFormatException",
+        ),
+        (
+            NumberFormatError::NegativeUnsigned("-1".to_owned()).into(),
+            "Illegal leading minus sign on unsigned string -1.",
+            "java.lang.NumberFormatException",
+        ),
+        (
+            NumberFormatError::NotFinite.into(),
+            "Infinite or NaN",
+            "java.lang.NumberFormatException",
+        ),
+        (
+            BoundsError::NegativeSize(-3).into(),
+            "-3",
+            "java.lang.NegativeArraySizeException",
+        ),
+        (
+            Error::index_out_of_bounds(4, 2),
+            "Index 4 out of bounds for length 2",
+            "java.lang.ArrayIndexOutOfBoundsException",
+        ),
+        (
+            BoundsError::ListIndex {
+                index: -1,
+                length: 0,
+            }
+            .into(),
+            "Index -1 out of bounds for length 0",
+            "java.lang.IndexOutOfBoundsException",
+        ),
+        (
+            BoundsError::ListEnd(9).into(),
+            "toIndex = 9",
+            "java.lang.IndexOutOfBoundsException",
+        ),
+        (
+            BoundsError::StringIndex {
+                index: 1,
+                length: 1,
+            }
+            .into(),
+            "Index 1 out of bounds for length 1",
+            "java.lang.StringIndexOutOfBoundsException",
+        ),
+        (
+            BoundsError::StringRange {
+                start: 1,
+                end: 0,
+                length: 1,
+            }
+            .into(),
+            "Range [1, 0) out of bounds for length 1",
+            "java.lang.StringIndexOutOfBoundsException",
+        ),
+        (
+            IllegalArgumentError::Capacity(-2).into(),
+            "Illegal Capacity: -2",
+            "java.lang.IllegalArgumentException",
+        ),
+        (
+            IllegalArgumentError::MillisOutOfRange(90_000_000).into(),
+            "Millis out of range: 90000000",
+            "java.lang.IllegalArgumentException",
+        ),
+        (
+            IllegalArgumentError::EscapeNotHexadecimal {
+                digit: 'g',
+                code: 103,
+            }
+            .into(),
+            "URLDecoder: Illegal hex characters in escape (%) pattern - not a hexadecimal digit: \"g\" = 103",
+            "java.lang.IllegalArgumentException",
+        ),
+        (
+            IllegalArgumentError::IncompleteEscape.into(),
+            "URLDecoder: Incomplete trailing escape (%) pattern",
+            "java.lang.IllegalArgumentException",
+        ),
+        (
+            ResourceError::ArrayTooLong.into(),
+            "Requested array size exceeds VM limit",
+            "java.lang.OutOfMemoryError",
+        ),
+        (
+            ResourceError::OutOfMemory.into(),
+            "Java heap space",
+            "java.lang.OutOfMemoryError",
+        ),
+        (
+            Error::Immutable,
+            "UnsupportedOperationException",
+            "java.lang.UnsupportedOperationException",
+        ),
+        (
+            Error::division_by_zero(),
+            "/ by zero",
+            "java.lang.ArithmeticException",
+        ),
+    ];
+    for (error, message, class) in failures {
+        assert_eq!(error.to_string(), message);
+        assert_eq!(exception_class(&error), class, "{message}");
+        assert!(error.is_runtime(), "{message}");
+    }
+}
+
+#[test]
+fn math_failures_have_the_wording_and_class_of_commons_math() {
+    use super::error::math::MathError;
+
+    const EXCEPTION: &str = "org.apache.commons.math3.exception.";
+    const LINEAR: &str = "org.apache.commons.math3.linear.";
+    let failures = [
+        (
+            MathError::TooManyIterations { max: 1000 },
+            "illegal state: maximal count (1,000) exceeded: iterations",
+            format!("{EXCEPTION}TooManyIterationsException"),
+        ),
+        (
+            MathError::QrDecomposition {
+                rows: 2000,
+                cols: 3,
+            },
+            "illegal state: unable to perform Q.R decomposition on the 2,000x3 jacobian matrix",
+            format!("{EXCEPTION}ConvergenceException"),
+        ),
+        (
+            MathError::NotStrictlyPositive {
+                value: 0,
+                minimum: 0,
+            },
+            "0 is smaller than, or equal to, the minimum (0)",
+            format!("{EXCEPTION}NotStrictlyPositiveException"),
+        ),
+        (
+            MathError::NoData,
+            "no data",
+            format!("{EXCEPTION}NoDataException"),
+        ),
+        (
+            MathError::EmptyPolynomialCoefficients,
+            "empty polynomials coefficients array",
+            format!("{EXCEPTION}NoDataException"),
+        ),
+        (
+            MathError::MatrixWithoutColumn,
+            "matrix must have at least one column",
+            format!("{EXCEPTION}NoDataException"),
+        ),
+        (
+            MathError::OutOfRange {
+                value: 1.5,
+                low: 0.0,
+                high: 1.0,
+            },
+            "1.5 out of [0, 1] range",
+            format!("{EXCEPTION}OutOfRangeException"),
+        ),
+        (
+            MathError::NoBracketing {
+                lower: 0.0,
+                upper: 1.0,
+                lower_value: 2.0,
+                upper_value: 3.0,
+            },
+            "function values at endpoints do not have different signs, endpoints: [0, 1], values: [2, 3]",
+            format!("{EXCEPTION}NoBracketingException"),
+        ),
+        (
+            MathError::DimensionMismatch {
+                wrong: 2,
+                expected: 3,
+            },
+            "2 != 3",
+            format!("{EXCEPTION}DimensionMismatchException"),
+        ),
+        (
+            MathError::NonSquareMatrix { rows: 2, cols: 3 },
+            "non square (2x3) matrix",
+            format!("{LINEAR}NonSquareMatrixException"),
+        ),
+        (
+            MathError::MatrixDimensionMismatch {
+                rows: 1,
+                cols: 2,
+                expected_rows: 3,
+                expected_cols: 4,
+            },
+            "got 1x2 but expected 3x4",
+            format!("{LINEAR}MatrixDimensionMismatchException"),
+        ),
+        (
+            MathError::SingularMatrix,
+            "matrix is singular",
+            format!("{LINEAR}SingularMatrixException"),
+        ),
+        (
+            MathError::NonMonotonic {
+                index: 2,
+                previous: 5.0,
+                wrong: 4.0,
+            },
+            "points 1 and 2 are not strictly increasing (5 >= 4)",
+            format!("{EXCEPTION}NonMonotonicSequenceException"),
+        ),
+        (
+            MathError::TooFewPoints(1),
+            "number of points (1)",
+            format!("{EXCEPTION}NumberIsTooSmallException"),
+        ),
+        (
+            MathError::TwoPointsRequired(1),
+            "2 points are required, got only 1",
+            format!("{EXCEPTION}NumberIsTooSmallException"),
+        ),
+        (
+            MathError::BandwidthTooSmall(1),
+            "bandwidth (1)",
+            format!("{EXCEPTION}NumberIsTooSmallException"),
+        ),
+        (
+            MathError::NotFiniteNumber(f64::NAN),
+            "NaN is not a finite number",
+            format!("{EXCEPTION}NotFiniteNumberException"),
+        ),
+    ];
+    for (failure, message, class) in failures {
+        let error = Error::from(failure);
+        assert_eq!(error.to_string(), message);
+        assert_eq!(exception_class(&error), class, "{message}");
+        assert!(error.is_runtime(), "{message}");
+    }
+}

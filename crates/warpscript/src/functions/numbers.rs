@@ -10,6 +10,7 @@ use super::Entry;
 use super::args::fail;
 use crate::bigdecimal::{BigDecimal, RoundingMode};
 use crate::error::Result;
+use crate::error::fault::BoundsError;
 use crate::format::java_double_to_string;
 use crate::gts::{GeoTimeSerie, Values};
 use crate::macros::{Callable, StackFunction, StackObject};
@@ -248,10 +249,7 @@ fn zto(stack: &mut Stack) -> Result<()> {
     // `new long[(int) count]`.
     let count = count as i32;
     let Ok(count) = usize::try_from(count) else {
-        return Err(crate::error::Error::runtime(
-            "java.lang.NegativeArraySizeException",
-            count.to_string(),
-        ));
+        return Err(BoundsError::NegativeSize(i64::from(count)).into());
     };
     let mut longs = vec![0i64; count];
     let mut byteidx = 0;

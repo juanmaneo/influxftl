@@ -34,6 +34,7 @@ use indexmap::{IndexMap, IndexSet};
 use super::Entry;
 use super::args::{compute_and_check_index, fail, fail_with_cause, pop_list, pop_long, pop_map};
 use super::gts_reduce::{java_hash_order, java_string_hash, table_size_for};
+use crate::error::fault::BoundsError;
 use crate::error::{Error, Result};
 use crate::gts::{GeoTimeSerie, Gts};
 use crate::stack::Stack;
@@ -89,7 +90,7 @@ const VARIABLE_NAMES: &str =
 
 /// Java `ArrayList.set` / `remove` on an invalid index (`Objects.checkIndex`).
 fn index_out_of_bounds(index: i64, length: usize) -> Error {
-    Error::new(format!("Index {index} out of bounds for length {length}"))
+    BoundsError::ListIndex { index, length }.into()
 }
 
 /// The string made of a single UTF-16 code unit (`String.valueOf(char)`); a lone surrogate

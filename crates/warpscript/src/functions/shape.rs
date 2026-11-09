@@ -9,6 +9,7 @@ use std::rc::Rc;
 use super::Entry;
 use super::args::fail;
 use super::collections::{flatten_value, nested_get};
+use crate::error::fault::{BoundsError, IllegalArgumentError};
 use crate::error::{Error, Result};
 use crate::stack::Stack;
 use crate::value::{List, Value};
@@ -24,10 +25,7 @@ pub const FUNCTIONS: &[(&str, Entry)] = &[
 
 /// The `IndexOutOfBoundsException` of `List.get`.
 fn list_index_error(index: i64, length: usize) -> Error {
-    Error::runtime(
-        "java.lang.IndexOutOfBoundsException",
-        format!("Index {index} out of bounds for length {length}"),
-    )
+    BoundsError::ListIndex { index, length }.into()
 }
 
 /// `SHAPE.candidate_shape`: the sizes of the first element of each nesting level.
@@ -178,7 +176,7 @@ fn reshape(stack: &mut Stack) -> Result<()> {
         let dim = dim as i32;
         let len = elts.len() as i32;
         if dim == 0 {
-            return Err(Error::runtime("java.lang.ArithmeticException", "/ by zero"));
+            return Err(Error::division_by_zero());
         }
         let size = len / dim;
         if size == 0 {
@@ -188,20 +186,14 @@ fn reshape(stack: &mut Stack) -> Result<()> {
             ));
         }
         if size < 0 {
-            return Err(Error::runtime(
-                "java.lang.IllegalArgumentException",
-                format!("Illegal Capacity: {size}"),
-            ));
+            return Err(IllegalArgumentError::Capacity(i64::from(size)).into());
         }
         let mut grouped = Vec::with_capacity(size as usize);
         let mut idx = 0i32;
         while idx < len {
             let end = idx.wrapping_add(dim);
             if end > len {
-                return Err(Error::runtime(
-                    "java.lang.IndexOutOfBoundsException",
-                    format!("toIndex = {end}"),
-                ));
+                return Err(BoundsError::ListEnd(end).into());
             }
             grouped.push(Value::list(elts[idx as usize..end as usize].to_vec()));
             idx = end;

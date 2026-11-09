@@ -13,8 +13,8 @@
 
 #![allow(clippy::many_single_char_names)] // the names of Commons Math
 
-use crate::error::{Error, Result};
-use crate::interpolation::message_decimal;
+use crate::error::Result;
+use crate::error::math::MathError;
 
 /// `Gamma.invGamma1pm1`: `1 / Γ(1 + x) - 1` for `-0.5 <= x <= 1.5`.
 #[allow(clippy::excessive_precision, clippy::unreadable_literal)]
@@ -261,10 +261,12 @@ impl TDistribution {
     #[allow(clippy::float_cmp)]
     pub fn inverse_cumulative_probability(&self, p: f64) -> Result<f64> {
         if !(0.0..=1.0).contains(&p) && !p.is_nan() {
-            return Err(Error::runtime(
-                "org.apache.commons.math3.exception.OutOfRangeException",
-                format!("{} out of [0, 1] range", message_decimal(p)),
-            ));
+            return Err(MathError::OutOfRange {
+                value: p,
+                low: 0.0,
+                high: 1.0,
+            }
+            .into());
         }
         if p == 0.0 {
             return Ok(f64::NEG_INFINITY);
@@ -315,16 +317,13 @@ fn brent_solve(f: impl Fn(f64) -> f64, min: f64, max: f64, accuracy: f64) -> Res
     if y_initial * y_max < 0.0 {
         return Ok(brent(&f, initial, max, y_initial, y_max, accuracy));
     }
-    Err(Error::runtime(
-        "org.apache.commons.math3.exception.NoBracketingException",
-        format!(
-            "function values at endpoints do not have different signs, endpoints: [{}, {}], values: [{}, {}]",
-            message_decimal(min),
-            message_decimal(max),
-            message_decimal(y_min),
-            message_decimal(y_max)
-        ),
-    ))
+    Err(MathError::NoBracketing {
+        lower: min,
+        upper: max,
+        lower_value: y_min,
+        upper_value: y_max,
+    }
+    .into())
 }
 
 /// `BrentSolver.brent`.

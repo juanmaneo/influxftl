@@ -11,7 +11,9 @@
 // floating point operations happen in the same order.
 #![allow(clippy::needless_range_loop, clippy::many_single_char_names)]
 
-use crate::error::{Error, Result};
+use crate::error::Result;
+use crate::error::fault::BoundsError;
+use crate::error::math::MathError;
 use crate::jmath;
 
 /// `Precision.SAFE_MIN`: 2⁻¹⁰²².
@@ -36,35 +38,6 @@ pub struct WeightedPoint {
     pub x: f64,
     /// The observed value.
     pub y: f64,
-}
-
-/// `MessageFormat` rendering of a count (`Locale.US`: grouped by thousands).
-fn grouped(value: u64) -> String {
-    let digits = value.to_string();
-    let mut out = String::new();
-    for (i, digit) in digits.chars().enumerate() {
-        if i > 0 && (digits.len() - i).is_multiple_of(3) {
-            out.push(',');
-        }
-        out.push(digit);
-    }
-    out
-}
-
-/// A Commons Math exception.
-fn math_error(class: &'static str, message: String) -> Error {
-    Error::runtime(class, message)
-}
-
-/// `TooManyIterationsException`.
-fn too_many_iterations(max: i32) -> Error {
-    math_error(
-        "org.apache.commons.math3.exception.TooManyIterationsException",
-        format!(
-            "illegal state: maximal count ({}) exceeded: iterations",
-            grouped(u64::from(max.unsigned_abs()))
-        ),
-    )
 }
 
 /// The weighted least-squares problem of a polynomial of `degree` through the points.
@@ -160,14 +133,11 @@ fn qr_decomposition(mut a: Vec<Vec<f64>>, n_c: usize, solved_cols: usize) -> Res
                 norm2 += aki * aki;
             }
             if !norm2.is_finite() {
-                return Err(math_error(
-                    "org.apache.commons.math3.exception.ConvergenceException",
-                    format!(
-                        "illegal state: unable to perform Q.R decomposition on the {}x{} jacobian matrix",
-                        grouped(n_r as u64),
-                        grouped(n_c as u64)
-                    ),
-                ));
+                return Err(MathError::QrDecomposition {
+                    rows: n_r,
+                    cols: n_c,
+                }
+                .into());
             }
             if norm2 > ak2 {
                 next_column = i;
@@ -489,7 +459,10 @@ fn optimize(problem: &Problem, n_c: usize, max_iterations: i32) -> Result<Vec<f6
         .map(|v| v.to_bits())
         .collect();
         if iterations > max_iterations || state == previous_state {
-            return Err(too_many_iterations(max_iterations));
+            return Err(MathError::TooManyIterations {
+                max: max_iterations,
+            }
+            .into());
         }
         previous_state = state;
         let previous_point = current_point.clone();
@@ -630,12 +603,8 @@ fn optimize(problem: &Problem, n_c: usize, max_iterations: i32) -> Result<Vec<f6
 /// below `-1`).
 pub fn coefficient_count(degree: i32) -> Result<usize> {
     let n_parameters = degree.wrapping_add(1);
-    usize::try_from(n_parameters).map_err(|_| {
-        Error::runtime(
-            "java.lang.NegativeArraySizeException",
-            n_parameters.to_string(),
-        )
-    })
+    usize::try_from(n_parameters)
+        .map_err(|_| BoundsError::NegativeSize(i64::from(n_parameters)).into())
 }
 
 /// `PolynomialCurveFitter.withMaxIterations(max_iterations).fit(points)` with
@@ -648,16 +617,14 @@ pub fn polynomial_fit(
 ) -> Result<Vec<f64>> {
     // The square root of the empty weight matrix cannot be allocated.
     if points.is_empty() {
-        return Err(math_error(
-            "org.apache.commons.math3.exception.NotStrictlyPositiveException",
-            "0 is smaller than, or equal to, the minimum (0)".to_owned(),
-        ));
+        return Err(MathError::NotStrictlyPositive {
+            value: 0,
+            minimum: 0,
+        }
+        .into());
     }
     if n_parameters == 0 {
-        return Err(math_error(
-            "org.apache.commons.math3.exception.NoDataException",
-            "empty polynomials coefficients array".to_owned(),
-        ));
+        return Err(MathError::EmptyPolynomialCoefficients.into());
     }
     let problem = Problem {
         x: points.iter().map(|p| p.x).collect(),

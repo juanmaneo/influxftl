@@ -10,11 +10,8 @@
 //! through, with their (en_US) messages. The argument checks the callers make impossible
 //! (arrays of different lengths, empty arrays, out of range evaluation points) are left out.
 
-use crate::error::{Error, Result};
-
-const NON_MONOTONIC: &str = "org.apache.commons.math3.exception.NonMonotonicSequenceException";
-const TOO_SMALL: &str = "org.apache.commons.math3.exception.NumberIsTooSmallException";
-const NOT_FINITE: &str = "org.apache.commons.math3.exception.NotFiniteNumberException";
+use crate::error::Result;
+use crate::error::math::MathError;
 
 /// A piecewise polynomial function (`PolynomialSplineFunction`): polynomial `i`, evaluated
 /// at `x - knots[i]`, applies on `[knots[i], knots[i + 1]]`.
@@ -81,57 +78,17 @@ fn horner(c: &[f64], x: f64) -> f64 {
         .fold(c[n - 1], |result, cj| x * result + cj)
 }
 
-/// The `MessageFormat` (en_US) rendering of a number argument: digits grouped by three,
-/// `∞` for infinities. Integral values only (ticks, counts and indexes), which `{}` renders
-/// with the shortest digits padded with zeros like `DecimalFormat`.
-pub(crate) fn message_number(d: f64) -> String {
-    if d.is_nan() {
-        return "NaN".to_owned();
-    }
-    let digits = if d.is_infinite() {
-        "∞".to_owned()
-    } else {
-        group(&format!("{}", d.abs()))
-    };
-    if d.is_sign_negative() {
-        format!("-{digits}")
-    } else {
-        digits
-    }
-}
-
-/// Digits grouped by three with `,`.
-fn group(digits: &str) -> String {
-    let mut out = String::with_capacity(digits.len() * 4 / 3);
-    for (i, c) in digits.chars().enumerate() {
-        if i > 0 && (digits.len() - i).is_multiple_of(3) {
-            out.push(',');
-        }
-        out.push(c);
-    }
-    out
-}
-
-/// `NumberIsTooSmallException` with the message pattern `pattern` (whose `{}` is `wrong`).
-fn too_small(pattern: &str, wrong: usize) -> Error {
-    Error::runtime(TOO_SMALL, pattern.replace("{}", &group(&wrong.to_string())))
-}
-
 /// `MathArrays.checkOrder(x)`: `x` must be strictly increasing.
 pub fn check_order(x: &[f64]) -> Result<()> {
     for index in 1..x.len() {
         let (previous, wrong) = (x[index - 1], x[index]);
         if wrong <= previous {
-            return Err(Error::runtime(
-                NON_MONOTONIC,
-                format!(
-                    "points {} and {} are not strictly increasing ({} >= {})",
-                    group(&(index - 1).to_string()),
-                    group(&index.to_string()),
-                    message_number(previous),
-                    message_number(wrong)
-                ),
-            ));
+            return Err(MathError::NonMonotonic {
+                index,
+                previous,
+                wrong,
+            }
+            .into());
         }
     }
     Ok(())
@@ -140,7 +97,7 @@ pub fn check_order(x: &[f64]) -> Result<()> {
 /// `LinearInterpolator.interpolate`: the piecewise linear function through the points.
 pub fn linear(x: &[f64], y: &[f64]) -> Result<PolynomialSplineFunction> {
     if x.len() < 2 {
-        return Err(too_small("number of points ({})", x.len()));
+        return Err(MathError::TooFewPoints(x.len()).into());
     }
     check_order(x)?;
     let polynomials = (0..x.len() - 1)
@@ -156,7 +113,7 @@ pub fn linear(x: &[f64], y: &[f64]) -> Result<PolynomialSplineFunction> {
 #[allow(clippy::many_single_char_names)] // The names of Commons Math.
 pub fn spline(x: &[f64], y: &[f64]) -> Result<PolynomialSplineFunction> {
     if x.len() < 3 {
-        return Err(too_small("number of points ({})", x.len()));
+        return Err(MathError::TooFewPoints(x.len()).into());
     }
     let n = x.len() - 1;
     check_order(x)?;
@@ -191,7 +148,7 @@ pub fn spline(x: &[f64], y: &[f64]) -> Result<PolynomialSplineFunction> {
 /// `AkimaSplineInterpolator.interpolate`: the Akima cubic spline through the points.
 pub fn akima(x: &[f64], y: &[f64]) -> Result<PolynomialSplineFunction> {
     if x.len() < 5 {
-        return Err(too_small("number of points ({})", x.len()));
+        return Err(MathError::TooFewPoints(x.len()).into());
     }
     check_order(x)?;
     let n = x.len();
@@ -263,13 +220,7 @@ fn differentiate_three_point(
 /// `DividedDifferenceInterpolator.interpolate`: the interpolating polynomial in Newton form.
 pub fn divided_difference(x: &[f64], y: &[f64]) -> Result<NewtonForm> {
     if x.len() < 2 {
-        return Err(Error::runtime(
-            TOO_SMALL,
-            format!(
-                "2 points are required, got only {}",
-                group(&x.len().to_string())
-            ),
-        ));
+        return Err(MathError::TwoPointsRequired(x.len()).into());
     }
     check_order(x)?;
     let n = x.len();
@@ -307,10 +258,7 @@ pub fn loess(
 /// `MathUtils.checkFinite` on every value.
 fn check_finite(values: &[f64]) -> Result<()> {
     match values.iter().find(|v| !v.is_finite()) {
-        Some(v) => Err(Error::runtime(
-            NOT_FINITE,
-            format!("{} is not a finite number", message_number(*v)),
-        )),
+        Some(v) => Err(MathError::NotFiniteNumber(*v).into()),
         None => Ok(()),
     }
 }
@@ -332,10 +280,7 @@ pub fn loess_smooth(
     }
     let bandwidth_in_points = (bandwidth * n as f64) as i32;
     if bandwidth_in_points < 2 {
-        return Err(Error::runtime(
-            TOO_SMALL,
-            format!("bandwidth ({bandwidth_in_points})"),
-        ));
+        return Err(MathError::BandwidthTooSmall(bandwidth_in_points).into());
     }
     let mut res = vec![0.0; n];
     let mut residuals = vec![0.0; n];
@@ -474,45 +419,6 @@ pub fn linear_combination(a: &[f64], b: &[f64]) -> f64 {
     }
 }
 
-/// `NoDataException`.
-fn no_data() -> Error {
-    Error::runtime(
-        "org.apache.commons.math3.exception.NoDataException",
-        "no data",
-    )
-}
-
-/// `OutOfRangeException`: `{value} out of [{lo}, {hi}] range`.
-fn out_of_range(value: f64, lo: f64, hi: f64) -> Error {
-    Error::runtime(
-        "org.apache.commons.math3.exception.OutOfRangeException",
-        format!(
-            "{} out of [{}, {}] range",
-            message_decimal(value),
-            message_decimal(lo),
-            message_decimal(hi)
-        ),
-    )
-}
-
-/// The `MessageFormat` (en_US) rendering of a double argument: at most three fraction digits
-/// (half even), digits grouped by three.
-pub(crate) fn message_decimal(d: f64) -> String {
-    let rounded = format!("{:.3}", d.abs());
-    let rounded = rounded.trim_end_matches('0').trim_end_matches('.');
-    let (int, frac) = rounded.split_once('.').unwrap_or((rounded, ""));
-    let int: f64 = int.parse().unwrap_or_default();
-    let mut out = message_number(int);
-    if !frac.is_empty() {
-        out.push('.');
-        out.push_str(frac);
-    }
-    if d.is_sign_negative() && !d.is_nan() {
-        out.insert(0, '-');
-    }
-    out
-}
-
 /// The coefficients `AINV × beta` of a spline (every term summed, as Commons Math does).
 fn spline_coefficients<const N: usize>(ainv: &[[i8; N]; N], beta: &[f64; N]) -> [f64; N] {
     let mut a = [0.0; N];
@@ -572,7 +478,12 @@ impl BicubicInterpolatingFunction {
         let n = val.len() as i64;
         let r = java_binary_search_doubles(val, c);
         if r == -1 || r == -n - 1 {
-            return Err(out_of_range(c, val[0], val[val.len() - 1]));
+            return Err(MathError::OutOfRange {
+                value: c,
+                low: val[0],
+                high: val[val.len() - 1],
+            }
+            .into());
         }
         Ok(if r < 0 {
             -r - 2
@@ -620,7 +531,7 @@ pub fn bicubic(
     fval: &[Vec<f64>],
 ) -> Result<BicubicInterpolatingFunction> {
     if xval.is_empty() || yval.is_empty() {
-        return Err(no_data());
+        return Err(MathError::NoData.into());
     }
     check_order(xval)?;
     check_order(yval)?;
@@ -822,7 +733,7 @@ pub fn tricubic(
     fval: &[Vec<Vec<f64>>],
 ) -> Result<TricubicInterpolatingFunction> {
     if xval.is_empty() || yval.is_empty() || zval.is_empty() {
-        return Err(no_data());
+        return Err(MathError::NoData.into());
     }
     check_order(xval)?;
     check_order(yval)?;

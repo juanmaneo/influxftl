@@ -22,6 +22,7 @@ use super::Entry;
 use super::args::{fail, fail_with_cause, int_value};
 use super::misc::TIME_UNITS_PER_MS;
 use super::runtime::current_time;
+use crate::error::fault::NumberFormatError;
 use crate::error::{Class, Error, Result};
 use crate::stack::Stack;
 use crate::value::Value;
@@ -879,10 +880,7 @@ pub(crate) fn duration_to_period(text: &str) -> Result<(Period, i64)> {
                 format!(
                     "Parsing of sub second precision part of duration has failed. tried to parse: {fraction}"
                 ),
-                Error::runtime(
-                    "java.lang.NumberFormatException",
-                    format!("For input string: \"0.{fraction}\""),
-                ),
+                NumberFormatError::InvalidInput(format!("0.{fraction}")).into(),
             )
         })?;
         offset = (value * TIME_UNITS_PER_S as f64) as i64;

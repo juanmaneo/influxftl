@@ -15,7 +15,8 @@ use super::misc::TIME_UNITS_PER_MS;
 use super::operators::parse_java_double;
 use super::strings::{compile_regex, regex_error};
 use super::time::TIME_UNITS_PER_S;
-use crate::error::{Error, Result};
+use crate::error::Result;
+use crate::error::fault::BoundsError;
 use crate::geoxp::to_geoxp_point;
 use crate::gts::{GeoTimeSerie, NO_ELEVATION, NO_LOCATION};
 use crate::javamap::JavaHashMap;
@@ -124,8 +125,7 @@ fn group<'t>(caps: &Captures<'t, str>, name: &str) -> Option<&'t str> {
 
 /// `Double.parseDouble`, failing with a `NumberFormatException`.
 fn parse_double(text: &str) -> Result<f64> {
-    parse_java_double(text)
-        .map_err(|err| Error::runtime("java.lang.NumberFormatException", err.to_string()))
+    Ok(parse_java_double(text)?)
 }
 
 impl Parser {
@@ -180,10 +180,11 @@ impl Parser {
                     Some(b'S') => Value::from(text),
                     Some(_) => continue,
                     None => {
-                        return Err(Error::runtime(
-                            "java.lang.StringIndexOutOfBoundsException",
-                            "Index 1 out of bounds for length 1",
-                        ));
+                        return Err(BoundsError::StringIndex {
+                            index: 1,
+                            length: 1,
+                        }
+                        .into());
                     }
                 };
                 let class = name[2..].to_owned();

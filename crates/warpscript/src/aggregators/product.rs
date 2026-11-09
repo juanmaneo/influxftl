@@ -7,6 +7,7 @@
 //! `tanh`, the logistic function or a rectifier).
 
 use super::{Aggregated, Aggregator, AggregatorArgs, Named, Roles, double_value};
+use crate::error::fault::NumberFormatError;
 use crate::error::{Error, Result};
 use crate::format::java_double_to_string;
 use crate::functions::Entry;
@@ -168,10 +169,7 @@ impl Aggregator for Product {
                     (l.unsigned_abs(), 0)
                 }
                 Value::Double(d) if !d.is_finite() => {
-                    return Err(Error::runtime(
-                        "java.lang.NumberFormatException",
-                        "Infinite or NaN",
-                    ));
+                    return Err(NumberFormatError::NotFinite.into());
                 }
                 Value::Double(d) => {
                     is_double = true;

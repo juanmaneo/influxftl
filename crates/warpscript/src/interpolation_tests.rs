@@ -9,8 +9,9 @@
 
 //! Tests of the Commons Math interpolators (expected values computed with Commons Math 3.6.1).
 
+use crate::error::math::message_number;
 use crate::interpolation::{
-    akima, check_order, divided_difference, linear, loess, loess_smooth, message_number, spline,
+    akima, check_order, divided_difference, linear, loess, loess_smooth, spline,
 };
 
 const X: [f64; 6] = [10.0, 20.0, 40.0, 70.0, 75.0, 90.0];

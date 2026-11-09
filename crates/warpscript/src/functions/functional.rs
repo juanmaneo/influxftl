@@ -25,6 +25,7 @@ use indexmap::IndexMap;
 use super::Entry;
 use super::args::{fail, pop_list, pop_macro};
 use super::math::entropy_error;
+use crate::error::fault::BoundsError;
 use crate::error::{Error, Result};
 use crate::jrandom::JavaRandom;
 use crate::macros::Macro;
@@ -77,10 +78,11 @@ fn apply_macro(stack: &mut Stack, m: &Rc<Macro>, args: &[Value]) -> Result<Value
 fn list_element(list: &List, index: usize) -> Result<Value> {
     let items = list.borrow();
     items.get(index).cloned().ok_or_else(|| {
-        Error::new(format!(
-            "Index {index} out of bounds for length {}",
-            items.len()
-        ))
+        BoundsError::ListIndex {
+            index: index as i64,
+            length: items.len(),
+        }
+        .into()
     })
 }
 

@@ -20,6 +20,7 @@ use super::matrix::{
 };
 use super::numerical::{self, Binary};
 use crate::bigdecimal::BigDecimal;
+use crate::error::fault::NumberFormatError;
 use crate::error::{Error, Result};
 use crate::jmath;
 use crate::macros::Macro;
@@ -727,12 +728,12 @@ fn todouble(stack: &mut Stack) -> Result<()> {
 /// `Infinity`, a decimal number or a hexadecimal one (`0x1.8p3`), the numbers optionally
 /// followed by one of the type suffixes `f`, `F`, `d`, `D`. The Rust-only forms `inf`, `nan`…
 /// are rejected.
-pub(crate) fn parse_java_double(s: &str) -> Result<f64> {
+pub(crate) fn parse_java_double(s: &str) -> std::result::Result<f64, NumberFormatError> {
     let trimmed = s.trim_matches(|c: char| c <= ' ');
     if trimmed.is_empty() {
-        return Err(Error::new("empty String"));
+        return Err(NumberFormatError::Empty);
     }
-    let error = || Error::new(format!("For input string: \"{trimmed}\""));
+    let error = || NumberFormatError::InvalidInput(trimmed.to_owned());
     let (sign, rest) = match trimmed.strip_prefix('-') {
         Some(rest) => (-1.0, rest),
         None => (1.0, trimmed.strip_prefix('+').unwrap_or(trimmed)),

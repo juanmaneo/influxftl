@@ -12,6 +12,7 @@ use super::gts::{datapoint_from_list, gts_or_list, gts_or_list_try};
 use super::gts_frameworks::{Mapped, MappedDatapoint, aggregate, datapoint_from_stack};
 use super::time::{Period, Zone, add_period, duration_to_period};
 use crate::aggregators::{Aggregator, AggregatorArgs, Window, aggregator_of};
+use crate::error::fault::{ArithmeticError, BoundsError, NumberFormatError};
 use crate::error::{Class, Error, Result};
 use crate::gts::{GeoTimeSerie, Gts};
 use crate::macros::Macro;
@@ -274,8 +275,7 @@ fn duration_bucketize(stack: &mut Stack, gts: &Gts, params: &Calendar) -> Result
         params.bucketcount
     };
     // `Math.toIntExact`.
-    let bucketcount = i32::try_from(bucketcount)
-        .map_err(|_| Error::runtime("java.lang.ArithmeticException", "integer overflow"))?;
+    let bucketcount = i32::try_from(bucketcount).map_err(|_| ArithmeticError::IntegerOverflow)?;
     bucketized.lastbucket = lastbucket_index;
     bucketized.bucketspan = 1;
     bucketized.bucketcount = i64::from(bucketcount);
@@ -469,10 +469,11 @@ fn bucketize_calendar(stack: &mut Stack) -> Result<()> {
             ));
         }
         None => {
-            return Err(Error::runtime(
-                "java.lang.StringIndexOutOfBoundsException",
-                "Index 0 out of bounds for length 0",
-            ));
+            return Err(BoundsError::StringIndex {
+                index: 0,
+                length: 0,
+            }
+            .into());
         }
     }
     let (period, offset) = duration_to_period(duration)
@@ -487,7 +488,7 @@ fn bucketize_calendar(stack: &mut Stack) -> Result<()> {
         ));
     }
     if average_span == 0 {
-        return Err(Error::runtime("java.lang.ArithmeticException", "/ by zero"));
+        return Err(Error::division_by_zero());
     }
     let (lastbucket_index, bucketoffset) = locate_lastbucket(lastbucket, &period, average_span)?;
     let params = Calendar {
@@ -524,12 +525,8 @@ fn bucketize_calendar(stack: &mut Stack) -> Result<()> {
 
 /// `Long.parseLong`.
 fn parse_long(text: &str) -> Result<i64> {
-    text.parse::<i64>().map_err(|_| {
-        Error::runtime(
-            "java.lang.NumberFormatException",
-            format!("For input string: \"{text}\""),
-        )
-    })
+    text.parse::<i64>()
+        .map_err(|_| NumberFormatError::InvalidInput(text.to_owned()).into())
 }
 
 /// `UNBUCKETIZECALENDAR.gtsOp`: a calendar-bucketized series back on its timestamps (the end
