@@ -105,10 +105,7 @@ fn sorted_indices(values: &[Value], name: &str) -> Result<Vec<usize>> {
     }
     let keys: Vec<Option<Num>> = values.iter().map(Num::of).collect();
     if non_null.iter().any(|&i| keys[i].is_none()) {
-        return Err(Error::runtime(
-            "java.lang.RuntimeException",
-            format!("{name} can only operate on numeric Geo Time Series."),
-        ));
+        return Err(AggregatorError::NotNumeric(name.to_owned()).into());
     }
     let mut indices: Vec<usize> = (0..values.len()).collect();
     indices.sort_by(|&a, &b| match (keys[a], keys[b]) {
@@ -516,12 +513,7 @@ impl Aggregator for Percentile {
             });
         }
         // The comparator's `RuntimeException` is wrapped in a `WarpScriptException`.
-        let indices = sorted_indices(values, self.name).map_err(|err| {
-            Error::with_cause(
-                format!("java.lang.RuntimeException: {}", err.message()),
-                err,
-            )
-        })?;
+        let indices = sorted_indices(values, self.name).map_err(Error::wrapped)?;
         let n = values.len() - nulls;
         let p = self.rank / 100.0;
         let pn = p * n as f64;

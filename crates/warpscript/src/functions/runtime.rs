@@ -21,7 +21,7 @@ use super::misc::{ATTRIBUTE_INFOMODE, TIME_UNITS_PER_MS};
 use crate::encoding::opb64_encode;
 use crate::error::fault::ResourceError;
 use crate::error::stack::StackError;
-use crate::error::{Error, Result};
+use crate::error::{Error, IoFailure, Result};
 use crate::macros::{Callable, Macro, StackFunction, Statement};
 use crate::snapshot::add_element;
 use crate::stack::{REVISION, Stack};
@@ -844,7 +844,7 @@ fn print_levels(stack: &mut Stack, levels: impl Iterator<Item = usize>) -> Resul
     writer
         .write_all(text.as_bytes())
         .and_then(|()| writer.flush())
-        .map_err(|err| Error::new(err.to_string()))
+        .map_err(|err| Error::from(IoFailure::from(err)))
 }
 
 /// `PEEK`: print the top of the stack.
@@ -934,11 +934,14 @@ fn rev(stack: &mut Stack) -> Result<()> {
 }
 
 /// `CHECKREV.SplitRev`: the numeric components of a revision such as `1.2.3-42-abcd`.
-fn split_rev(revision: &str, error: &str) -> Result<Vec<i32>> {
+fn split_rev(revision: &str, name: &str, requirement: &str) -> Result<Vec<i32>> {
     let mut parts = Vec::new();
     let head = revision.split('-').next().unwrap_or_default();
     for part in head.split('.') {
-        parts.push(part.parse::<i32>().map_err(|_| Error::new(error))?);
+        parts.push(
+            part.parse::<i32>()
+                .map_err(|_| Error::usage(name, requirement))?,
+        );
     }
     Ok(parts)
 }
@@ -948,15 +951,13 @@ fn split_rev(revision: &str, error: &str) -> Result<Vec<i32>> {
 pub(crate) fn check_rev(name: &str, platform: &str, rev: &str) -> Result<i32> {
     let given = split_rev(
         rev,
-        &format!(
-            "{name} expects the given revision to be of the form 'X', 'X.Y' or 'X.Y.Z'. X, Y and Z are integers."
-        ),
+        name,
+        "expects the given revision to be of the form 'X', 'X.Y' or 'X.Y.Z'. X, Y and Z are integers.",
     )?;
     let current = split_rev(
         platform,
-        &format!(
-            "{name} expects the revision to be set on the platform to a string of the form 'X.Y.Z'. X, Y and Z are integers."
-        ),
+        name,
+        "expects the revision to be set on the platform to a string of the form 'X.Y.Z'. X, Y and Z are integers.",
     )?;
     let mut comparison = 0;
     for (ours, theirs) in current.iter().zip(&given) {

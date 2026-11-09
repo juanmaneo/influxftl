@@ -4,8 +4,10 @@
 //! Warp 10 compatibility of the errors: the Java exception class a script reads in the `type`
 //! of `ERROR`. Nothing else in the crate names a Java class of an error.
 
+use super::aggregator::AggregatorError;
 use super::fault::{BoundsError, ResourceError};
 use super::math::MathError;
+use super::text::ReplacementClass;
 use super::{Class, Error};
 use crate::encoder::EncoderError;
 use crate::pickle::PickleError;
@@ -19,12 +21,8 @@ const WARP_SCRIPT_EXCEPTION: &str = "io.warp10.script.WarpScriptException";
 /// The Java class of the exception `err` stands for.
 pub fn exception_class(err: &Error) -> &'static str {
     match err {
-        Error::Legacy {
-            runtime: Some(class),
-            ..
-        } => class,
-        Error::Legacy { runtime: None, .. }
-        | Error::Context { .. }
+        Error::Aggregator(AggregatorError::NotNumeric(_)) => "java.lang.RuntimeException",
+        Error::Context { .. }
         | Error::Usage { .. }
         | Error::Stack(_)
         | Error::Time(_)
@@ -34,7 +32,6 @@ pub fn exception_class(err: &Error) -> &'static str {
         | Error::Crypto(_)
         | Error::Geo(_)
         | Error::Platform(_)
-        | Error::Text(_)
         | Error::Format(_)
         | Error::Wrapped { .. }
         | Error::NotFinite(_) => WARP_SCRIPT_EXCEPTION,
@@ -51,6 +48,11 @@ pub fn exception_class(err: &Error) -> &'static str {
             ResourceError::ArrayTooLong | ResourceError::OutOfMemory => {
                 "java.lang.OutOfMemoryError"
             }
+        },
+        Error::Text(err) => match err.replacement_class() {
+            Some(ReplacementClass::IndexOutOfBounds) => "java.lang.IndexOutOfBoundsException",
+            Some(ReplacementClass::IllegalArgument) => "java.lang.IllegalArgumentException",
+            None => WARP_SCRIPT_EXCEPTION,
         },
         Error::Io(_) => "java.io.IOException",
         Error::Immutable => "java.lang.UnsupportedOperationException",

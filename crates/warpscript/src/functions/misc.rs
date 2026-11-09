@@ -5,6 +5,7 @@
 
 use super::Entry;
 use super::args::{fail, pop_long, pop_map, pop_string};
+use crate::error::platform::PlatformError;
 use crate::error::{Error, Result};
 use crate::snapshot::add_element;
 use crate::stack::Stack;
@@ -206,12 +207,12 @@ fn macro_config(stack: &mut Stack, name: &str, with_default: bool) -> Result<()>
         stack.push(default);
         return Ok(());
     }
-    let mut message = format!("{name} macro configuration '{key}' not found, need to set one of [");
-    for attempt in &attempts {
-        message.push_str(&format!(" '{attempt}'"));
+    Err(PlatformError::MacroConfigNotFound {
+        function: name.to_owned(),
+        key: key.to_owned(),
+        attempts,
     }
-    message.push_str(" ].");
-    Err(Error::new(message))
+    .into())
 }
 
 fn macroconfig(stack: &mut Stack) -> Result<()> {
@@ -236,13 +237,13 @@ fn secure_key(stack: &Stack) -> Option<String> {
 fn secure(stack: &mut Stack) -> Result<()> {
     let script = stack.pop()?;
     let Some(key) = secure_key(stack) else {
-        return Err(Error::new("You need to set the secure key first."));
+        return Err(PlatformError::NoSecureKey.into());
     };
     let Value::String(script) = script else {
         return Err(fail("SECURE", "operates on a string."));
     };
     let Some(codec) = stack.secure_codec() else {
-        return Err(Error::new("Missing secure script encryption key."));
+        return Err(PlatformError::NoSecureScriptKey.into());
     };
     let encoded = codec.secure(&key, &script)?;
     stack.push(encoded);
@@ -254,17 +255,17 @@ fn unsecure_script(stack: &mut Stack, name: &str, check_key: bool) -> Result<Str
     let encoded = stack.pop()?;
     let key = secure_key(stack);
     if check_key && key.is_none() {
-        return Err(Error::new("You need to set the secure key first."));
+        return Err(PlatformError::NoSecureKey.into());
     }
     let Value::String(encoded) = encoded else {
         return Err(fail(name, "operates on a string."));
     };
     let Some(codec) = stack.secure_codec() else {
-        return Err(Error::new("Missing secure script encryption key."));
+        return Err(PlatformError::NoSecureScriptKey.into());
     };
     let decoded = codec.unsecure(&encoded)?;
     if check_key && key.as_deref() != Some(decoded.key.as_str()) {
-        return Err(Error::new("Invalid secure key."));
+        return Err(PlatformError::InvalidSecureKey.into());
     }
     Ok(decoded.script)
 }

@@ -18,7 +18,7 @@ use flate2::write::{GzEncoder, ZlibEncoder};
 
 use super::Entry;
 use super::args::{fail, fail_with_cause};
-use crate::error::{Error, Result};
+use crate::error::{Error, IoFailure, Result};
 use crate::stack::Stack;
 use crate::value::Value;
 
@@ -45,7 +45,7 @@ pub(crate) fn compress_fn(
         fail_with_cause(
             name,
             "encountered an error while compressing.",
-            Error::new(err.to_string()),
+            Error::from(IoFailure::from(err)),
         )
     })?;
     stack.push(Value::bytes(compressed));
@@ -65,7 +65,7 @@ fn decompress_fn(
         fail_with_cause(
             name,
             "encountered an error while decompressing.",
-            Error::new(err.to_string()),
+            Error::from(IoFailure::from(err)),
         )
     })?;
     stack.push(Value::bytes(decompressed));

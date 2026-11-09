@@ -23,9 +23,16 @@ impl Write for FailAfter {
     }
 }
 
+/// A plain failure of a Warp 10 function (`WarpScriptException`, not a runtime one).
+fn plain() -> Error {
+    super::error::series::SeriesError::DuplicateTicks.into()
+}
+
+const PLAIN: &str = "Can't be applied on GTS with duplicate ticks";
+
 #[test]
 fn display_propagates_writer_failures() {
-    let err = Error::with_cause("outer", Error::with_cause("middle", Error::new("root")));
+    let err = Error::with_cause("outer", Error::with_cause("middle", plain()));
     let outcomes: Vec<bool> = (0..9)
         .map(|n| write!(FailAfter(n), "{err}").is_ok())
         .collect();
@@ -37,14 +44,14 @@ fn display_propagates_writer_failures() {
 
 #[test]
 fn messages_and_causes() {
-    let root = Error::new("root");
+    let root = plain();
     let middle = Error::with_cause("middle", root.clone());
     let outer = Error::with_cause("outer", middle);
     assert_eq!(outer.message(), "outer");
     assert_eq!(outer.root_cause(), &root);
-    assert_eq!(outer.messages(), vec!["outer", "middle", "root"]);
-    assert_eq!(outer.to_string(), "outer (middle (root))");
-    assert_eq!(root.to_string(), "root");
+    assert_eq!(outer.messages(), vec!["outer", "middle", PLAIN]);
+    assert_eq!(outer.to_string(), format!("outer (middle ({PLAIN}))"));
+    assert_eq!(root.to_string(), PLAIN);
     assert!(!outer.is_signal());
     assert_eq!(root.cause(), None);
     assert_eq!(outer.cause().map(Error::message), Some("middle".to_owned()));
@@ -99,13 +106,13 @@ fn typed_failures() {
         Error::class_cast(ValueKind::String, Class::Number),
         Error::index_out_of_bounds(0, 0),
         Error::null_pointer(),
-        Error::runtime("java.lang.ArithmeticException", "/ by zero"),
+        Error::division_by_zero(),
     ] {
         assert!(err.is_runtime(), "{err}");
         assert!(!err.is_signal(), "{err}");
     }
     for err in [
-        Error::new("plain"),
+        plain(),
         Error::with_cause("wrapped", Error::empty_stack()),
         Error::from(NotFinite::Nan),
     ] {
@@ -125,19 +132,16 @@ fn not_finite_is_a_typed_failure() {
 #[test]
 fn exception_classes() {
     let cases = [
-        (Error::new("plain"), "io.warp10.script.WarpScriptException"),
+        (plain(), "io.warp10.script.WarpScriptException"),
         (
-            Error::with_cause("wrapped", Error::new("root")),
+            Error::with_cause("wrapped", plain()),
             "io.warp10.script.WarpScriptException",
         ),
         (
             Error::from(NotFinite::Nan),
             "io.warp10.script.WarpScriptException",
         ),
-        (
-            Error::runtime("java.lang.ArithmeticException", "/ by zero"),
-            "java.lang.ArithmeticException",
-        ),
+        (Error::division_by_zero(), "java.lang.ArithmeticException"),
         (Error::Return, "io.warp10.script.WarpScriptReturnException"),
         (
             Error::Stop(String::new()),
@@ -1225,13 +1229,22 @@ fn text_failures_have_the_wording_of_warp10() {
         ),
     ];
     for (failure, message) in failures {
+        // `Matcher.appendReplacement` raises runtime exceptions.
+        let (class, runtime) = match &failure {
+            TextError::NoGroup(_) => ("java.lang.IndexOutOfBoundsException", true),
+            TextError::MissingEscaped
+            | TextError::MissingGroupIndex
+            | TextError::EmptyGroupName
+            | TextError::UnclosedGroupName
+            | TextError::DigitGroupName(_)
+            | TextError::NoGroupNamed(_)
+            | TextError::IllegalGroupReference => ("java.lang.IllegalArgumentException", true),
+            _ => ("io.warp10.script.WarpScriptException", false),
+        };
         let error = Error::from(failure);
         assert_eq!(error.to_string(), message);
-        assert_eq!(
-            exception_class(&error),
-            "io.warp10.script.WarpScriptException"
-        );
-        assert!(!error.is_runtime(), "{message}");
+        assert_eq!(exception_class(&error), class, "{message}");
+        assert_eq!(error.is_runtime(), runtime, "{message}");
     }
     assert_eq!(
         RegexFailure::from(regex.clone()),
@@ -1644,7 +1657,7 @@ fn remaining_domain_failures_have_the_wording_of_warp10() {
             PlatformError::MacroConfigNotFound {
                 function: "MACROCONFIG".to_owned(),
                 key: "k".to_owned(),
-                attempts: " 'a' 'b'".to_owned(),
+                attempts: vec!["a".to_owned(), "b".to_owned()],
             }
             .into(),
             "MACROCONFIG macro configuration 'k' not found, need to set one of [ 'a' 'b' ].".to_owned(),
@@ -1749,6 +1762,14 @@ fn remaining_domain_failures_have_the_wording_of_warp10() {
     assert_eq!(io.to_string(), "pipe closed");
     assert_eq!(exception_class(&io), "java.io.IOException");
     assert!(!io.is_runtime());
+    let not_numeric = Error::from(AggregatorError::NotNumeric("mapper.median".to_owned()));
+    assert_eq!(
+        not_numeric.to_string(),
+        "mapper.median can only operate on numeric Geo Time Series."
+    );
+    assert_eq!(exception_class(&not_numeric), "java.lang.RuntimeException");
+    assert!(not_numeric.is_runtime());
+    assert!(!Error::from(AggregatorError::InvalidValueType).is_runtime());
     assert_eq!(
         exception_class(&ResourceError::StackOverflow.into()),
         "java.lang.StackOverflowError"

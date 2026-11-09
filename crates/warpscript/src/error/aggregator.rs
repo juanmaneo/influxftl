@@ -25,6 +25,9 @@ pub enum AggregatorError {
         /// What the strings were mixed with.
         kind: &'static str,
     },
+    /// A median or percentile of values that are not numbers.
+    #[error("{0} can only operate on numeric Geo Time Series.")]
+    NotNumeric(String),
     /// A median of an even number of values that are not numbers.
     #[error("Unable to compute median on an even number of non numeric values.")]
     EvenNonNumericMedian,

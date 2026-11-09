@@ -31,14 +31,17 @@ pub enum PlatformError {
     #[error("Invalid secure key.")]
     InvalidSecureKey,
     /// A macro configuration key that is set nowhere.
-    #[error("{function} macro configuration '{key}' not found, need to set one of [{attempts} ].")]
+    #[error(
+        "{function} macro configuration '{key}' not found, need to set one of [{} ].",
+        quoted(attempts)
+    )]
     MacroConfigNotFound {
         /// The function that read it.
         function: String,
         /// The key.
         key: String,
-        /// The keys tried, each preceded by a space and quoted.
-        attempts: String,
+        /// The keys tried.
+        attempts: Vec<String>,
     },
     /// A structure nested deeper than a snapshot can render.
     #[error("Recursive data structures exceeded {} levels.", MAX_RECURSION_LEVEL)]
@@ -49,4 +52,15 @@ pub enum PlatformError {
     /// The operating system could not provide entropy.
     #[error("Unable to obtain random data from the operating system ({0}).")]
     Entropy(getrandom::Error),
+}
+
+/// The keys, each quoted and preceded by a space.
+fn quoted(keys: &[String]) -> String {
+    let mut out = String::new();
+    for key in keys {
+        out.push_str(" '");
+        out.push_str(key);
+        out.push('\'');
+    }
+    out
 }

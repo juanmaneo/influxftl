@@ -156,3 +156,37 @@ pub enum TextError {
     #[error("Unable to support size over 2**32.")]
     RlpSizeTooLarge,
 }
+
+impl TextError {
+    /// `true` for the replacement syntax failures, which `Matcher.appendReplacement` raises as
+    /// runtime exceptions, `false` for the other failures.
+    pub fn is_runtime(&self) -> bool {
+        self.replacement_class().is_some()
+    }
+
+    /// The simple class of the runtime exception a replacement syntax failure stands for:
+    /// `IndexOutOfBounds` for a group number that does not exist, `IllegalArgument` for the
+    /// other malformed replacements.
+    pub(super) fn replacement_class(&self) -> Option<ReplacementClass> {
+        match self {
+            TextError::NoGroup(_) => Some(ReplacementClass::IndexOutOfBounds),
+            TextError::MissingEscaped
+            | TextError::MissingGroupIndex
+            | TextError::EmptyGroupName
+            | TextError::UnclosedGroupName
+            | TextError::DigitGroupName(_)
+            | TextError::NoGroupNamed(_)
+            | TextError::IllegalGroupReference => Some(ReplacementClass::IllegalArgument),
+            _ => None,
+        }
+    }
+}
+
+/// The exception class of a replacement syntax failure.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) enum ReplacementClass {
+    /// `IndexOutOfBoundsException`.
+    IndexOutOfBounds,
+    /// `IllegalArgumentException`.
+    IllegalArgument,
+}

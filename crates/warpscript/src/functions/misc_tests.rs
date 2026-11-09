@@ -166,7 +166,7 @@ struct FakeCodec;
 impl SecureCodec for FakeCodec {
     fn secure(&self, key: &str, script: &str) -> Result<String> {
         if script == "fail" {
-            return Err(Error::new("Unable to secure script."));
+            return Err(Error::usage("TEST", "Unable to secure script."));
         }
         Ok(format!("{key}|{script}"))
     }
@@ -174,7 +174,7 @@ impl SecureCodec for FakeCodec {
     fn unsecure(&self, encoded: &str) -> Result<SecureScript> {
         let (key, script) = encoded
             .split_once('|')
-            .ok_or_else(|| Error::new("Unable to unsecure script."))?;
+            .ok_or_else(|| Error::usage("TEST", "Unable to unsecure script."))?;
         Ok(SecureScript {
             key: key.to_owned(),
             script: script.to_owned(),

@@ -105,17 +105,7 @@ impl Aggregator for RegExpReplace {
         let Some(value) = single_value(args, self.name)? else {
             return Ok(empty());
         };
-        let replaced = regex_replace(string_of(value)?, &self.source, &self.replacement, true)
-            .map_err(|err| {
-                // `Matcher.appendReplacement` throws runtime exceptions.
-                let message = err.message();
-                let class = if message.starts_with("No group ") {
-                    "java.lang.IndexOutOfBoundsException"
-                } else {
-                    "java.lang.IllegalArgumentException"
-                };
-                Error::runtime(class, message)
-            })?;
+        let replaced = regex_replace(string_of(value)?, &self.source, &self.replacement, true)?;
         Ok(Aggregated {
             tick: args.tick,
             location: args.locations[0],

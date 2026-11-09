@@ -435,8 +435,11 @@ fn attributes_and_state() {
     assert_eq!(stack.set_deadline(Some(now)), None);
     assert_eq!(stack.deadline(), Some(now));
     assert_eq!(stack.last_error(), None);
-    stack.set_last_error(Some(Error::new("e")));
-    assert_eq!(stack.last_error().unwrap().message(), "e");
+    stack.set_last_error(Some(Error::usage("TEST", "e")));
+    assert_eq!(
+        stack.last_error().expect("an error was set").message(),
+        "TEST e"
+    );
     assert_eq!(stack.macro_depth(), 0);
     assert_eq!(stack.line_number(), None);
     stack.set_return_depth(2);
@@ -590,7 +593,7 @@ impl SecureCodec for FakeCodec {
     fn unsecure(&self, encoded: &str) -> super::error::Result<SecureScript> {
         let (key, script) = encoded
             .split_once('|')
-            .ok_or_else(|| Error::new("Unable to unsecure script."))?;
+            .ok_or_else(|| Error::usage("TEST", "Unable to unsecure script."))?;
         Ok(SecureScript {
             key: key.to_owned(),
             script: script.to_owned(),

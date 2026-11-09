@@ -7,6 +7,7 @@
 
 use super::args::fail;
 use super::gts_operators::try_unary_op;
+use crate::error::series::SeriesError;
 use crate::error::{Error, Result};
 use crate::gts::{GeoTimeSerie, Type};
 use crate::stack::Stack;
@@ -134,14 +135,11 @@ impl Binary {
 /// operand) or, when `apply_in_list`, a single list reduced from left to right (`MAX`, `MIN`,
 /// `ADDEXACT`…; an empty list reduces to `NULL`).
 pub fn binary(stack: &mut Stack, name: &str, op: Binary, apply_in_list: bool) -> Result<()> {
-    let message = if apply_in_list {
-        format!(
-            "{name} can only operate on 2 numerical values, or a numerical value and a list of numerical values, or a numerical value and a GTS of numerical values, or a list of numerical values."
-        )
-    } else {
-        format!(
-            "{name} can only operate on 2 numerical values, or a numerical value and a list of numerical values, or a numerical value and a GTS of numerical values."
-        )
+    let refuse = || {
+        Error::from(SeriesError::NumericalOperands {
+            function: name.to_owned(),
+            reduces: apply_in_list,
+        })
     };
     let op0 = stack.pop()?;
     match op0 {
@@ -153,7 +151,7 @@ pub fn binary(stack: &mut Stack, name: &str, op: Binary, apply_in_list: bool) ->
                     Ok(())
                 }
                 Value::List(list) => {
-                    let out = map_list(&list.borrow(), top, true, op, &message)?;
+                    let out = map_list(&list.borrow(), top, true, op, &refuse)?;
                     stack.push(Value::list(out));
                     Ok(())
                 }
@@ -162,10 +160,10 @@ pub fn binary(stack: &mut Stack, name: &str, op: Binary, apply_in_list: bool) ->
                     stack.push(result);
                     Ok(())
                 }
-                _ => Err(Error::new(message)),
+                _ => Err(refuse()),
             }
         }
-        Value::Gts(ref gts) if !numeric_series(&gts.borrow()) => Err(Error::new(message)),
+        Value::Gts(ref gts) if !numeric_series(&gts.borrow()) => Err(refuse()),
         Value::Gts(gts) if apply_in_list => {
             let values: Vec<Value> = {
                 let gts = gts.borrow();
@@ -184,7 +182,7 @@ pub fn binary(stack: &mut Stack, name: &str, op: Binary, apply_in_list: bool) ->
         Value::Gts(gts) => {
             let op1 = stack.pop()?;
             if !op1.is_number() {
-                return Err(Error::new(message));
+                return Err(refuse());
             }
             let result = map_series(&gts.borrow(), &mut |v| op.apply(&op1, v))?;
             stack.push(result);
@@ -195,7 +193,7 @@ pub fn binary(stack: &mut Stack, name: &str, op: Binary, apply_in_list: bool) ->
             let mut result: Option<Value> = None;
             for element in items.iter() {
                 if !element.is_number() {
-                    return Err(Error::new(message));
+                    return Err(refuse());
                 }
                 result = Some(match result {
                     None => op.first(element),
@@ -208,13 +206,13 @@ pub fn binary(stack: &mut Stack, name: &str, op: Binary, apply_in_list: bool) ->
         Value::List(list) => {
             let op1 = stack.pop()?;
             if !op1.is_number() {
-                return Err(Error::new(message));
+                return Err(refuse());
             }
-            let out = map_list(&list.borrow(), &op1, false, op, &message)?;
+            let out = map_list(&list.borrow(), &op1, false, op, &refuse)?;
             stack.push(Value::list(out));
             Ok(())
         }
-        _ => Err(Error::new(message)),
+        _ => Err(refuse()),
     }
 }
 
@@ -225,12 +223,12 @@ fn map_list(
     operand: &Value,
     element_first: bool,
     op: Binary,
-    message: &str,
+    refuse: &dyn Fn() -> Error,
 ) -> Result<Vec<Value>> {
     let mut out = Vec::with_capacity(list.len());
     for element in list {
         if !element.is_number() {
-            return Err(Error::new(message.to_owned()));
+            return Err(refuse());
         }
         let value = if element_first {
             op.apply(element, operand)?

@@ -258,41 +258,14 @@ pub enum Error {
     /// A malformed Thrift payload, or a defect of the reader.
     #[error(transparent)]
     Thrift(#[from] ThriftError),
-    /// A failure which has no variant of its own yet: its Warp 10 wording, and the class of
-    /// the Java `RuntimeException` it stands for when Warp 10 lets one escape rather than
-    /// raising a `WarpScriptException` (the functions that catch and wrap those let them
-    /// through unwrapped). Being replaced, module by module, by typed variants.
-    #[error("{message}")]
-    Legacy {
-        /// The message, worded like Warp 10's.
-        message: String,
-        /// The class of the runtime exception, if it is one.
-        runtime: Option<&'static str>,
-    },
 }
 
 impl Error {
-    /// A failure with `message` and no variant of its own yet.
-    pub fn new(message: impl Into<String>) -> Self {
-        Error::Legacy {
-            message: message.into(),
-            runtime: None,
-        }
-    }
-
     /// A failure with `message` caused by `cause`.
     pub fn with_cause(message: impl Into<String>, cause: Error) -> Self {
         Error::Context {
             context: message.into(),
             source: Box::new(cause),
-        }
-    }
-
-    /// A runtime failure of Java class `class` with `message`, with no variant of its own yet.
-    pub fn runtime(class: &'static str, message: impl Into<String>) -> Self {
-        Error::Legacy {
-            message: message.into(),
-            runtime: Some(class),
         }
     }
 
@@ -350,10 +323,11 @@ impl Error {
     /// through unwrapped.
     pub fn is_runtime(&self) -> bool {
         match self {
-            Error::Legacy { runtime, .. } => runtime.is_some(),
+            Error::Aggregator(err) => matches!(err, AggregatorError::NotNumeric(_)),
             Error::Thrift(err) => !err.is_malformed_input(),
             Error::Encoder(err) => err.is_runtime(),
             Error::Pickle(err) => err.is_runtime(),
+            Error::Text(err) => err.is_runtime(),
             Error::Math(_)
             | Error::Arithmetic(_)
             | Error::NumberFormat(_)
@@ -374,13 +348,11 @@ impl Error {
             | Error::Stack(_)
             | Error::Time(_)
             | Error::Series(_)
-            | Error::Aggregator(_)
             | Error::Collection(_)
             | Error::Crypto(_)
             | Error::Geo(_)
             | Error::Platform(_)
             | Error::Io(_)
-            | Error::Text(_)
             | Error::Format(_)
             | Error::Parse { .. }
             | Error::Wrapped { .. }
