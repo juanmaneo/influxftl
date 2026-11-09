@@ -980,3 +980,158 @@ fn interpreter_failures_have_the_wording_of_warp10() {
     );
     assert!(!usage.is_runtime());
 }
+
+#[test]
+fn time_failures_have_the_wording_of_warp10() {
+    use super::error::time::TimeError;
+
+    let failures = [
+        (
+            TimeError::UnknownZone("Mars/Base".to_owned()),
+            "The datetime zone id 'Mars/Base' is not recognised",
+        ),
+        (
+            TimeError::ZoneGap {
+                local: "2024-03-31T02:30:00.000".to_owned(),
+                zone: "Europe/Paris".to_owned(),
+            },
+            "Illegal instant due to time zone offset transition (daylight savings time 'gap'): 2024-03-31T02:30:00.000 (Europe/Paris)",
+        ),
+        (
+            TimeError::MalformedOffset {
+                id: "+2:00".to_owned(),
+                rest: "2:00".to_owned(),
+            },
+            "Invalid format: \"+2:00\" is malformed at \"2:00\"",
+        ),
+        (
+            TimeError::InstantOutOfRange(i64::MAX),
+            "The instant 9223372036854775807 is out of range.",
+        ),
+        (
+            TimeError::FieldOutOfRange {
+                value: 13,
+                field: "monthOfYear".to_owned(),
+                min: 1,
+                max: 12,
+                suffix: String::new(),
+            },
+            "Value 13 for monthOfYear must be in the range [1,12]",
+        ),
+        (
+            TimeError::CalculationOverflow,
+            "The calculation caused an overflow.",
+        ),
+        (TimeError::InvalidIsoDuration, "invalid ISO8601 duration."),
+        (TimeError::InvalidDuration, "Invalid ISO8601 duration"),
+        (
+            TimeError::AmbiguousDuration,
+            "no support for ambiguous durations containing years or months, please convert those to days.",
+        ),
+        (
+            TimeError::UnparsableDuration("P1".to_owned()),
+            "Parsing of duration without sub second precision has failed. Tried to parse: P1",
+        ),
+        (
+            TimeError::Unparsable {
+                text: "x".to_owned(),
+                index: 0,
+            },
+            "Text 'x' could not be parsed at index 0",
+        ),
+        (
+            TimeError::UnparsableBecause {
+                text: "x".to_owned(),
+                detail: "why".to_owned(),
+            },
+            "Text 'x' could not be parsed: why",
+        ),
+        (
+            TimeError::UnparsedText {
+                text: "x".to_owned(),
+                index: 1,
+            },
+            "Text 'x' could not be parsed, unparsed text found at index 1",
+        ),
+        (
+            TimeError::WrongTime {
+                before: true,
+                instant: "2020".to_owned(),
+            },
+            "Current time is before '2020'",
+        ),
+        (
+            TimeError::WrongTime {
+                before: false,
+                instant: "2020".to_owned(),
+            },
+            "Current time is after '2020'",
+        ),
+        (
+            TimeError::TimescaleOnBucketized,
+            "Cannot apply timescale on a bucketized GTS. Unbucketize it first.",
+        ),
+        (
+            TimeError::OverlapExceedsWidth,
+            "Overlap cannot exceed chunk width.",
+        ),
+        (
+            TimeError::ChunkLabelTaken("chunk".to_owned()),
+            "Cannot operate on Geo Time Series which already have a label named 'chunk'",
+        ),
+        (
+            TimeError::EncoderChunkLabelTaken("chunk".to_owned()),
+            "Cannot operate on encoders which already have a label named 'chunk'",
+        ),
+        (
+            TimeError::BucketspanExceedsChunk,
+            "Cannot operate on Geo Time Series with a bucketspan greater than the chunk width.",
+        ),
+        (
+            TimeError::NoTicks,
+            "Cannot load from long array because \"cropped.ticks\" is null",
+        ),
+        (
+            TimeError::NotSorted("a{}".to_owned()),
+            "GTS a{} is not sorted.",
+        ),
+        (
+            TimeError::WrongOrder("a{}".to_owned()),
+            "GTS a{} is not sorted in the expected order.",
+        ),
+        (
+            TimeError::EncoderWrongOrder("a{}".to_owned()),
+            "ENCODER a{} is not sorted in expected order.",
+        ),
+        (
+            TimeError::NotSeriesOrEncoders,
+            "expects a list of Geo Time Series or encoders or of lists thereof.",
+        ),
+        (
+            TimeError::InconsistentChunkTypes,
+            "Inconsistent types for chunks to fuse.",
+        ),
+        (
+            TimeError::NegativePeriod {
+                origin: 5,
+                times: 2,
+                period: "P1D".to_owned(),
+                offset: 3,
+            },
+            "Period is negative from timestamp 5. Can not add a negative period. Period is 2 times P1D plus 3 time unit(s).",
+        ),
+        (
+            TimeError::CalendarBucketLimit { count: 9, max: 8 },
+            "Bucket count (9) is exceeding maximum value of 8. Consider raising the limit or using capabilities.",
+        ),
+    ];
+    for (failure, message) in failures {
+        let error = Error::from(failure);
+        assert_eq!(error.to_string(), message);
+        assert_eq!(
+            exception_class(&error),
+            "io.warp10.script.WarpScriptException"
+        );
+        assert!(!error.is_runtime(), "{message}");
+    }
+}

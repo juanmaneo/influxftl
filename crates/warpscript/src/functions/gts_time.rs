@@ -16,6 +16,7 @@ use super::args::{fail, fail_with_cause};
 use super::gts::{decoded, element_or_list, gts_or_list_try};
 use super::time::parse_iso8601;
 use crate::encoder::{EncodedValue, GtsEncoder};
+use crate::error::time::TimeError;
 use crate::error::{Error, Result};
 use crate::gts::{GeoTimeSerie, Gts, Metadata, Type};
 use crate::selector::build_selector_ordered;
@@ -96,9 +97,7 @@ fn timescale(stack: &mut Stack) -> Result<()> {
         // `GTSHelper.timescale`
         let gts = gts.borrow();
         if gts.is_bucketized() {
-            return Err(Error::new(
-                "Cannot apply timescale on a bucketized GTS. Unbucketize it first.",
-            ));
+            return Err(TimeError::TimescaleOnBucketized.into());
         }
         let mut scaled = gts.clone();
         for tick in &mut scaled.ticks {
@@ -132,7 +131,7 @@ fn timemodulo(stack: &mut Stack) -> Result<()> {
         let mut output: BTreeMap<i64, GeoTimeSerie> = BTreeMap::new();
         for i in 0..gts.size() {
             if modulo == 0 {
-                return Err(Error::new("/ by zero"));
+                return Err(Error::division_by_zero());
             }
             let tick = gts.tick_at(i);
             let quotient = tick.wrapping_div(modulo);
@@ -409,26 +408,22 @@ fn chunk_gts(gts: &mut GeoTimeSerie, params: &Chunking) -> Result<Vec<GeoTimeSer
         overlap,
     } = *params;
     if overlap < 0 || overlap > chunkwidth {
-        return Err(Error::new("Overlap cannot exceed chunk width."));
+        return Err(TimeError::OverlapExceedsWidth.into());
     }
     if gts.metadata.labels.contains_key(chunklabel) {
-        return Err(Error::new(format!(
-            "Cannot operate on Geo Time Series which already have a label named '{chunklabel}'"
-        )));
+        return Err(TimeError::ChunkLabelTaken(chunklabel.to_string()).into());
     }
     let bucketized = gts.is_bucketized();
     if bucketized {
         if gts.bucketspan > chunkwidth {
-            return Err(Error::new(
-                "Cannot operate on Geo Time Series with a bucketspan greater than the chunk width.",
-            ));
+            return Err(TimeError::BucketspanExceedsChunk.into());
         }
     } else if gts.size() == 0 && lastchunk == 0 {
         return Ok(Vec::new());
     }
     // Warp 10 divides by the chunk width along most of its paths.
     if chunkwidth == 0 {
-        return Err(Error::new("/ by zero"));
+        return Err(Error::division_by_zero());
     }
     let zero_chunk_count = chunkcount == 0;
     if zero_chunk_count {
@@ -600,19 +595,17 @@ fn chunk_encoder(encoder: &GtsEncoder, params: &Chunking) -> Result<Vec<GtsEncod
         overlap,
     } = *params;
     if overlap < 0 || overlap > chunkwidth {
-        return Err(Error::new("Overlap cannot exceed chunk width."));
+        return Err(TimeError::OverlapExceedsWidth.into());
     }
     if encoder.metadata.labels.contains_key(chunklabel) {
-        return Err(Error::new(format!(
-            "Cannot operate on encoders which already have a label named '{chunklabel}'"
-        )));
+        return Err(TimeError::EncoderChunkLabelTaken(chunklabel.to_string()).into());
     }
     if encoder.count() == 0 && encoder.size() == 0 && lastchunk == 0 {
         return Ok(Vec::new());
     }
     // As for series, a zero width is refused where Warp 10 divides by it (or loops forever).
     if chunkwidth == 0 {
-        return Err(Error::new("/ by zero"));
+        return Err(Error::division_by_zero());
     }
     let zero_chunk_count = chunkcount == 0;
     if zero_chunk_count {
@@ -791,9 +784,7 @@ fn crop_gts(gts: &mut GeoTimeSerie) -> Result<GeoTimeSerie> {
     }
     // Warp 10 reads the last tick of the (unallocated) result.
     let Some(&last) = cropped.ticks.last() else {
-        return Err(Error::new(
-            "Cannot load from long array because \"cropped.ticks\" is null",
-        ));
+        return Err(TimeError::NoTicks.into());
     };
     cropped.bucketspan = gts.bucketspan;
     cropped.lastbucket = last;
@@ -943,25 +934,25 @@ fn sorted_merge(params: &[Value], reversed: bool) -> Result<GtsEncoder> {
                 let g = gts.borrow();
                 if g.size() > 1 {
                     if !g.sorted {
-                        return Err(Error::new(format!(
-                            "GTS {} is not sorted.",
-                            build_selector_ordered(&g.metadata, false)
-                        )));
+                        return Err(TimeError::NotSorted(build_selector_ordered(
+                            &g.metadata,
+                            false,
+                        ))
+                        .into());
                     }
                     if g.reversed != reversed {
-                        return Err(Error::new(format!(
-                            "GTS {} is not sorted in the expected order.",
-                            build_selector_ordered(&g.metadata, false)
-                        )));
+                        return Err(TimeError::WrongOrder(build_selector_ordered(
+                            &g.metadata,
+                            false,
+                        ))
+                        .into());
                     }
                 }
                 series.push(gts.clone());
             }
             Value::Encoder(encoder) => encoders.push(encoder.clone()),
             _ if nested => {
-                return Err(Error::new(
-                    "expects a list of Geo Time Series or encoders or of lists thereof.",
-                ));
+                return Err(TimeError::NotSeriesOrEncoders.into());
             }
             _ => {}
         }
@@ -1044,10 +1035,10 @@ fn sorted_merge(params: &[Value], reversed: bool) -> Result<GtsEncoder> {
                         if (reversed && next.0 > last_tick)
                             || (!reversed && next.0 < last_tick) =>
                     {
-                        return Err(Error::new(format!(
-                            "ENCODER {} is not sorted in expected order.",
-                            build_selector_ordered(metadata, false)
-                        )));
+                        return Err(TimeError::EncoderWrongOrder(build_selector_ordered(
+                            metadata, false,
+                        ))
+                        .into());
                     }
                     _ => {}
                 }
@@ -1124,7 +1115,7 @@ fn fuse_gts(chunks: &[Gts]) -> Result<GeoTimeSerie> {
             }
             Some(kind) => {
                 if chunk.size() != 0 && kind != chunk.type_of() {
-                    return Err(Error::new("Inconsistent types for chunks to fuse."));
+                    return Err(TimeError::InconsistentChunkTypes.into());
                 }
             }
         }

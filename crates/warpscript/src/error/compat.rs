@@ -27,6 +27,7 @@ pub fn exception_class(err: &Error) -> &'static str {
         | Error::Context { .. }
         | Error::Usage { .. }
         | Error::Stack(_)
+        | Error::Time(_)
         | Error::NotFinite(_) => WARP_SCRIPT_EXCEPTION,
         Error::Thrift(err) => thrift_class(err),
         Error::Encoder(err) => encoder_class(err),

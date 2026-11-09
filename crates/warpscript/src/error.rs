@@ -15,6 +15,7 @@ pub mod compat;
 pub mod fault;
 pub mod math;
 pub mod stack;
+pub mod time;
 
 use std::sync::Arc;
 use std::{fmt, io};
@@ -24,6 +25,7 @@ use self::fault::{
 };
 use self::math::MathError;
 use self::stack::StackError;
+use self::time::TimeError;
 use crate::encoder::EncoderError;
 use crate::finite::NotFinite;
 use crate::pickle::PickleError;
@@ -178,6 +180,9 @@ pub enum Error {
         /// What it expects.
         requirement: String,
     },
+    /// A failure of a time function.
+    #[error(transparent)]
+    Time(#[from] TimeError),
     /// A failure of the interpreter.
     #[error(transparent)]
     Stack(#[from] StackError),
@@ -292,6 +297,7 @@ impl Error {
             | Error::Context { .. }
             | Error::Usage { .. }
             | Error::Stack(_)
+            | Error::Time(_)
             | Error::NotFinite(_) => false,
         }
     }

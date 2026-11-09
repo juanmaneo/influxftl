@@ -13,6 +13,7 @@ use super::gts_frameworks::{Mapped, MappedDatapoint, aggregate, datapoint_from_s
 use super::time::{Period, Zone, add_period, duration_to_period};
 use crate::aggregators::{Aggregator, AggregatorArgs, Window, aggregator_of};
 use crate::error::fault::{ArithmeticError, BoundsError, NumberFormatError};
+use crate::error::time::TimeError;
 use crate::error::{Class, Error, Result};
 use crate::gts::{GeoTimeSerie, Gts};
 use crate::macros::Macro;
@@ -94,11 +95,13 @@ fn add_non_negative_period(
         return Ok(origin);
     }
     if (result > origin) ^ (n > 0) {
-        return Err(Error::new(format!(
-            "Period is negative from timestamp {origin}. Can not add a negative period. Period is {n} times {} plus {} time unit(s).",
-            period_to_string(&period.period),
-            period.offset
-        )));
+        return Err(TimeError::NegativePeriod {
+            origin,
+            times: n,
+            period: period_to_string(&period.period),
+            offset: period.offset,
+        }
+        .into());
     }
     Ok(result)
 }
@@ -251,10 +254,11 @@ fn duration_bucketize(stack: &mut Stack, gts: &Gts, params: &Calendar) -> Result
             break;
         }
         if count > params.maxbuckets {
-            return Err(Error::new(format!(
-                "Bucket count ({count}) is exceeding maximum value of {}. Consider raising the limit or using capabilities.",
-                params.maxbuckets
-            )));
+            return Err(TimeError::CalendarBucketLimit {
+                count,
+                max: params.maxbuckets,
+            }
+            .into());
         }
         if tick <= params.lastbucket {
             subgts.borrow_mut().copy_datapoint(&source, i);

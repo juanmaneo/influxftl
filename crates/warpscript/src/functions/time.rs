@@ -22,7 +22,8 @@ use super::Entry;
 use super::args::{fail, fail_with_cause, int_value};
 use super::misc::TIME_UNITS_PER_MS;
 use super::runtime::current_time;
-use crate::error::fault::NumberFormatError;
+use crate::error::fault::{BoundsError, NumberFormatError};
+use crate::error::time::TimeError;
 use crate::error::{Class, Error, Result};
 use crate::stack::Stack;
 use crate::value::Value;
@@ -86,9 +87,7 @@ impl Zone {
                 FixedOffset::east_opt(seconds).map_or(Zone::Named(Tz::UTC), Zone::Fixed)
             });
         }
-        Err(Error::new(format!(
-            "The datetime zone id '{id}' is not recognised"
-        )))
+        Err(TimeError::UnknownZone(id.to_string()).into())
     }
 
     /// `DateTimeZone.getID()`, without the resolution of the IANA links Joda performs
@@ -153,11 +152,11 @@ impl Zone {
             LocalResult::Single(offset) | LocalResult::Ambiguous(offset, _) => {
                 Ok(shift(local, -offset))
             }
-            LocalResult::None => Err(Error::new(format!(
-                "Illegal instant due to time zone offset transition (daylight savings time 'gap'): {} ({})",
-                local.format("%Y-%m-%dT%H:%M:%S%.3f"),
-                tz.name()
-            ))),
+            LocalResult::None => Err(TimeError::ZoneGap {
+                local: local.format("%Y-%m-%dT%H:%M:%S%.3f").to_string(),
+                zone: tz.name().to_string(),
+            }
+            .into()),
         }
     }
 }
@@ -171,9 +170,11 @@ fn shift(instant: NaiveDateTime, seconds: i32) -> NaiveDateTime {
 
 /// `Invalid format: "+2:00" is malformed at "2:00"`.
 fn malformed(id: &str, rest: &str) -> Error {
-    Error::new(format!(
-        "Invalid format: \"{id}\" is malformed at \"{rest}\""
-    ))
+    TimeError::MalformedOffset {
+        id: id.to_string(),
+        rest: rest.to_string(),
+    }
+    .into()
 }
 
 /// Parse a Joda offset identifier (`+HH`, `+HH:mm`, `+HHmm`, `+HH:mm:ss`, `+HHmmss`) into
@@ -249,7 +250,7 @@ fn split_millis(ts: i64) -> (i64, i64) {
 fn utc_from_millis(millis: i64) -> Result<NaiveDateTime> {
     DateTime::from_timestamp_millis(millis)
         .map(|dt| dt.naive_utc())
-        .ok_or_else(|| Error::new(format!("The instant {millis} is out of range.")))
+        .ok_or_else(|| TimeError::InstantOutOfRange(millis).into())
 }
 
 /// Milliseconds since the epoch of a UTC date-time.
@@ -350,9 +351,14 @@ fn totselements(stack: &mut Stack) -> Result<()> {
 
 /// `IllegalFieldValueException` text.
 fn field_error(value: i32, field: &str, min: i32, max: i32, suffix: &str) -> Error {
-    Error::new(format!(
-        "Value {value} for {field} must be in the range [{min},{max}]{suffix}"
-    ))
+    TimeError::FieldOutOfRange {
+        value,
+        field: field.to_string(),
+        min,
+        max,
+        suffix: suffix.to_string(),
+    }
+    .into()
 }
 
 /// Number of days in `month` of `year` (ISO chronology).
@@ -404,11 +410,9 @@ fn datetime_from_fields(fields: [i32; 6], zone: Zone) -> Result<NaiveDateTime> {
 
 /// Java `((Number) o).intValue()` of a list element, or the Java exception texts.
 fn int_element(elements: &[Value], index: usize) -> Result<i32> {
-    let value = elements.get(index).ok_or_else(|| {
-        Error::new(format!(
-            "Index {index} out of bounds for length {}",
-            elements.len()
-        ))
+    let value = elements.get(index).ok_or(BoundsError::ListIndex {
+        index: index as i64,
+        length: elements.len(),
     })?;
     int_value(value).ok_or_else(|| Error::class_cast(value.kind(), Class::Number))
 }
@@ -490,7 +494,7 @@ fn add_to_instant(
 ) -> Result<i64> {
     let utc = utc_from_millis(ts / TIME_UNITS_PER_MS)?;
     let (local, _) = to_local(zone, utc);
-    let shifted = step(local).ok_or_else(|| Error::new("The calculation caused an overflow."))?;
+    let shifted = step(local).ok_or(TimeError::CalculationOverflow)?;
     let result = zone.local_to_utc(shifted);
     Ok(millis_of(result) * TIME_UNITS_PER_MS + ts % TIME_UNITS_PER_MS)
 }
@@ -742,7 +746,7 @@ pub fn parse_duration(text: &str) -> Result<i64> {
     };
     let tokens: Vec<&str> = unsigned.split('.').collect();
     if tokens.len() > 2 {
-        return Err(Error::new("invalid ISO8601 duration."));
+        return Err(TimeError::InvalidIsoDuration.into());
     }
     let mut subseconds = 0i64;
     let head = tokens[0];
@@ -752,15 +756,13 @@ pub fn parse_duration(text: &str) -> Result<i64> {
         period_text = format!("{head}S");
         let value: f64 = format!("0.{fraction}")
             .parse()
-            .map_err(|_| Error::new(format!("For input string: \"0.{fraction}\"")))?;
+            .map_err(|_| NumberFormatError::InvalidInput(format!("0.{fraction}")))?;
         subseconds = (value * TIME_UNITS_PER_S as f64) as i64;
     }
     let mut period = Period::default();
     parse_period(&period_text, &mut period);
     if period.months != 0 || period.years != 0 {
-        return Err(Error::new(
-            "no support for ambiguous durations containing years or months, please convert those to days.",
-        ));
+        return Err(TimeError::AmbiguousDuration.into());
     }
     let negative_subseconds = if period.seconds < 0 {
         true
@@ -868,7 +870,7 @@ fn humanduration(stack: &mut Stack) -> Result<()> {
 pub(crate) fn duration_to_period(text: &str) -> Result<(Period, i64)> {
     let tokens: Vec<&str> = text.split('.').collect();
     if tokens.len() > 2 {
-        return Err(Error::new("Invalid ISO8601 duration"));
+        return Err(TimeError::InvalidDuration.into());
     }
     let mut offset = 0;
     let mut text = text.to_owned();
@@ -887,9 +889,7 @@ pub(crate) fn duration_to_period(text: &str) -> Result<(Period, i64)> {
     }
     let mut period = Period::default();
     if parse_period(&text, &mut period) < 0 {
-        return Err(Error::new(format!(
-            "Parsing of duration without sub second precision has failed. Tried to parse: {text}"
-        )));
+        return Err(TimeError::UnparsableDuration(text.clone()).into());
     }
     Ok((period, offset))
 }
@@ -914,8 +914,8 @@ fn add_period_utc(
     zone: Zone,
     n: i64,
 ) -> Result<(NaiveDateTime, i64)> {
-    let overflow = || Error::new("The calculation caused an overflow.");
-    let scaled = |value: i64| -> Result<i32> {
+    let overflow = || TimeError::CalculationOverflow;
+    let scaled = |value: i64| -> core::result::Result<i32, TimeError> {
         value
             .checked_mul(n)
             .and_then(|v| i32::try_from(v).ok())
@@ -1018,9 +1018,11 @@ fn addduration(stack: &mut Stack) -> Result<()> {
 
 /// `DateTimeParseException` for a failure at `index`.
 fn unparsable(text: &str, index: usize) -> Error {
-    Error::new(format!(
-        "Text '{text}' could not be parsed at index {index}"
-    ))
+    TimeError::Unparsable {
+        text: text.to_string(),
+        index,
+    }
+    .into()
 }
 
 /// Read exactly `n` digits at `pos`.
@@ -1036,8 +1038,13 @@ fn digits(text: &str, pos: usize, n: usize) -> Option<u32> {
 /// `ZonedDateTime.parse` → time units since the epoch (`TOTIMESTAMP.parseTimestamp`).
 pub fn parse_timestamp(text: &str) -> Result<i64> {
     let error = |index: usize| unparsable(text, index);
-    let invalid =
-        |detail: String| Error::new(format!("Text '{text}' could not be parsed: {detail}"));
+    let invalid = |detail: String| {
+        TimeError::UnparsableBecause {
+            text: text.to_string(),
+            detail,
+        }
+        .into()
+    };
     let bytes = text.as_bytes();
     // Year: 4 digits, or a sign followed by at least 4 digits.
     let mut pos = 0;
@@ -1218,9 +1225,11 @@ const MONTH_NAMES: [&str; 12] = [
 
 /// `DateTimeParseException` for trailing text.
 fn unparsed(text: &str, index: usize) -> Error {
-    Error::new(format!(
-        "Text '{text}' could not be parsed, unparsed text found at index {index}"
-    ))
+    TimeError::UnparsedText {
+        text: text.to_string(),
+        index,
+    }
+    .into()
 }
 
 /// `TOTIMESTAMP.parseTimestamp`: the timestamp of an ISO 8601 date-time string with a time
@@ -1264,10 +1273,11 @@ fn not_before_after(stack: &mut Stack, name: &str, before: bool) -> Result<()> {
     };
     let now = current_time();
     if (before && now < instant) || (!before && now > instant) {
-        return Err(Error::new(format!(
-            "Current time is {} '{top}'",
-            if before { "before" } else { "after" }
-        )));
+        return Err(TimeError::WrongTime {
+            before,
+            instant: top.to_string(),
+        }
+        .into());
     }
     Ok(())
 }
