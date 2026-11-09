@@ -308,6 +308,16 @@ impl GeoShape {
         GeoShape::from_coverage(&coverage)
     }
 
+    /// `GEOSPLIT`: the clusters of touching cells, each as a shape.
+    pub fn split(&self) -> Result<Vec<GeoShape>> {
+        Ok(self
+            .coverage()?
+            .clusters()
+            .iter()
+            .map(GeoShape::from_coverage)
+            .collect())
+    }
+
     /// `GEO.NORMALIZE`: both shapes with their cells split to the finest resolution of the
     /// cells they overlap.
     pub fn normalize(&self, other: &GeoShape) -> Result<(GeoShape, GeoShape)> {

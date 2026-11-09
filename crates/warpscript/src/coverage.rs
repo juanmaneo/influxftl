@@ -8,10 +8,11 @@
 //! bits cleared. The Java sets are hash sets, but every iteration over them is either
 //! followed by a sort or does not depend on the order, so ordered sets behave the same.
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeSet, VecDeque};
 
 use crate::error::Result;
 use crate::error::fault::BoundsError;
+use crate::geoxp::delta_hhcode;
 
 /// The HHCode bits a cell of each resolution keeps (index `r` for resolution `2 * (r + 1)`).
 const PREFIX_MASK: [i64; 16] = {
@@ -287,6 +288,58 @@ impl Coverage {
         true
     }
 
+    /// `CoverageHelper.clusters`: the groups of cells that touch each other (to the north,
+    /// east, south or west, at their own resolution or at a coarser one), each as a
+    /// coverage, the first cell of each group (in geocell order) giving its place.
+    pub fn clusters(&self) -> Vec<Coverage> {
+        let cells = self.to_geocells(MAX_RESOLUTION as i32);
+        let mut cluster_ids = vec![0usize; cells.len()];
+        let mut current = 1;
+        while let Some(first) = cluster_ids.iter().position(|id| *id == 0) {
+            cluster_ids[first] = current;
+            let mut window = VecDeque::from([cells[first]]);
+            while let Some(cell) = window.pop_front() {
+                for neighbor in neighbors(cell).iter().rev() {
+                    let Ok(index) = cells.binary_search(neighbor) else {
+                        continue;
+                    };
+                    match cluster_ids[index] {
+                        0 => {
+                            cluster_ids[index] = current;
+                            window.push_back(*neighbor);
+                        }
+                        id if id != current => {
+                            // The neighbor belongs to a cluster found earlier: join it.
+                            for other in cluster_ids.iter_mut().filter(|other| **other == id) {
+                                *other = current;
+                            }
+                        }
+                        _ => {}
+                    }
+                }
+            }
+            current += 1;
+        }
+        // A cluster that was joined to another has no cell left.
+        (1..current)
+            .filter_map(|id| {
+                let members: Vec<&i64> = cells
+                    .iter()
+                    .zip(&cluster_ids)
+                    .filter_map(|(cell, cluster)| (*cluster == id).then_some(cell))
+                    .collect();
+                if members.is_empty() {
+                    return None;
+                }
+                let mut coverage = Coverage::new();
+                for geocell in members {
+                    coverage.add_cell((((*geocell as u64) >> 60) << 1) as i32, *geocell << 4);
+                }
+                Some(coverage)
+            })
+            .collect()
+    }
+
     /// `toGeoCells`: the geocells of the resolutions up to `finest` (at most 30), sorted as
     /// signed longs.
     pub fn to_geocells(&self, finest: i32) -> Vec<i64> {
@@ -305,4 +358,49 @@ impl Coverage {
         geocells.sort_unstable();
         geocells
     }
+}
+
+/// The top level cells (the digit of the resolution 2) a neighbor to the north, east, south
+/// or west must not be in, unless the cell is, for it to be a neighbor: it wrapped around
+/// the planisphere.
+const WRAPPING_TOP_CELLS: [[u64; 4]; 4] = [
+    [0, 1, 4, 5],
+    [0xA, 8, 2, 0],
+    [0xA, 0xB, 0xE, 0xF],
+    [0xF, 0xD, 7, 5],
+];
+
+/// The cells `cell` may touch, in the order `CoverageHelper.clusters` looks for them: its
+/// north, east, south and west neighbors at its own resolution (the ones that wrapped around
+/// are `0`), then the cells of each coarser resolution (from the coarsest) holding those.
+fn neighbors(cell: i64) -> Vec<i64> {
+    const TOP_CELL: u64 = 0x0F00_0000_0000_0000;
+    const RESOLUTION: u64 = 0xF000_0000_0000_0000;
+    let resolution = ((cell as u64) >> 60) as i32;
+    let hhcode = cell << 4;
+    let deltas = [(1, 0), (0, 1), (-1, 0), (0, -1)];
+    let own: Vec<i64> = deltas
+        .iter()
+        .zip(&WRAPPING_TOP_CELLS)
+        .map(|((delta_lat, delta_lon), wrapping)| {
+            let neighbor = (cell as u64 & RESOLUTION)
+                | (delta_hhcode(hhcode, resolution << 1, *delta_lat, *delta_lon) as u64 >> 4);
+            let top = (neighbor & TOP_CELL) >> 56;
+            if wrapping.contains(&top) && neighbor & TOP_CELL != cell as u64 & TOP_CELL {
+                0
+            } else {
+                neighbor as i64
+            }
+        })
+        .collect();
+    let coarser = (1..resolution).flat_map(|level| {
+        let shift = 60 - 4 * level;
+        own.iter().map(move |neighbor| {
+            // The cells that a neighbor that wrapped (0) is replaced by are those of the
+            // first HHCode, as they are in Warp 10.
+            ((((*neighbor as u64) >> shift) << shift) & 0x0FFF_FFFF_FFFF_FFFF) as i64
+                | (i64::from(level) << 60)
+        })
+    });
+    own.iter().copied().chain(coarser).collect()
 }

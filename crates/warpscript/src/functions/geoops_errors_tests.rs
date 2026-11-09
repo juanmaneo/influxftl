@@ -81,3 +81,8 @@ fn a_regexp_fails_on_a_cell_without_resolution() {
         .into()
     );
 }
+
+#[test]
+fn a_split_fails_on_a_cell_without_resolution() {
+    assert_eq!(failure("GEOSPLIT", vec![broken()]), array_index());
+}

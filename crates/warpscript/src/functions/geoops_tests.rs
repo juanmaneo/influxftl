@@ -1,7 +1,7 @@
 // Copyright 2026 The influxftl Authors. Licensed under the Apache License, Version 2.0.
 
 //! Oracle-checked tests of the `GEOSHAPE` operations: `GEO.UNION`, `GEO.INTERSECTION`, `GEO.DIFFERENCE`, `GEO.INTERSECTS`, `GEO.WITHIN`,
-//! `GEO.OPTIMIZE`, `GEO.NORMALIZE`, `GEOSHIFT` and `GEO.REGEXP`.
+//! `GEO.OPTIMIZE`, `GEO.NORMALIZE`, `GEOSHIFT`, `GEO.REGEXP`, `GEOSPLIT` and `BBOX`.
 //! The expectations are the answers of Warp 10 3.5.0 to the same scripts:
 //! the JSON stack (top first) or the error message (in its JDK 11+ form).
 
@@ -5053,5 +5053,1591 @@ fn regexp() {
             Err(r"GEO.REGEXP expects a GeoShape instance on top of the stack."),
         ),
         (r"@A GEO.REGEXP 'a' STORE $a", Ok(r#"["b9a[d].*"]"#)),
+    ]);
+}
+
+#[test]
+fn split_1() {
+    check(&[
+        (
+            r"[  ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r"[[]]"),
+        ),
+        (
+            r"[ 'b9ad' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["b9ad"]]]"#),
+        ),
+        (
+            r"[ 'b9ad' 'b9ae' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["b9ad"],["b9ae"]]]"#),
+        ),
+        (
+            r"[ 'b9ad' 'b9a0' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["b9a0"],["b9ad"]]]"#),
+        ),
+        (
+            r"[ 'b9ad' 'b9ae' 'b9a0' 'b9a1' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["b9a0","b9a1"],["b9ad"],["b9ae"]]]"#),
+        ),
+        (r"[  ] ->GEOSHAPE GEOSPLIT SIZE", Ok(r"[0]")),
+        (r"[ 'b9ad' ] ->GEOSHAPE GEOSPLIT SIZE", Ok(r"[1]")),
+        (r"[ 'b9ad' 'b9a0' ] ->GEOSHAPE GEOSPLIT SIZE", Ok(r"[2]")),
+        (
+            r"[ '0' '1' '4' '5' 'a' 'b' 'e' 'f' '2' '3' '6' '7' '8' '9' 'c' 'd' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["0","1","2","3","4","5","6","7","8","9","a","b","c","d","e","f"]]]"#),
+        ),
+        (
+            r"[ '0' '1' '4' '5' 'a' 'b' 'e' 'f' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["0","1","4","5"],["a","b","e","f"]]]"#),
+        ),
+        (
+            r"[ '2' '3' '6' '7' '8' '9' 'c' 'd' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["2","3","6","7","8","9","c","d"]]]"#),
+        ),
+        (
+            r"[ '0' '0' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["0"]]]"#),
+        ),
+        (
+            r"[ '0' 'f' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["0"],["f"]]]"#),
+        ),
+        (
+            r"[ '0' '5' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["0"],["5"]]]"#),
+        ),
+        (
+            r"[ '0' 'a' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["0"],["a"]]]"#),
+        ),
+        (
+            r"[ '1' '0' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["0","1"]]]"#),
+        ),
+        (
+            r"[ '1' 'f' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["1"],["f"]]]"#),
+        ),
+        (
+            r"[ '1' '5' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["1"],["5"]]]"#),
+        ),
+        (
+            r"[ '1' 'a' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["1"],["a"]]]"#),
+        ),
+        (
+            r"[ '4' '0' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["0"],["4"]]]"#),
+        ),
+        (
+            r"[ '4' 'f' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["4"],["f"]]]"#),
+        ),
+        (
+            r"[ '4' '5' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["4","5"]]]"#),
+        ),
+        (
+            r"[ '4' 'a' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["4"],["a"]]]"#),
+        ),
+        (
+            r"[ '5' '0' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["0"],["5"]]]"#),
+        ),
+        (
+            r"[ '5' 'f' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["5"],["f"]]]"#),
+        ),
+        (
+            r"[ '5' '5' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["5"]]]"#),
+        ),
+        (
+            r"[ '5' 'a' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["5"],["a"]]]"#),
+        ),
+        (
+            r"[ 'a' '0' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["0"],["a"]]]"#),
+        ),
+        (
+            r"[ 'a' 'f' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["a"],["f"]]]"#),
+        ),
+        (
+            r"[ 'a' '5' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["5"],["a"]]]"#),
+        ),
+        (
+            r"[ 'a' 'a' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["a"]]]"#),
+        ),
+        (
+            r"[ 'b' '0' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["0"],["b"]]]"#),
+        ),
+        (
+            r"[ 'b' 'f' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["b"],["f"]]]"#),
+        ),
+        (
+            r"[ 'b' '5' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["5"],["b"]]]"#),
+        ),
+        (
+            r"[ 'b' 'a' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["a","b"]]]"#),
+        ),
+        (
+            r"[ 'e' '0' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["0"],["e"]]]"#),
+        ),
+        (
+            r"[ 'e' 'f' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["e","f"]]]"#),
+        ),
+        (
+            r"[ 'e' '5' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["5"],["e"]]]"#),
+        ),
+        (
+            r"[ 'e' 'a' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["a"],["e"]]]"#),
+        ),
+        (
+            r"[ 'f' '0' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["0"],["f"]]]"#),
+        ),
+        (
+            r"[ 'f' 'f' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["f"]]]"#),
+        ),
+        (
+            r"[ 'f' '5' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["5"],["f"]]]"#),
+        ),
+        (
+            r"[ 'f' 'a' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["a"],["f"]]]"#),
+        ),
+        (
+            r"[ '2' '0' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["0","2"]]]"#),
+        ),
+        (
+            r"[ '2' 'f' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["2"],["f"]]]"#),
+        ),
+        (
+            r"[ '2' '5' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["2"],["5"]]]"#),
+        ),
+        (
+            r"[ '2' 'a' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["2"],["a"]]]"#),
+        ),
+        (
+            r"[ '3' '0' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["0"],["3"]]]"#),
+        ),
+        (
+            r"[ '3' 'f' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["3"],["f"]]]"#),
+        ),
+        (
+            r"[ '3' '5' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["3"],["5"]]]"#),
+        ),
+        (
+            r"[ '3' 'a' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["3"],["a"]]]"#),
+        ),
+        (
+            r"[ '6' '0' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["0"],["6"]]]"#),
+        ),
+        (
+            r"[ '6' 'f' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["6"],["f"]]]"#),
+        ),
+        (
+            r"[ '6' '5' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["5"],["6"]]]"#),
+        ),
+        (
+            r"[ '6' 'a' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["6"],["a"]]]"#),
+        ),
+        (
+            r"[ '7' '0' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["0"],["7"]]]"#),
+        ),
+        (
+            r"[ '7' 'f' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["7"],["f"]]]"#),
+        ),
+        (
+            r"[ '7' '5' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["5","7"]]]"#),
+        ),
+        (
+            r"[ '7' 'a' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["7"],["a"]]]"#),
+        ),
+        (
+            r"[ '8' '0' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["0"],["8"]]]"#),
+        ),
+        (
+            r"[ '8' 'f' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["8"],["f"]]]"#),
+        ),
+        (
+            r"[ '8' '5' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["5"],["8"]]]"#),
+        ),
+        (
+            r"[ '8' 'a' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["8","a"]]]"#),
+        ),
+        (
+            r"[ '9' '0' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["0"],["9"]]]"#),
+        ),
+        (
+            r"[ '9' 'f' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["9"],["f"]]]"#),
+        ),
+        (
+            r"[ '9' '5' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["5"],["9"]]]"#),
+        ),
+        (
+            r"[ '9' 'a' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["9"],["a"]]]"#),
+        ),
+        (
+            r"[ 'c' '0' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["0"],["c"]]]"#),
+        ),
+        (
+            r"[ 'c' 'f' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["c"],["f"]]]"#),
+        ),
+        (
+            r"[ 'c' '5' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["5"],["c"]]]"#),
+        ),
+        (
+            r"[ 'c' 'a' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["a"],["c"]]]"#),
+        ),
+        (
+            r"[ 'd' '0' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["0"],["d"]]]"#),
+        ),
+        (
+            r"[ 'd' 'f' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["d","f"]]]"#),
+        ),
+        (
+            r"[ 'd' '5' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["5"],["d"]]]"#),
+        ),
+        (
+            r"[ 'd' 'a' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["a"],["d"]]]"#),
+        ),
+        (
+            r"[ '00' '01' '02' '04' '05' '08' '0a' '10' '11' '14' '15' '20' '22' '28' '2a' '40' '41' '44' '45' '50' '51' '54' '55' '57' '5d' '5f' '75' '77' '7d' '7f' '80' '82' '88' '8a' 'a0' 'a2' 'a8' 'aa' 'ab' 'ae' 'af' 'ba' 'bb' 'be' 'bf' 'd5' 'd7' 'dd' 'df' 'ea' 'eb' 'ee' 'ef' 'f5' 'f7' 'fa' 'fb' 'fd' 'fe' 'ff' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(
+                r#"[[["00","01","02","04","05","08","0a","10","11","14","15","20","22","28","2a","40","41","44","45","50","51","54","55","57","5d","5f","75","77","7d","7f","80","82","88","8a","a0","a2","a8","aa","ab","ae","af","ba","bb","be","bf","d5","d7","dd","df","ea","eb","ee","ef","f5","f7","fa","fb","fd","fe","ff"]]]"#,
+            ),
+        ),
+        (
+            r"[ 'a8' '02' '77' '80' '00' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["00","02"],["77"],["80"],["a8"]]]"#),
+        ),
+        (
+            r"[ '28' '7f' 'ef' '82' '44' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["28"],["44"],["7f"],["82"],["ef"]]]"#),
+        ),
+        (
+            r"[ 'ba' 'ee' '15' '02' '8a' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["02"],["15"],["8a"],["ba"],["ee"]]]"#),
+        ),
+        (
+            r"[ '82' '51' '05' '40' 'dd' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["05"],["40"],["51"],["82"],["dd"]]]"#),
+        ),
+        (
+            r"[ '57' '02' '75' 'fa' '11' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["02"],["11"],["57"],["75"],["fa"]]]"#),
+        ),
+        (
+            r"[ 'ab' '55' '5d' '75' '45' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["45"],["55"],["5d"],["75"],["ab"]]]"#),
+        ),
+        (
+            r"[ 'ef' 'be' '41' '7f' '20' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["20"],["41"],["7f"],["be"],["ef"]]]"#),
+        ),
+        (
+            r"[ 'be' '50' 'bb' '57' '11' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["11"],["50"],["57"],["bb","be"]]]"#),
+        ),
+        (
+            r"[ '7f' 'ea' 'fa' '40' '7d' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["40"],["7d","7f"],["ea"],["fa"]]]"#),
+        ),
+        (
+            r"[ 'ae' '5d' '02' 'aa' '00' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["00","02"],["5d"],["aa"],["ae"]]]"#),
+        ),
+        (
+            r"[ '40' '11' '22' 'fe' '50' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["11"],["22"],["40"],["50"],["fe"]]]"#),
+        ),
+        (
+            r"[ 'a0' '57' 'ea' 'fd' '40' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["40"],["57"],["a0"],["ea"],["fd"]]]"#),
+        ),
+        (
+            r"[ '000' '001' '002' '004' '005' '008' '00a' '010' '011' '014' '015' '020' '022' '028' '02a' '040' '041' '044' '045' '050' '051' '054' '055' '080' '082' '088' '08a' '0a0' '0a2' '0a8' '0aa' '100' '101' '104' '105' '110' '111' '114' '115' '140' '141' '144' '145' '150' '151' '154' '155' '200' '202' '208' '20a' '220' '222' '228' '22a' '280' '282' '288' '28a' '2a0' '2a2' '2a8' '2aa' '400' '401' '404' '405' '410' '411' '414' '415' '440' '441' '444' '445' '450' '451' '454' '455' '500' '501' '504' '505' '510' '511' '514' '515' '540' '541' '544' '545' '550' '551' '554' '555' '557' '55d' '55f' '575' '577' '57d' '57f' '5d5' '5d7' '5dd' '5df' '5f5' '5f7' '5fd' '5ff' '755' '757' '75d' '75f' '775' '777' '77d' '77f' '7d5' '7d7' '7dd' '7df' '7f5' '7f7' '7fd' '7ff' '800' '802' '808' '80a' '820' '822' '828' '82a' '880' '882' '888' '88a' '8a0' '8a2' '8a8' '8aa' 'a00' 'a02' 'a08' 'a0a' 'a20' 'a22' 'a28' 'a2a' 'a80' 'a82' 'a88' 'a8a' 'aa0' 'aa2' 'aa8' 'aaa' 'aab' 'aae' 'aaf' 'aba' 'abb' 'abe' 'abf' 'aea' 'aeb' 'aee' 'aef' 'afa' 'afb' 'afe' 'aff' 'baa' 'bab' 'bae' 'baf' 'bba' 'bbb' 'bbe' 'bbf' 'bea' 'beb' 'bee' 'bef' 'bfa' 'bfb' 'bfe' 'bff' 'd55' 'd57' 'd5d' 'd5f' 'd75' 'd77' 'd7d' 'd7f' 'dd5' 'dd7' 'ddd' 'ddf' 'df5' 'df7' 'dfd' 'dff' 'eaa' 'eab' 'eae' 'eaf' 'eba' 'ebb' 'ebe' 'ebf' 'eea' 'eeb' 'eee' 'eef' 'efa' 'efb' 'efe' 'eff' 'f55' 'f57' 'f5d' 'f5f' 'f75' 'f77' 'f7d' 'f7f' 'faa' 'fab' 'fae' 'faf' 'fba' 'fbb' 'fbe' 'fbf' 'fd5' 'fd7' 'fdd' 'fdf' 'fea' 'feb' 'fee' 'fef' 'ff5' 'ff7' 'ffa' 'ffb' 'ffd' 'ffe' 'fff' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(
+                r#"[[["000","001","002","004","005","008","00a","010","011","014","015","020","022","028","02a","040","041","044","045","050","051","054","055","080","082","088","08a","0a0","0a2","0a8","0aa","100","101","104","105","110","111","114","115","140","141","144","145","150","151","154","155","200","202","208","20a","220","222","228","22a","280","282","288","28a","2a0","2a2","2a8","2aa","400","401","404","405","410","411","414","415","440","441","444","445","450","451","454","455","500","501","504","505","510","511","514","515","540","541","544","545","550","551","554","555","557","55d","55f","575","577","57d","57f","5d5","5d7","5dd","5df","5f5","5f7","5fd","5ff","755","757","75d","75f","775","777","77d","77f","7d5","7d7","7dd","7df","7f5","7f7","7fd","7ff","800","802","808","80a","820","822","828","82a","880","882","888","88a","8a0","8a2","8a8","8aa","a00","a02","a08","a0a","a20","a22","a28","a2a","a80","a82","a88","a8a","aa0","aa2","aa8","aaa","aab","aae","aaf","aba","abb","abe","abf","aea","aeb","aee","aef","afa","afb","afe","aff","baa","bab","bae","baf","bba","bbb","bbe","bbf","bea","beb","bee","bef","bfa","bfb","bfe","bff","d55","d57","d5d","d5f","d75","d77","d7d","d7f","dd5","dd7","ddd","ddf","df5","df7","dfd","dff","eaa","eab","eae","eaf","eba","ebb","ebe","ebf","eea","eeb","eee","eef","efa","efb","efe","eff","f55","f57","f5d","f5f","f75","f77","f7d","f7f","faa","fab","fae","faf","fba","fbb","fbe","fbf","fd5","fd7","fdd","fdf","fea","feb","fee","fef","ff5","ff7","ffa","ffb","ffd","ffe","fff"]]]"#,
+            ),
+        ),
+        (
+            r"[ '501' 'afb' '8a8' '777' '757' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["501"],["757"],["777"],["8a8"],["afb"]]]"#),
+        ),
+        (
+            r"[ '7dd' '041' 'aee' 'a2a' '510' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["041"],["510"],["7dd"],["a2a"],["aee"]]]"#),
+        ),
+        (
+            r"[ 'eef' '808' '141' 'eee' '288' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["141"],["288"],["808"],["eee","eef"]]]"#),
+        ),
+        (
+            r"[ 'ffb' '5df' '2a8' '014' '011' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["011","014"],["2a8"],["5df"],["ffb"]]]"#),
+        ),
+        (
+            r"[ '802' '454' 'eba' 'aa2' 'aef' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["454"],["802"],["aa2"],["aef"],["eba"]]]"#),
+        ),
+        (
+            r"[ '045' '888' 'fbf' 'efb' '051' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["045"],["051"],["888"],["efb"],["fbf"]]]"#),
+        ),
+        (
+            r"[ '115' '575' 'a0a' 'feb' '557' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["115"],["557"],["575"],["a0a"],["feb"]]]"#),
+        ),
+        (
+            r"[ 'fba' 'a8a' '115' '0a2' 'ff7' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["0a2"],["115"],["a8a"],["fba"],["ff7"]]]"#),
+        ),
+        (
+            r"[ 'dd7' 'dd5' '082' '75f' '145' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["082"],["145"],["75f"],["dd5","dd7"]]]"#),
+        ),
+        (
+            r"[ 'fff' 'eab' '202' 'feb' '544' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["202"],["544"],["eab"],["feb"],["fff"]]]"#),
+        ),
+        (
+            r"[ '755' 'ffb' '5f5' '775' '2aa' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["2aa"],["5f5"],["755"],["775"],["ffb"]]]"#),
+        ),
+    ]);
+}
+
+#[test]
+fn split_2() {
+    check(&[
+        (
+            r"[ 'bab' '415' '111' 'aab' '82a' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["111"],["415"],["82a"],["aab"],["bab"]]]"#),
+        ),
+        (
+            r"[ '0' 'f' 'f1' 'e1' 'c0001' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["0"],["e1"],["f","f1"],["c0001"]]]"#),
+        ),
+        (
+            r"[ '0' 'a' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["0"],["a"]]]"#),
+        ),
+        (
+            r"[ '0' 'a0' 'af' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["0","a0"],["af"]]]"#),
+        ),
+        (
+            r"[ '0' '1' 'f0' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["0","1"],["f0"]]]"#),
+        ),
+        (
+            r"[ '00' 'f0' 'ff' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["00"],["f0"],["ff"]]]"#),
+        ),
+        (
+            r"[ '0' 'ff' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["0","ff"]]]"#),
+        ),
+        (
+            r"[ '0' 'fff' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["0","fff"]]]"#),
+        ),
+        (
+            r"[ '43' '49' '4a' '4b' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["43","49","4a","4b"]]]"#),
+        ),
+        (
+            r"[ '43' '49' '4a' '4b' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["43","49","4a","4b"]]]"#),
+        ),
+        (
+            r"[ '43' '49' '4a' '4b' ] ->GEOSHAPE GEOSPLIT SIZE",
+            Ok(r"[1]"),
+        ),
+        (
+            r"[ '44' '46' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["44","46"]]]"#),
+        ),
+        (
+            r"[ '4' '46' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["4","46"]]]"#),
+        ),
+        (r"[ '44' '46' ] ->GEOSHAPE GEOSPLIT SIZE", Ok(r"[1]")),
+        (
+            r"[ 'db' 'de' 'df' 'f1' 'f5' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["db","de","df","f1","f5"]]]"#),
+        ),
+        (
+            r"[ 'd' 'de' 'df' 'f' 'f1' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["d","f","de","df","f1"]]]"#),
+        ),
+        (
+            r"[ 'db' 'de' 'df' 'f1' 'f5' ] ->GEOSHAPE GEOSPLIT SIZE",
+            Ok(r"[1]"),
+        ),
+        (
+            r"[ '54' '56' '5c' '5d' '5f' 'de' 'df' 'f1' 'f3' 'f4' 'f5' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["54","56","5c","5d","5f"],["de","df","f1","f3","f4","f5"]]]"#),
+        ),
+        (
+            r"[ '5' '54' '56' '5c' '5f' 'de' 'df' 'f' 'f4' 'f5' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["5","54","56","5c","5f"],["f","de","df","f4","f5"]]]"#),
+        ),
+        (
+            r"[ '54' '56' '5c' '5d' '5f' 'de' 'df' 'f1' 'f3' 'f4' 'f5' ] ->GEOSHAPE GEOSPLIT SIZE",
+            Ok(r"[2]"),
+        ),
+        (
+            r"[ 'a8' 'a9' 'aa' 'ab' 'ce' 'cf' 'e4' 'e5' 'e6' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["a8","a9","aa","ab"],["ce","cf","e4","e5","e6"]]]"#),
+        ),
+        (
+            r"[ 'a' 'a9' 'ce' 'cf' 'e4' 'e5' 'e6' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["a","a9"],["ce","cf","e4","e5","e6"]]]"#),
+        ),
+        (
+            r"[ 'a8' 'a9' 'aa' 'ab' 'ce' 'cf' 'e4' 'e5' 'e6' ] ->GEOSHAPE GEOSPLIT SIZE",
+            Ok(r"[2]"),
+        ),
+        (
+            r"[ '9b' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["9b"]]]"#),
+        ),
+        (
+            r"[ '9b' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["9b"]]]"#),
+        ),
+        (r"[ '9b' ] ->GEOSHAPE GEOSPLIT SIZE", Ok(r"[1]")),
+        (
+            r"[ '23' '29' '2c' '2d' '38' 'c5' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["23","29","2c","2d","38"],["c5"]]]"#),
+        ),
+        (
+            r"[ '2' '29' '2c' '2d' '38' 'c5' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["2","29","2c","2d","38"],["c5"]]]"#),
+        ),
+        (
+            r"[ '23' '29' '2c' '2d' '38' 'c5' ] ->GEOSHAPE GEOSPLIT SIZE",
+            Ok(r"[2]"),
+        ),
+        (
+            r"[ '29' '2b' '2c' '81' '84' '85' '90' 'f1' 'f3' 'f4' 'f5' 'f6' 'f9' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["29","2b","2c","81","84","85","90"],["f1","f3","f4","f5","f6","f9"]]]"#),
+        ),
+        (
+            r"[ '29' '2b' '2c' '81' '84' '85' '90' 'f' 'f1' 'f5' 'f6' 'f9' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["29","2b","2c","81","84","85","90"],["f","f1","f5","f6","f9"]]]"#),
+        ),
+        (
+            r"[ '29' '2b' '2c' '81' '84' '85' '90' 'f1' 'f3' 'f4' 'f5' 'f6' 'f9' ] ->GEOSHAPE GEOSPLIT SIZE",
+            Ok(r"[2]"),
+        ),
+        (
+            r"[ '37' '44' '45' '46' '47' '52' '62' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["37","62"],["44","45","46","47","52"]]]"#),
+        ),
+        (
+            r"[ '37' '4' '44' '46' '5' '62' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["37","62"],["4","5","44","46"]]]"#),
+        ),
+        (
+            r"[ '37' '44' '45' '46' '47' '52' '62' ] ->GEOSHAPE GEOSPLIT SIZE",
+            Ok(r"[2]"),
+        ),
+        (
+            r"[ '33' '89' '8b' 'a1' 'a2' 'a3' 'a4' 'a8' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["33"],["89","8b","a1","a2","a3","a4","a8"]]]"#),
+        ),
+        (
+            r"[ '33' '89' '8b' 'a' 'a1' 'a3' 'a4' 'a8' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["33"],["a","89","8b","a1","a3","a4","a8"]]]"#),
+        ),
+        (
+            r"[ '33' '89' '8b' 'a1' 'a2' 'a3' 'a4' 'a8' ] ->GEOSHAPE GEOSPLIT SIZE",
+            Ok(r"[2]"),
+        ),
+        (
+            r"[ '8a' '8b' 'f8' 'f9' 'fa' 'fb' 'fc' 'fe' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["8a","8b"],["f8","f9","fa","fb","fc","fe"]]]"#),
+        ),
+        (
+            r"[ '8a' '8b' 'f' 'f8' 'fa' 'fc' 'fe' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["8a","8b"],["f","f8","fa","fc","fe"]]]"#),
+        ),
+        (
+            r"[ '8a' '8b' 'f8' 'f9' 'fa' 'fb' 'fc' 'fe' ] ->GEOSHAPE GEOSPLIT SIZE",
+            Ok(r"[2]"),
+        ),
+        (
+            r"[ '13' '8e' 'a1' 'a3' 'a4' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["13"],["8e","a1","a3","a4"]]]"#),
+        ),
+        (
+            r"[ '1' '8e' 'a' 'a3' 'a4' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["1"],["a","8e","a3","a4"]]]"#),
+        ),
+        (
+            r"[ '13' '8e' 'a1' 'a3' 'a4' ] ->GEOSHAPE GEOSPLIT SIZE",
+            Ok(r"[2]"),
+        ),
+        (
+            r"[ '25' '27' '30' '32' '33' '39' 'a1' 'a4' 'a6' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["25","27","30","32","33","39"],["a1","a4","a6"]]]"#),
+        ),
+        (
+            r"[ '2' '25' '3' '32' '33' '39' 'a1' 'a4' 'a6' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["2","3","25","32","33","39"],["a1","a4","a6"]]]"#),
+        ),
+        (
+            r"[ '25' '27' '30' '32' '33' '39' 'a1' 'a4' 'a6' ] ->GEOSHAPE GEOSPLIT SIZE",
+            Ok(r"[2]"),
+        ),
+        (
+            r"[ '2b' '2e' '2f' '81' '84' 'bd' 'bf' 'c7' 'e8' 'ea' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["2b","2e","2f","81","84"],["bd","bf","e8","ea"],["c7"]]]"#),
+        ),
+        (
+            r"[ '2' '2b' '2f' '8' '81' 'bd' 'bf' 'c7' 'e' 'ea' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["2","8","2b","2f","81"],["e","bd","bf","ea"],["c7"]]]"#),
+        ),
+        (
+            r"[ '2b' '2e' '2f' '81' '84' 'bd' 'bf' 'c7' 'e8' 'ea' ] ->GEOSHAPE GEOSPLIT SIZE",
+            Ok(r"[3]"),
+        ),
+        (
+            r"[ '14c' '14d' '3d6' '3d7' '472' '478' '479' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["14c","14d"],["3d6","3d7"],["472","478","479"]]]"#),
+        ),
+        (
+            r"[ '14c' '14d' '3d' '3d7' '47' '472' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["14c","14d"],["3d","3d7"],["47","472"]]]"#),
+        ),
+        (
+            r"[ '14c' '14d' '3d6' '3d7' '472' '478' '479' ] ->GEOSHAPE GEOSPLIT SIZE",
+            Ok(r"[3]"),
+        ),
+        (
+            r"[ '27b' '27c' '27d' '27e' '2d1' '2d4' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["27b","27c","27d","27e","2d1","2d4"]]]"#),
+        ),
+        (
+            r"[ '27b' '27c' '27d' '27e' '2d' '2d4' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["2d","27b","27c","27d","27e","2d4"]]]"#),
+        ),
+        (
+            r"[ '27b' '27c' '27d' '27e' '2d1' '2d4' ] ->GEOSHAPE GEOSPLIT SIZE",
+            Ok(r"[1]"),
+        ),
+        (
+            r"[ '183' '184' '186' '22e' '22f' '23a' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["183","184","186"],["22e","22f","23a"]]]"#),
+        ),
+        (
+            r"[ '18' '184' '186' '22' '23a' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["18","184","186"],["22","23a"]]]"#),
+        ),
+        (
+            r"[ '183' '184' '186' '22e' '22f' '23a' ] ->GEOSHAPE GEOSPLIT SIZE",
+            Ok(r"[2]"),
+        ),
+        (
+            r"[ '03f' '095' '4ba' '4bb' '611' '614' '616' '61c' '61d' '61e' '61f' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["03f","095"],["4ba","4bb","611","614","616","61c","61d","61e","61f"]]]"#),
+        ),
+        (
+            r"[ '03f' '095' '4b' '4ba' '61' '611' '614' '61c' '61d' '61e' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["03f","095"],["4b","61","4ba","611","614","61c","61d","61e"]]]"#),
+        ),
+        (
+            r"[ '03f' '095' '4ba' '4bb' '611' '614' '616' '61c' '61d' '61e' '61f' ] ->GEOSHAPE GEOSPLIT SIZE",
+            Ok(r"[2]"),
+        ),
+        (
+            r"[ '94d' '94f' '95a' 'ba5' 'fa8' 'fa9' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["94d","94f","95a"],["ba5"],["fa8","fa9"]]]"#),
+        ),
+        (
+            r"[ '94' '94d' '95a' 'ba' 'fa8' 'fa9' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["ba"],["94","94d","95a"],["fa8","fa9"]]]"#),
+        ),
+        (
+            r"[ '94d' '94f' '95a' 'ba5' 'fa8' 'fa9' ] ->GEOSHAPE GEOSPLIT SIZE",
+            Ok(r"[3]"),
+        ),
+        (
+            r"[ '451' '453' '454' '456' '528' '52a' '580' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["451","453","454","456"],["528","52a","580"]]]"#),
+        ),
+        (
+            r"[ '45' '453' '454' '52' '52a' '580' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["45","453","454"],["52","52a","580"]]]"#),
+        ),
+        (
+            r"[ '451' '453' '454' '456' '528' '52a' '580' ] ->GEOSHAPE GEOSPLIT SIZE",
+            Ok(r"[2]"),
+        ),
+        (
+            r"[ '23f' '268' '26a' '2c0' '36d' '378' '379' '37b' '37e' '3d4' 'ac4' 'ac5' 'ac6' 'ac7' 'acc' 'acd' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(
+                r#"[[["23f","268","26a","2c0"],["36d","378","379","37b","37e","3d4"],["ac4","ac5","ac6","ac7","acc","acd"]]]"#,
+            ),
+        ),
+        (
+            r"[ '23f' '26' '268' '2c0' '36d' '37' '378' '379' '37b' '3d' 'ac' 'ac4' 'ac5' 'ac6' 'ac7' 'acc' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(
+                r#"[[["26","23f","268","2c0"],["37","3d","36d","378","379","37b"],["ac","ac4","ac5","ac6","ac7","acc"]]]"#,
+            ),
+        ),
+        (
+            r"[ '23f' '268' '26a' '2c0' '36d' '378' '379' '37b' '37e' '3d4' 'ac4' 'ac5' 'ac6' 'ac7' 'acc' 'acd' ] ->GEOSHAPE GEOSPLIT SIZE",
+            Ok(r"[3]"),
+        ),
+        (
+            r"[ 'f36' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["f36"]]]"#),
+        ),
+        (
+            r"[ 'f3' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["f3"]]]"#),
+        ),
+        (r"[ 'f36' ] ->GEOSHAPE GEOSPLIT SIZE", Ok(r"[1]")),
+        (
+            r"[ '582' '588' '58a' '58b' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["582","588","58a","58b"]]]"#),
+        ),
+        (
+            r"[ '58' '582' '58a' '58b' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["58","582","58a","58b"]]]"#),
+        ),
+        (
+            r"[ '582' '588' '58a' '58b' ] ->GEOSHAPE GEOSPLIT SIZE",
+            Ok(r"[1]"),
+        ),
+        (
+            r"[ '7a4' 'f6a' 'f6b' 'fc0' 'fc1' 'fc4' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["7a4"],["f6a","f6b","fc0","fc1","fc4"]]]"#),
+        ),
+        (
+            r"[ '7a4' 'f6a' 'f6b' 'fc' 'fc0' 'fc4' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["7a4"],["fc","f6a","f6b","fc0","fc4"]]]"#),
+        ),
+        (
+            r"[ '7a4' 'f6a' 'f6b' 'fc0' 'fc1' 'fc4' ] ->GEOSHAPE GEOSPLIT SIZE",
+            Ok(r"[2]"),
+        ),
+        (
+            r"[ '455' '457' '45c' '45d' '9ba' 'b10' 'b12' 'b18' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["455","457","45c","45d"],["9ba","b10","b12","b18"]]]"#),
+        ),
+        (
+            r"[ '45' '45c' '9ba' 'b1' 'b10' 'b12' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["45","45c"],["b1","9ba","b10","b12"]]]"#),
+        ),
+        (
+            r"[ '455' '457' '45c' '45d' '9ba' 'b10' 'b12' 'b18' ] ->GEOSHAPE GEOSPLIT SIZE",
+            Ok(r"[2]"),
+        ),
+        (
+            r"[ 'fec' 'fed' 'fee' 'fef' 'ffa' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["fec","fed","fee","fef","ffa"]]]"#),
+        ),
+        (
+            r"[ 'fe' 'fec' 'fee' 'ff' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["fe","ff","fec","fee"]]]"#),
+        ),
+        (
+            r"[ 'fec' 'fed' 'fee' 'fef' 'ffa' ] ->GEOSHAPE GEOSPLIT SIZE",
+            Ok(r"[1]"),
+        ),
+        (
+            r"[ 'c99' 'c9b' 'cb0' 'cb1' 'df8' 'df9' 'dfb' 'dfc' 'eb1' 'eb4' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["c99","c9b","cb0","cb1"],["df8","df9","dfb","dfc"],["eb1","eb4"]]]"#),
+        ),
+        (
+            r"[ 'c99' 'c9b' 'cb' 'cb0' 'df' 'df8' 'dfb' 'dfc' 'eb' 'eb1' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["cb","c99","c9b","cb0"],["df","df8","dfb","dfc"],["eb","eb1"]]]"#),
+        ),
+        (
+            r"[ 'c99' 'c9b' 'cb0' 'cb1' 'df8' 'df9' 'dfb' 'dfc' 'eb1' 'eb4' ] ->GEOSHAPE GEOSPLIT SIZE",
+            Ok(r"[3]"),
+        ),
+        (
+            r"[ 'b55' 'b56' 'b57' 'b5c' 'b5d' 'dac' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["b55","b56","b57","b5c","b5d"],["dac"]]]"#),
+        ),
+        (
+            r"[ 'b5' 'b55' 'b57' 'b5c' 'b5d' 'da' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["da"],["b5","b55","b57","b5c","b5d"]]]"#),
+        ),
+        (
+            r"[ 'b55' 'b56' 'b57' 'b5c' 'b5d' 'dac' ] ->GEOSHAPE GEOSPLIT SIZE",
+            Ok(r"[2]"),
+        ),
+        (
+            r"[ '3390' '3391' '3393' '3396' '7b5e' '7b5f' '7b74' '7b76' 'ba23' 'ba24' 'ba26' 'ba2c' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(
+                r#"[[["3390","3391","3393","3396"],["7b5e","7b5f","7b74","7b76"],["ba23","ba24","ba26","ba2c"]]]"#,
+            ),
+        ),
+        (
+            r"[ '3390' '3391' '3393' '3396' '7b5e' '7b5f' '7b74' '7b76' 'ba23' 'ba24' 'ba26' 'ba2c' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(
+                r#"[[["3390","3391","3393","3396"],["7b5e","7b5f","7b74","7b76"],["ba23","ba24","ba26","ba2c"]]]"#,
+            ),
+        ),
+        (
+            r"[ '3390' '3391' '3393' '3396' '7b5e' '7b5f' '7b74' '7b76' 'ba23' 'ba24' 'ba26' 'ba2c' ] ->GEOSHAPE GEOSPLIT SIZE",
+            Ok(r"[3]"),
+        ),
+        (
+            r"[ '07bd' '07bf' '07e8' '07e9' '07ea' '07ec' '76d7' '7782' 'f4f1' 'f4f2' 'f4f3' 'f4f8' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(
+                r#"[[["07bd","07bf","07e8","07e9","07ea","07ec"],["76d7","7782"],["f4f1","f4f2","f4f3","f4f8"]]]"#,
+            ),
+        ),
+        (
+            r"[ '07bd' '07bf' '07e8' '07e9' '07ea' '07ec' '76d7' '7782' 'f4f1' 'f4f2' 'f4f3' 'f4f8' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(
+                r#"[[["07bd","07bf","07e8","07e9","07ea","07ec"],["76d7","7782"],["f4f1","f4f2","f4f3","f4f8"]]]"#,
+            ),
+        ),
+        (
+            r"[ '07bd' '07bf' '07e8' '07e9' '07ea' '07ec' '76d7' '7782' 'f4f1' 'f4f2' 'f4f3' 'f4f8' ] ->GEOSHAPE GEOSPLIT SIZE",
+            Ok(r"[3]"),
+        ),
+        (
+            r"[ 'a0e7' 'a0ed' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["a0e7","a0ed"]]]"#),
+        ),
+        (
+            r"[ 'a0e7' 'a0ed' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["a0e7","a0ed"]]]"#),
+        ),
+    ]);
+}
+
+#[test]
+fn split_3() {
+    check(&[
+        (r"[ 'a0e7' 'a0ed' ] ->GEOSHAPE GEOSPLIT SIZE", Ok(r"[1]")),
+        (
+            r"[ '2669' '266a' '266b' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["2669","266a","266b"]]]"#),
+        ),
+        (
+            r"[ '2669' '266a' '266b' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["2669","266a","266b"]]]"#),
+        ),
+        (
+            r"[ '2669' '266a' '266b' ] ->GEOSHAPE GEOSPLIT SIZE",
+            Ok(r"[1]"),
+        ),
+        (
+            r"[ '0367' 'ece6' 'ecec' 'eced' 'f3bb' 'f904' 'f905' 'f910' 'f911' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["0367"],["ece6","ecec","eced"],["f3bb","f904","f905","f910","f911"]]]"#),
+        ),
+        (
+            r"[ '0367' 'ece6' 'ecec' 'eced' 'f3bb' 'f904' 'f905' 'f910' 'f911' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["0367"],["ece6","ecec","eced"],["f3bb","f904","f905","f910","f911"]]]"#),
+        ),
+        (
+            r"[ '0367' 'ece6' 'ecec' 'eced' 'f3bb' 'f904' 'f905' 'f910' 'f911' ] ->GEOSHAPE GEOSPLIT SIZE",
+            Ok(r"[3]"),
+        ),
+        (
+            r"[ '85cf' '85e5' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["85cf","85e5"]]]"#),
+        ),
+        (
+            r"[ '85cf' '85e5' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["85cf","85e5"]]]"#),
+        ),
+        (r"[ '85cf' '85e5' ] ->GEOSHAPE GEOSPLIT SIZE", Ok(r"[1]")),
+        (
+            r"[ '3801' 'e2e0' 'e2e1' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["3801"],["e2e0","e2e1"]]]"#),
+        ),
+        (
+            r"[ '3801' 'e2e' 'e2e1' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["3801"],["e2e","e2e1"]]]"#),
+        ),
+        (
+            r"[ '3801' 'e2e0' 'e2e1' ] ->GEOSHAPE GEOSPLIT SIZE",
+            Ok(r"[2]"),
+        ),
+        (
+            r"[ '21f6' '21f7' '24a2' '6d32' '6d33' '6d38' '6d39' '6d3b' 'c2a7' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["21f6","21f7","24a2"],["6d32","6d33","6d38","6d39","6d3b"],["c2a7"]]]"#),
+        ),
+        (
+            r"[ '21f6' '21f7' '24a' '6d32' '6d33' '6d38' '6d39' '6d3b' 'c2a7' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["24a","21f6","21f7"],["6d32","6d33","6d38","6d39","6d3b"],["c2a7"]]]"#),
+        ),
+        (
+            r"[ '21f6' '21f7' '24a2' '6d32' '6d33' '6d38' '6d39' '6d3b' 'c2a7' ] ->GEOSHAPE GEOSPLIT SIZE",
+            Ok(r"[3]"),
+        ),
+        (
+            r"[ '37b2' '37b3' '37b6' 'aa82' 'aa83' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["37b2","37b3","37b6"],["aa82","aa83"]]]"#),
+        ),
+        (
+            r"[ '37b' 'aa8' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["37b"],["aa8"]]]"#),
+        ),
+        (
+            r"[ '37b2' '37b3' '37b6' 'aa82' 'aa83' ] ->GEOSHAPE GEOSPLIT SIZE",
+            Ok(r"[2]"),
+        ),
+        (
+            r"[ '1bb9' '1bbb' '1bbe' '223a' '2285' '2286' '2287' '2290' 'bb5f' 'bb75' 'be0a' 'be20' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(
+                r#"[[["1bb9","1bbb","1bbe"],["223a","2285","2286","2287","2290"],["bb5f","bb75","be0a","be20"]]]"#,
+            ),
+        ),
+        (
+            r"[ '1bb9' '1bbb' '1bbe' '223a' '228' '2285' '2287' '2290' 'bb5f' 'bb75' 'be0' 'be2' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(
+                r#"[[["1bb9","1bbb","1bbe"],["228","223a","2285","2287","2290"],["be0","be2","bb5f","bb75"]]]"#,
+            ),
+        ),
+        (
+            r"[ '1bb9' '1bbb' '1bbe' '223a' '2285' '2286' '2287' '2290' 'bb5f' 'bb75' 'be0a' 'be20' ] ->GEOSHAPE GEOSPLIT SIZE",
+            Ok(r"[3]"),
+        ),
+        (
+            r"[ '65d9' '65db' '65dc' '65dd' '7082' '7088' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["65d9","65db","65dc","65dd","7082","7088"]]]"#),
+        ),
+        (
+            r"[ '65d' '65d9' '65db' '65dd' '7082' '7088' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["65d","65d9","65db","65dd","7082","7088"]]]"#),
+        ),
+        (
+            r"[ '65d9' '65db' '65dc' '65dd' '7082' '7088' ] ->GEOSHAPE GEOSPLIT SIZE",
+            Ok(r"[1]"),
+        ),
+        (
+            r"[ '3448' '344a' '6f48' '6f4a' '6f60' 'fa2e' 'fa2f' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["3448","344a"],["6f48","6f4a","6f60"],["fa2e","fa2f"]]]"#),
+        ),
+        (
+            r"[ '344' '3448' '6f48' '6f4a' '6f60' 'fa2' 'fa2e' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["344","3448"],["6f48","6f4a","6f60"],["fa2","fa2e"]]]"#),
+        ),
+        (
+            r"[ '3448' '344a' '6f48' '6f4a' '6f60' 'fa2e' 'fa2f' ] ->GEOSHAPE GEOSPLIT SIZE",
+            Ok(r"[3]"),
+        ),
+        (
+            r"[ '6d84' '927a' '927b' '927e' '927f' '92d0' '92d1' '93d8' '93d9' '93db' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(
+                r#"[[["6d84"],["927a","927b","927e","927f","92d0","92d1"],["93d8","93d9","93db"]]]"#,
+            ),
+        ),
+        (
+            r"[ '6d8' '927a' '927b' '927e' '927f' '92d0' '92d1' '93d' '93db' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["6d8"],["927a","927b","927e","927f","92d0","92d1"],["93d","93db"]]]"#),
+        ),
+        (
+            r"[ '6d84' '927a' '927b' '927e' '927f' '92d0' '92d1' '93d8' '93d9' '93db' ] ->GEOSHAPE GEOSPLIT SIZE",
+            Ok(r"[3]"),
+        ),
+        (
+            r"[ '2111' '2113' '2114' '2116' '2119' '211c' '211e' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["2111","2113","2114","2116","2119","211c","211e"]]]"#),
+        ),
+        (
+            r"[ '2111' '2113' '2114' '2116' '2119' '211c' '211e' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["2111","2113","2114","2116","2119","211c","211e"]]]"#),
+        ),
+        (
+            r"[ '2111' '2113' '2114' '2116' '2119' '211c' '211e' ] ->GEOSHAPE GEOSPLIT SIZE",
+            Ok(r"[1]"),
+        ),
+        (
+            r"[ '002a9' '002aa' '002ab' 'ca63b' 'ca691' 'ca693' 'ca696' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["002a9","002aa","002ab"],["ca63b","ca691","ca693","ca696"]]]"#),
+        ),
+        (
+            r"[ '002a9' '002aa' '002ab' 'ca63' 'ca69' 'ca693' 'ca696' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["002a9","002aa","002ab"],["ca63","ca69","ca693","ca696"]]]"#),
+        ),
+        (
+            r"[ '002a9' '002aa' '002ab' 'ca63b' 'ca691' 'ca693' 'ca696' ] ->GEOSHAPE GEOSPLIT SIZE",
+            Ok(r"[2]"),
+        ),
+        (
+            r"[ '410bd' '8bc78' '8bc7a' '959a9' '959ab' '959ae' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["410bd"],["8bc78","8bc7a"],["959a9","959ab","959ae"]]]"#),
+        ),
+        (
+            r"[ '410bd' '8bc78' '8bc7a' '959a9' '959ab' '959ae' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["410bd"],["8bc78","8bc7a"],["959a9","959ab","959ae"]]]"#),
+        ),
+        (
+            r"[ '410bd' '8bc78' '8bc7a' '959a9' '959ab' '959ae' ] ->GEOSHAPE GEOSPLIT SIZE",
+            Ok(r"[3]"),
+        ),
+        (
+            r"[ 'cb038' 'cb039' 'cb03a' 'cb03b' 'ec265' 'ec266' 'ec267' 'ec26c' 'ec270' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(
+                r#"[[["cb038","cb039","cb03a","cb03b"],["ec265","ec266","ec267","ec26c","ec270"]]]"#,
+            ),
+        ),
+        (
+            r"[ 'cb03' 'cb038' 'cb03a' 'cb03b' 'ec26' 'ec266' 'ec267' 'ec270' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["cb03","cb038","cb03a","cb03b"],["ec26","ec266","ec267","ec270"]]]"#),
+        ),
+        (
+            r"[ 'cb038' 'cb039' 'cb03a' 'cb03b' 'ec265' 'ec266' 'ec267' 'ec26c' 'ec270' ] ->GEOSHAPE GEOSPLIT SIZE",
+            Ok(r"[2]"),
+        ),
+        (
+            r"[ '06bd4' '398b8' '4dcb5' '4dcb7' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["06bd4"],["398b8"],["4dcb5","4dcb7"]]]"#),
+        ),
+        (
+            r"[ '06bd4' '398b8' '4dcb5' '4dcb7' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["06bd4"],["398b8"],["4dcb5","4dcb7"]]]"#),
+        ),
+        (
+            r"[ '06bd4' '398b8' '4dcb5' '4dcb7' ] ->GEOSHAPE GEOSPLIT SIZE",
+            Ok(r"[3]"),
+        ),
+        (
+            r"[ '1e303' '1e304' '1e306' '1e30c' '8563b' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["1e303","1e304","1e306","1e30c"],["8563b"]]]"#),
+        ),
+        (
+            r"[ '1e30' '1e303' '1e304' '1e30c' '8563' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["8563"],["1e30","1e303","1e304","1e30c"]]]"#),
+        ),
+        (
+            r"[ '1e303' '1e304' '1e306' '1e30c' '8563b' ] ->GEOSHAPE GEOSPLIT SIZE",
+            Ok(r"[2]"),
+        ),
+        (
+            r"[ '53de8' '53de9' 'c936a' 'c936b' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["53de8","53de9"],["c936a","c936b"]]]"#),
+        ),
+        (
+            r"[ '53de' '53de9' 'c936' 'c936a' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["53de","53de9"],["c936","c936a"]]]"#),
+        ),
+        (
+            r"[ '53de8' '53de9' 'c936a' 'c936b' ] ->GEOSHAPE GEOSPLIT SIZE",
+            Ok(r"[2]"),
+        ),
+        (
+            r"[ 'a5865' 'a5867' 'a5a99' 'a5a9b' 'd25c7' 'd25d2' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["a5865","a5867"],["a5a99","a5a9b"],["d25c7","d25d2"]]]"#),
+        ),
+        (
+            r"[ 'a586' 'a5865' 'a5a9' 'a5a99' 'd25c7' 'd25d' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["a586","a5865"],["a5a9","a5a99"],["d25d","d25c7"]]]"#),
+        ),
+        (
+            r"[ 'a5865' 'a5867' 'a5a99' 'a5a9b' 'd25c7' 'd25d2' ] ->GEOSHAPE GEOSPLIT SIZE",
+            Ok(r"[3]"),
+        ),
+        (
+            r"[ '07046' '07047' '14d7a' '14dd0' '83e0d' '83e18' '83e19' '83e1a' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["07046","07047"],["14d7a","14dd0"],["83e0d","83e18","83e19","83e1a"]]]"#),
+        ),
+        (
+            r"[ '0704' '07047' '14d7a' '14dd0' '83e0d' '83e1' '83e1a' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["0704","07047"],["14d7a","14dd0"],["83e1","83e0d","83e1a"]]]"#),
+        ),
+        (
+            r"[ '07046' '07047' '14d7a' '14dd0' '83e0d' '83e18' '83e19' '83e1a' ] ->GEOSHAPE GEOSPLIT SIZE",
+            Ok(r"[3]"),
+        ),
+        (
+            r"[ '346e2' '346e3' '346e6' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["346e2","346e3","346e6"]]]"#),
+        ),
+        (
+            r"[ '346e2' '346e3' '346e6' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["346e2","346e3","346e6"]]]"#),
+        ),
+        (
+            r"[ '346e2' '346e3' '346e6' ] ->GEOSHAPE GEOSPLIT SIZE",
+            Ok(r"[1]"),
+        ),
+        (
+            r"[ '559fd' '55ca2' '55ca8' '9d27f' '9d2d5' '9d32a' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["559fd","55ca2","55ca8"],["9d27f","9d2d5","9d32a"]]]"#),
+        ),
+        (
+            r"[ '559f' '55ca' '55ca2' '9d27f' '9d2d5' '9d32a' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["559f","55ca","55ca2"],["9d27f","9d2d5","9d32a"]]]"#),
+        ),
+        (
+            r"[ '559fd' '55ca2' '55ca8' '9d27f' '9d2d5' '9d32a' ] ->GEOSHAPE GEOSPLIT SIZE",
+            Ok(r"[2]"),
+        ),
+        (
+            r"[ '36533' '36534' '36536' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["36533","36534","36536"]]]"#),
+        ),
+        (
+            r"[ '3653' '36533' '36536' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["3653","36533","36536"]]]"#),
+        ),
+        (
+            r"[ '36533' '36534' '36536' ] ->GEOSHAPE GEOSPLIT SIZE",
+            Ok(r"[1]"),
+        ),
+        (
+            r"[ '7ff1e' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["7ff1e"]]]"#),
+        ),
+        (
+            r"[ '7ff1' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["7ff1"]]]"#),
+        ),
+        (r"[ '7ff1e' ] ->GEOSHAPE GEOSPLIT SIZE", Ok(r"[1]")),
+        (
+            r"[ '07af1' '07af3' '07af4' '0f8aa' '323a7' '323ac' '323ad' '323ae' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["07af1","07af3","07af4"],["0f8aa"],["323a7","323ac","323ad","323ae"]]]"#),
+        ),
+        (
+            r"[ '07af' '07af1' '0f8aa' '323a7' '323ac' '323ad' '323ae' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["07af","07af1"],["0f8aa"],["323a7","323ac","323ad","323ae"]]]"#),
+        ),
+        (
+            r"[ '07af1' '07af3' '07af4' '0f8aa' '323a7' '323ac' '323ad' '323ae' ] ->GEOSHAPE GEOSPLIT SIZE",
+            Ok(r"[3]"),
+        ),
+        (
+            r"[ 'c4a42' 'c4a48' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["c4a42","c4a48"]]]"#),
+        ),
+        (
+            r"[ 'c4a4' 'c4a42' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["c4a4","c4a42"]]]"#),
+        ),
+        (r"[ 'c4a42' 'c4a48' ] ->GEOSHAPE GEOSPLIT SIZE", Ok(r"[1]")),
+        (
+            r"[ '8519c8' '8519c9' '8519cc' 'e9eb1b' 'e9eb1e' 'e9eb31' 'e9eb34' 'e9eb36' 'e9eb37' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(
+                r#"[[["8519c8","8519c9","8519cc"],["e9eb1b","e9eb1e","e9eb31","e9eb34","e9eb36","e9eb37"]]]"#,
+            ),
+        ),
+        (
+            r"[ '8519c' '8519c9' '8519cc' 'e9eb1' 'e9eb3' 'e9eb36' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["8519c","8519c9","8519cc"],["e9eb1","e9eb3","e9eb36"]]]"#),
+        ),
+        (
+            r"[ '8519c8' '8519c9' '8519cc' 'e9eb1b' 'e9eb1e' 'e9eb31' 'e9eb34' 'e9eb36' 'e9eb37' ] ->GEOSHAPE GEOSPLIT SIZE",
+            Ok(r"[2]"),
+        ),
+        (
+            r"[ 'b5df97' 'b5df9d' 'b5dfc1' 'b5dfc2' 'b5dfc3' 'b5dfc8' 'd1591d' 'd1591f' 'd1594a' 'd1594b' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(
+                r#"[[["b5df97","b5df9d","b5dfc1","b5dfc2","b5dfc3","b5dfc8"],["d1591d","d1591f","d1594a","d1594b"]]]"#,
+            ),
+        ),
+        (
+            r"[ 'b5df97' 'b5df9d' 'b5dfc' 'b5dfc1' 'b5dfc8' 'd1591d' 'd1591f' 'd1594' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["b5dfc","b5df97","b5df9d","b5dfc1","b5dfc8"],["d1594","d1591d","d1591f"]]]"#),
+        ),
+        (
+            r"[ 'b5df97' 'b5df9d' 'b5dfc1' 'b5dfc2' 'b5dfc3' 'b5dfc8' 'd1591d' 'd1591f' 'd1594a' 'd1594b' ] ->GEOSHAPE GEOSPLIT SIZE",
+            Ok(r"[2]"),
+        ),
+        (
+            r"[ 'e4b978' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["e4b978"]]]"#),
+        ),
+        (
+            r"[ 'e4b978' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["e4b978"]]]"#),
+        ),
+        (r"[ 'e4b978' ] ->GEOSHAPE GEOSPLIT SIZE", Ok(r"[1]")),
+        (
+            r"[ '53d77f' 'a36a99' 'a36a9c' 'a36a9d' 'a36a9f' 'a36ab4' 'a36ab5' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["53d77f"],["a36a99","a36a9c","a36a9d","a36a9f","a36ab4","a36ab5"]]]"#),
+        ),
+        (
+            r"[ '53d77' 'a36a9' 'a36a99' 'a36a9f' 'a36ab4' 'a36ab5' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["53d77"],["a36a9","a36a99","a36a9f","a36ab4","a36ab5"]]]"#),
+        ),
+        (
+            r"[ '53d77f' 'a36a99' 'a36a9c' 'a36a9d' 'a36a9f' 'a36ab4' 'a36ab5' ] ->GEOSHAPE GEOSPLIT SIZE",
+            Ok(r"[2]"),
+        ),
+        (
+            r"[ 'a40cad' 'a40caf' 'a40cb8' 'a40e04' 'a40e05' 'cb4f6f' 'cb4f7a' 'cb4fc4' 'cb4fc5' 'cb4fd0' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(
+                r#"[[["a40cad","a40caf","a40cb8","a40e04","a40e05"],["cb4f6f","cb4f7a","cb4fc4","cb4fc5","cb4fd0"]]]"#,
+            ),
+        ),
+        (
+            r"[ 'a40cad' 'a40caf' 'a40cb8' 'a40e04' 'a40e05' 'cb4f6f' 'cb4f7' 'cb4fc' 'cb4fd0' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(
+                r#"[[["a40cad","a40caf","a40cb8","a40e04","a40e05"],["cb4f7","cb4fc","cb4f6f","cb4fd0"]]]"#,
+            ),
+        ),
+        (
+            r"[ 'a40cad' 'a40caf' 'a40cb8' 'a40e04' 'a40e05' 'cb4f6f' 'cb4f7a' 'cb4fc4' 'cb4fc5' 'cb4fd0' ] ->GEOSHAPE GEOSPLIT SIZE",
+            Ok(r"[2]"),
+        ),
+        (
+            r"[ '60e856' '60e85c' '83d501' '83d503' '83d504' '83d506' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["60e856","60e85c"],["83d501","83d503","83d504","83d506"]]]"#),
+        ),
+        (
+            r"[ '60e856' '60e85c' '83d50' '83d503' '83d504' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["60e856","60e85c"],["83d50","83d503","83d504"]]]"#),
+        ),
+        (
+            r"[ '60e856' '60e85c' '83d501' '83d503' '83d504' '83d506' ] ->GEOSHAPE GEOSPLIT SIZE",
+            Ok(r"[2]"),
+        ),
+        (
+            r"[ '4fed95' '4fed97' '4fed9d' '4fedc8' '4fedca' 'cbd85c' 'cbd85d' 'cbd85e' 'cbd85f' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(
+                r#"[[["4fed95","4fed97","4fed9d","4fedc8","4fedca"],["cbd85c","cbd85d","cbd85e","cbd85f"]]]"#,
+            ),
+        ),
+        (
+            r"[ '4fed95' '4fed97' '4fed9d' '4fedc8' '4fedca' 'cbd85c' 'cbd85d' 'cbd85e' 'cbd85f' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(
+                r#"[[["4fed95","4fed97","4fed9d","4fedc8","4fedca"],["cbd85c","cbd85d","cbd85e","cbd85f"]]]"#,
+            ),
+        ),
+        (
+            r"[ '4fed95' '4fed97' '4fed9d' '4fedc8' '4fedca' 'cbd85c' 'cbd85d' 'cbd85e' 'cbd85f' ] ->GEOSHAPE GEOSPLIT SIZE",
+            Ok(r"[2]"),
+        ),
+        (
+            r"[ '78aefc' '78aefe' '7a0454' '7a0455' '7a0456' 'b1aaa4' 'b1aaa6' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["78aefc","78aefe","7a0454","7a0455","7a0456"],["b1aaa4","b1aaa6"]]]"#),
+        ),
+        (
+            r"[ '78aefc' '78aefe' '7a045' '7a0454' 'b1aaa4' 'b1aaa6' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["7a045","78aefc","78aefe","7a0454"],["b1aaa4","b1aaa6"]]]"#),
+        ),
+        (
+            r"[ '78aefc' '78aefe' '7a0454' '7a0455' '7a0456' 'b1aaa4' 'b1aaa6' ] ->GEOSHAPE GEOSPLIT SIZE",
+            Ok(r"[2]"),
+        ),
+    ]);
+}
+
+#[test]
+fn split_4() {
+    check(&[
+        (
+            r"[ 'f3df2f' 'f3df85' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["f3df2f","f3df85"]]]"#),
+        ),
+        (
+            r"[ 'f3df2f' 'f3df8' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["f3df8","f3df2f"]]]"#),
+        ),
+        (
+            r"[ 'f3df2f' 'f3df85' ] ->GEOSHAPE GEOSPLIT SIZE",
+            Ok(r"[1]"),
+        ),
+        (
+            r"[ '1724db' '1724f1' '1724f2' '1724f3' '1724f6' 'f258bf' 'f25a15' 'f25a17' 'f25a1d' 'f25a40' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(
+                r#"[[["1724db","1724f1","1724f2","1724f3","1724f6"],["f258bf","f25a15","f25a17","f25a1d","f25a40"]]]"#,
+            ),
+        ),
+        (
+            r"[ '1724d' '1724f' '1724f2' '1724f3' '1724f6' 'f258bf' 'f25a15' 'f25a17' 'f25a1d' 'f25a40' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(
+                r#"[[["1724d","1724f","1724f2","1724f3","1724f6"],["f258bf","f25a15","f25a17","f25a1d","f25a40"]]]"#,
+            ),
+        ),
+        (
+            r"[ '1724db' '1724f1' '1724f2' '1724f3' '1724f6' 'f258bf' 'f25a15' 'f25a17' 'f25a1d' 'f25a40' ] ->GEOSHAPE GEOSPLIT SIZE",
+            Ok(r"[2]"),
+        ),
+        (
+            r"[ '9f70f4' 'bd483a' 'bd488d' 'bd4890' 'bd4892' 'bd4898' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["9f70f4"],["bd483a","bd488d","bd4890","bd4892","bd4898"]]]"#),
+        ),
+        (
+            r"[ '9f70f4' 'bd483' 'bd488' 'bd4890' 'bd4892' 'bd4898' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["9f70f4"],["bd483","bd488","bd4890","bd4892","bd4898"]]]"#),
+        ),
+        (
+            r"[ '9f70f4' 'bd483a' 'bd488d' 'bd4890' 'bd4892' 'bd4898' ] ->GEOSHAPE GEOSPLIT SIZE",
+            Ok(r"[2]"),
+        ),
+        (
+            r"[ '239047' '23904d' '23904f' '239052' '239065' '3773e7' '3773ed' '3773ef' '3773f2' '3773f8' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(
+                r#"[[["239047","23904d","23904f","239052","239065"],["3773e7","3773ed","3773ef","3773f2","3773f8"]]]"#,
+            ),
+        ),
+        (
+            r"[ '239047' '23904d' '23904f' '239052' '23906' '3773e7' '3773ed' '3773ef' '3773f2' '3773f8' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(
+                r#"[[["23906","239047","23904d","23904f","239052"],["3773e7","3773ed","3773ef","3773f2","3773f8"]]]"#,
+            ),
+        ),
+        (
+            r"[ '239047' '23904d' '23904f' '239052' '239065' '3773e7' '3773ed' '3773ef' '3773f2' '3773f8' ] ->GEOSHAPE GEOSPLIT SIZE",
+            Ok(r"[2]"),
+        ),
+        (
+            r"[ '922ffd' '922fff' '923aaa' '923aab' '929000' '929001' 'dddb4b' 'dddb4e' 'dddb4f' 'dddb58' 'dddb5a' 'dddb70' 'f88436' 'f8843c' 'f8843d' 'f88462' 'f88468' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(
+                r#"[[["922ffd","922fff","923aaa","923aab","929000","929001"],["dddb4b","dddb4e","dddb4f","dddb58","dddb5a","dddb70"],["f88436","f8843c","f8843d","f88462","f88468"]]]"#,
+            ),
+        ),
+        (
+            r"[ '922ff' '922fff' '923aaa' '923aab' '92900' '929001' 'dddb4' 'dddb4b' 'dddb4f' 'dddb58' 'dddb5a' 'dddb70' 'f88436' 'f8843c' 'f8843d' 'f88462' 'f88468' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(
+                r#"[[["922ff","92900","922fff","923aaa","923aab","929001"],["dddb4","dddb4b","dddb4f","dddb58","dddb5a","dddb70"],["f88436","f8843c","f8843d","f88462","f88468"]]]"#,
+            ),
+        ),
+        (
+            r"[ '922ffd' '922fff' '923aaa' '923aab' '929000' '929001' 'dddb4b' 'dddb4e' 'dddb4f' 'dddb58' 'dddb5a' 'dddb70' 'f88436' 'f8843c' 'f8843d' 'f88462' 'f88468' ] ->GEOSHAPE GEOSPLIT SIZE",
+            Ok(r"[3]"),
+        ),
+        (
+            r"[ '08f06b' '08f06e' '08f0c1' 'a0c425' 'a0c427' 'a0c430' 'a0c432' 'a0c438' 'a0c439' 'ad42ce' 'ad42e1' 'ad42e4' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(
+                r#"[[["08f06b","08f06e","08f0c1"],["a0c425","a0c427","a0c430","a0c432","a0c438","a0c439"],["ad42ce","ad42e1","ad42e4"]]]"#,
+            ),
+        ),
+        (
+            r"[ '08f06' '08f06e' '08f0c1' 'a0c42' 'a0c427' 'a0c430' 'a0c432' 'a0c438' 'a0c439' 'ad42c' 'ad42e' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(
+                r#"[[["ad42c","ad42e"],["08f06","08f06e","08f0c1"],["a0c42","a0c427","a0c430","a0c432","a0c438","a0c439"]]]"#,
+            ),
+        ),
+        (
+            r"[ '08f06b' '08f06e' '08f0c1' 'a0c425' 'a0c427' 'a0c430' 'a0c432' 'a0c438' 'a0c439' 'ad42ce' 'ad42e1' 'ad42e4' ] ->GEOSHAPE GEOSPLIT SIZE",
+            Ok(r"[3]"),
+        ),
+        (
+            r"[ '53b436a8' '53b436aa' '53b436ab' 'a7604416' 'a7604417' 'a760441c' 'ebfe132a' 'ebfe132b' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(
+                r#"[[["53b436a8","53b436aa","53b436ab"],["a7604416","a7604417","a760441c"],["ebfe132a","ebfe132b"]]]"#,
+            ),
+        ),
+        (
+            r"[ '53b436a' '53b436a8' 'a760441' 'a760441c' 'ebfe132a' 'ebfe132b' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["53b436a8","53b436a"],["a760441c","a760441"],["ebfe132a","ebfe132b"]]]"#),
+        ),
+        (
+            r"[ '53b436a8' '53b436aa' '53b436ab' 'a7604416' 'a7604417' 'a760441c' 'ebfe132a' 'ebfe132b' ] ->GEOSHAPE GEOSPLIT SIZE",
+            Ok(r"[3]"),
+        ),
+        (
+            r"[ '1c06c357' '1c06c35c' '1c06c35d' '1c06c602' '1c06c608' '536b940b' '536b940e' '536b9421' '536b9423' '536b9424' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(
+                r#"[[["1c06c357","1c06c35c","1c06c35d","1c06c602","1c06c608"],["536b940b","536b940e","536b9421","536b9423","536b9424"]]]"#,
+            ),
+        ),
+        (
+            r"[ '1c06c35' '1c06c357' '1c06c35c' '1c06c602' '1c06c608' '536b940' '536b940b' '536b9421' '536b9423' '536b9424' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(
+                r#"[[["1c06c357","1c06c35c","1c06c602","1c06c608","1c06c35"],["536b940b","536b9421","536b9423","536b9424","536b940"]]]"#,
+            ),
+        ),
+        (
+            r"[ '1c06c357' '1c06c35c' '1c06c35d' '1c06c602' '1c06c608' '536b940b' '536b940e' '536b9421' '536b9423' '536b9424' ] ->GEOSHAPE GEOSPLIT SIZE",
+            Ok(r"[2]"),
+        ),
+        (
+            r"[ '06ee779a' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["06ee779a"]]]"#),
+        ),
+        (
+            r"[ '06ee779a' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["06ee779a"]]]"#),
+        ),
+        (r"[ '06ee779a' ] ->GEOSHAPE GEOSPLIT SIZE", Ok(r"[1]")),
+        (
+            r"[ '1bea5dbc' '1bea5dbe' 'ae044362' 'ae044363' 'ae044366' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["1bea5dbc","1bea5dbe"],["ae044362","ae044363","ae044366"]]]"#),
+        ),
+        (
+            r"[ '1bea5dbc' '1bea5dbe' 'ae044362' 'ae044363' 'ae044366' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["1bea5dbc","1bea5dbe"],["ae044362","ae044363","ae044366"]]]"#),
+        ),
+        (
+            r"[ '1bea5dbc' '1bea5dbe' 'ae044362' 'ae044363' 'ae044366' ] ->GEOSHAPE GEOSPLIT SIZE",
+            Ok(r"[2]"),
+        ),
+        (
+            r"[ 'eeb13b8e' 'eeb13ba1' 'eeb13ba4' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["eeb13b8e","eeb13ba1","eeb13ba4"]]]"#),
+        ),
+        (
+            r"[ 'eeb13b8e' 'eeb13ba' 'eeb13ba4' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["eeb13b8e","eeb13ba4","eeb13ba"]]]"#),
+        ),
+        (
+            r"[ 'eeb13b8e' 'eeb13ba1' 'eeb13ba4' ] ->GEOSHAPE GEOSPLIT SIZE",
+            Ok(r"[1]"),
+        ),
+        (
+            r"[ '1d50309a' 'dfc505e9' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["1d50309a"],["dfc505e9"]]]"#),
+        ),
+        (
+            r"[ '1d50309a' 'dfc505e9' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["1d50309a"],["dfc505e9"]]]"#),
+        ),
+        (
+            r"[ '1d50309a' 'dfc505e9' ] ->GEOSHAPE GEOSPLIT SIZE",
+            Ok(r"[2]"),
+        ),
+        (
+            r"[ 'b9ad' 'b9b' 'b9ae1' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["b9b","b9ad"],["b9ae1"]]]"#),
+        ),
+        (
+            r"[ 'b9ad1' 'b9a' 'b9ae' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["b9a","b9ae","b9ad1"]]]"#),
+        ),
+        (
+            r"[ 'b9ad' 'b9ac' 'b9' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["b9","b9ac","b9ad"]]]"#),
+        ),
+        (
+            r"[ 'b9' 'b9a' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["b9","b9a"]]]"#),
+        ),
+        (
+            r"[ 'b9' 'b9a0' 'b9c' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["b9","b9c","b9a0"]]]"#),
+        ),
+        (
+            r"[ 'b9ad1ee0c5' 'b9ad1ee0c4' 'b9ad1ee0c7' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["b9ad1ee0c4","b9ad1ee0c5","b9ad1ee0c7"]]]"#),
+        ),
+        (
+            r"[ 'b9ad1ee0c5a9e7' 'b9ad1ee0c5a9e5' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["b9ad1ee0c5a9e5","b9ad1ee0c5a9e7"]]]"#),
+        ),
+        (
+            r"[ 'b9a0' 'b9a1' 'b9a2' 'b9a3' 'b9a4' 'b9a5' 'b9a6' 'b9a7' 'b9a8' 'b9a9' 'b9aa' 'b9ab' 'b9ac' 'b9ad' 'b9ae' 'b9af' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(
+                r#"[[["b9a0","b9a1","b9a2","b9a3","b9a4","b9a5","b9a6","b9a7","b9a8","b9a9","b9aa","b9ab","b9ac","b9ad","b9ae","b9af"]]]"#,
+            ),
+        ),
+        (
+            r"[ 'b9a0' 'b9a1' 'b9a2' 'b9a3' 'b9a4' 'b9aa' 'b9ab' 'b9ac' 'b9ad' 'b9ae' 'b9af' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(
+                r#"[[["b9a0","b9a1","b9a2","b9a3","b9a4"],["b9aa","b9ab","b9ac","b9ad","b9ae","b9af"]]]"#,
+            ),
+        ),
+        (
+            r"[ 'b9a0' 'b9a2' 'b9a4' 'b9a6' 'b9a8' 'b9aa' 'b9ac' 'b9ae' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["b9a0","b9a2","b9a8","b9aa"],["b9a4","b9a6","b9ac","b9ae"]]]"#),
+        ),
+        (
+            r"[ 'b9a0' 'b9a3' 'b9a6' 'b9a9' 'b9ac' 'b9af' ] ->GEOSHAPE GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["b9a0"],["b9a3","b9a6","b9a9","b9ac"],["b9af"]]]"#),
+        ),
+        (
+            r"@A GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["b9ad"]]]"#),
+        ),
+        (
+            r"@M GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["f"],["a1"],["b8"],["b9ad"]]]"#),
+        ),
+        (
+            r"@D GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(r#"[[["b9ad1ee0","b9ad1ee1"],["f01234567"]]]"#),
+        ),
+        (r"@E GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP", Ok(r"[[]]")),
+        (
+            r"@K GEOSPLIT <% DROP T GEOSHAPE-> %> LMAP",
+            Ok(
+                r#"[[["b9a0","b9a1","b9a2","b9a3","b9a4","b9a5","b9a6","b9a7","b9a8","b9a9","b9aa","b9ab","b9ac","b9ad","b9ae","b9af"]]]"#,
+            ),
+        ),
+        (r"@K15 GEOSPLIT SIZE", Ok(r"[1]")),
+        (r"1 GEOSPLIT", Err(r"GEOSPLIT operates on a GEOSHAPE.")),
+        (r"'a' GEOSPLIT", Err(r"GEOSPLIT operates on a GEOSHAPE.")),
+        (r"GEOSPLIT", Err(r"Empty stack.")),
+        (r"NULL GEOSPLIT", Err(r"GEOSPLIT operates on a GEOSHAPE.")),
+        (r"[ @A ] GEOSPLIT", Err(r"GEOSPLIT operates on a GEOSHAPE.")),
+        (r"@A GEOSPLIT TYPEOF", Ok(r#"["LIST"]"#)),
+        (r"@A GEOSPLIT 0 GET TYPEOF", Ok(r#"["GEOSHAPE"]"#)),
+    ]);
+}
+
+#[test]
+fn bbox() {
+    check(&[
+        (r"NEWGTS BBOX", Ok(r"[[-90.0,-180.0,90.0,180.0]]")),
+        (
+            r"NEWGTS 1 48.85 2.35 NaN 1 ADDVALUE BBOX",
+            Ok(r"[[48.8499999884516,2.3499999940395355,48.8499999884516,2.3499999940395355]]"),
+        ),
+        (
+            r"NEWGTS 1 NaN NaN NaN 1 ADDVALUE BBOX",
+            Ok(r"[[-90.0,-180.0,90.0,180.0]]"),
+        ),
+        (
+            r"NEWGTS 1 48.85 2.35 NaN 1 ADDVALUE 2 -33.9 151.2 NaN 2 ADDVALUE BBOX",
+            Ok(r"[[-33.900000024586916,2.3499999940395355,48.8499999884516,151.1999999731779]]"),
+        ),
+        (
+            r"NEWGTS 1 48.85 2.35 NaN 1 ADDVALUE 2 NaN NaN NaN 2 ADDVALUE 3 -33.9 151.2 NaN 3 ADDVALUE BBOX",
+            Ok(r"[[-33.900000024586916,2.3499999940395355,48.8499999884516,151.1999999731779]]"),
+        ),
+        (
+            r"NEWGTS 1 NaN NaN NaN 1 ADDVALUE 2 NaN NaN NaN 2 ADDVALUE 3 48.85 2.35 NaN 3 ADDVALUE BBOX",
+            Ok(r"[[48.8499999884516,2.3499999940395355,48.8499999884516,2.3499999940395355]]"),
+        ),
+        (
+            r"NEWGTS 1 90.0 180.0 NaN 1 ADDVALUE BBOX",
+            Ok(r"[[89.99999995809048,0.0,89.99999995809048,0.0]]"),
+        ),
+        (
+            r"NEWGTS 1 -90.0 -180.0 NaN 1 ADDVALUE BBOX",
+            Ok(r"[[-90.0,-180.0,-90.0,-180.0]]"),
+        ),
+        (
+            r"NEWGTS 1 0.0 0.0 NaN 1 ADDVALUE BBOX",
+            Ok(r"[[0.0,0.0,0.0,0.0]]"),
+        ),
+        (
+            r"NEWGTS 1 -90.0 -180.0 NaN 1 ADDVALUE 2 90.0 180.0 NaN 2 ADDVALUE BBOX",
+            Ok(r"[[-90.0,-180.0,89.99999995809048,0.0]]"),
+        ),
+        (
+            r"NEWGTS 1 10.0 -20.0 NaN 1 ADDVALUE 2 -30.0 40.0 NaN 2 ADDVALUE 3 50.0 -60.0 NaN 3 ADDVALUE BBOX",
+            Ok(r"[[-30.00000001396984,-60.00000002793968,49.99999999534339,39.9999999627471]]"),
+        ),
+        (
+            r"NEWGTS 3 10.0 -20.0 NaN 1 ADDVALUE 1 -30.0 40.0 NaN 2 ADDVALUE 2 50.0 -60.0 NaN 3 ADDVALUE BBOX",
+            Ok(r"[[-30.00000001396984,-60.00000002793968,49.99999999534339,39.9999999627471]]"),
+        ),
+        (
+            r"NEWGTS 1 10.0 -20.0 NaN 1 ADDVALUE 1 DROP",
+            Ok(
+                r#"[{"c":"","l":{},"a":{},"la":0,"v":[[1,9.999999990686774,-20.00000006519258,1]]}]"#,
+            ),
+        ),
+        (
+            r"NEWGTS 1 10.0 20.0 1 1 ADDVALUE BBOX",
+            Ok(r"[[9.999999990686774,19.99999998137355,9.999999990686774,19.99999998137355]]"),
+        ),
+        (
+            r"NEWGTS 1 10.0 20.0 1 1 ADDVALUE 1 -10.0 -20.0 1 1 ADDVALUE BBOX",
+            Ok(r"[[-10.00000003259629,-20.00000006519258,9.999999990686774,19.99999998137355]]"),
+        ),
+        (
+            r"[ NEWGTS NEWGTS 1 10.0 20.0 NaN 1 ADDVALUE ] BBOX",
+            Ok(
+                r"[[[-90.0,-180.0,90.0,180.0],[9.999999990686774,19.99999998137355,9.999999990686774,19.99999998137355]]]",
+            ),
+        ),
+        (r"[ NEWGTS ] BBOX", Ok(r"[[[-90.0,-180.0,90.0,180.0]]]")),
+        (r"[ ] BBOX", Ok(r"[[]]")),
+        (
+            r"[ NEWGTS 1 ] BBOX",
+            Err(r"BBOX can only operate on Geo Time Series instances."),
+        ),
+        (
+            r"[ 1 NEWGTS ] BBOX",
+            Err(r"BBOX can only operate on Geo Time Series instances."),
+        ),
+        (
+            r"[ NEWGTS 'a' ] BBOX",
+            Err(r"BBOX can only operate on Geo Time Series instances."),
+        ),
+        (
+            r"1 BBOX",
+            Err(r"BBOX can only operate on Geo Time Series instances."),
+        ),
+        (
+            r"'a' BBOX",
+            Err(r"BBOX can only operate on Geo Time Series instances."),
+        ),
+        (r"BBOX", Err(r"Empty stack.")),
+        (
+            r"NULL BBOX",
+            Err(r"BBOX can only operate on Geo Time Series instances."),
+        ),
+        (
+            r"@A BBOX",
+            Err(r"BBOX can only operate on Geo Time Series instances."),
+        ),
+        (
+            r"NEWGTS 1 48.85 2.35 NaN 1 ADDVALUE BBOX TYPEOF",
+            Ok(r#"["LIST"]"#),
+        ),
+        (r"NEWGTS 1 48.85 2.35 NaN 1 ADDVALUE BBOX SIZE", Ok(r"[4]")),
+        (
+            r"NEWGTS 1 48.85 2.35 NaN 1 ADDVALUE DUP BBOX DROP SIZE",
+            Ok(r"[1]"),
+        ),
+        (
+            r"NEWGTS 1 48.85 2.35 NaN 1 ADDVALUE [ SWAP ] BBOX",
+            Ok(r"[[[48.8499999884516,2.3499999940395355,48.8499999884516,2.3499999940395355]]]"),
+        ),
+        (
+            r"NEWGTS 1 48.85 2.35 NaN 1 ADDVALUE NEWGTS 1 -48.85 -2.35 NaN 1 ADDVALUE 2 ->LIST BBOX",
+            Ok(
+                r"[[[48.8499999884516,2.3499999940395355,48.8499999884516,2.3499999940395355],[-48.850000030361116,-2.3500000778585672,-48.850000030361116,-2.3500000778585672]]]",
+            ),
+        ),
     ]);
 }

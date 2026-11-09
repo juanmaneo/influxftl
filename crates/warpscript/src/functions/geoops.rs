@@ -2,8 +2,8 @@
 // Derived from Warp 10 (Copyright 2018-2026 SenX S.A.S., Apache-2.0), ported to Rust and modified.
 
 //! Operations on `GEOSHAPE`s: `GEO.UNION`, `GEO.INTERSECTION`, `GEO.DIFFERENCE`,
-//! `GEO.INTERSECTS`, `GEO.WITHIN`, `GEO.OPTIMIZE`, `GEO.NORMALIZE`, `GEOSHIFT` and
-//! `GEO.REGEXP`.
+//! `GEO.INTERSECTS`, `GEO.WITHIN`, `GEO.OPTIMIZE`, `GEO.NORMALIZE`, `GEOSHIFT`,
+//! `GEO.REGEXP`, `GEOSPLIT` and `BBOX`.
 
 use std::rc::Rc;
 
@@ -12,6 +12,7 @@ use super::args::fail;
 use super::gts::gts_or_list;
 use crate::error::{Error, Result};
 use crate::geoshape::GeoShape;
+use crate::geoxp::from_geoxp_point;
 use crate::gts::{GeoTimeSerie, NO_LOCATION};
 use crate::stack::Stack;
 use crate::value::Value;
@@ -33,6 +34,8 @@ pub const FUNCTIONS: &[(&str, Entry)] = &[
     ("GEO.NORMALIZE", Entry::Stack(normalize)),
     ("GEOSHIFT", Entry::Stack(geoshift)),
     ("GEO.REGEXP", Entry::Stack(georegexp)),
+    ("GEOSPLIT", Entry::Stack(geosplit)),
+    ("BBOX", Entry::Stack(bbox)),
 ];
 
 /// A `GEOSHAPE` stack object.
@@ -254,4 +257,51 @@ fn georegexp(stack: &mut Stack) -> Result<()> {
     };
     stack.push(Value::from(shape.regexp()?));
     Ok(())
+}
+
+/// `GEOSPLIT`: the clusters of touching cells of a shape, as a list of shapes.
+fn geosplit(stack: &mut Stack) -> Result<()> {
+    let Value::GeoShape(shape) = stack.pop()? else {
+        return Err(fail("GEOSPLIT", "operates on a GEOSHAPE."));
+    };
+    let shapes = shape.split()?.into_iter().map(shape_value).collect();
+    stack.push(Value::list(shapes));
+    Ok(())
+}
+
+/// `GTSHelper.bbox`: `[ minlat minlon maxlat maxlon ]` of the locations of a series, the
+/// whole world for a series without locations array.
+fn bounding_box(gts: &GeoTimeSerie) -> Value {
+    let Some(locations) = &gts.locations else {
+        return Value::list(vec![
+            Value::Double(-90.0),
+            Value::Double(-180.0),
+            Value::Double(90.0),
+            Value::Double(180.0),
+        ]);
+    };
+    let (mut min_lat, mut min_lon, mut max_lat, mut max_lon) =
+        (90.0f64, 180.0f64, -90.0f64, -180.0f64);
+    for location in locations
+        .iter()
+        .take(gts.size())
+        .filter(|l| **l != NO_LOCATION)
+    {
+        let (lat, lon) = from_geoxp_point(*location);
+        min_lat = min_lat.min(lat);
+        max_lat = max_lat.max(lat);
+        min_lon = min_lon.min(lon);
+        max_lon = max_lon.max(lon);
+    }
+    Value::list(vec![
+        Value::Double(min_lat),
+        Value::Double(min_lon),
+        Value::Double(max_lat),
+        Value::Double(max_lon),
+    ])
+}
+
+/// `BBOX`: the bounding box of the locations of a series or of each series of a list.
+fn bbox(stack: &mut Stack) -> Result<()> {
+    gts_or_list(stack, "BBOX", |gts| bounding_box(&gts.borrow()))
 }

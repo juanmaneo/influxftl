@@ -210,7 +210,7 @@ The project is Apache-2.0 and must stay redistributable under it (see `README.md
 
 ## 9. Status and next steps
 
-2010 / 2193 functions are ported (`docs/FUNCTIONS.md`; the inventory includes the names
+2012 / 2193 functions are ported (`docs/FUNCTIONS.md`; the inventory includes the names
 Warp 10 registers through `Builder`s and constants). The Geo Time Series model, the
 `GTSHelper` transforms (time, datapoints, statistics), `BUCKETIZE` and `MAP` with the
 shared aggregators (`sum`, `mean`, `min`, `max`, `first`, `last`, `count`, `and`, `or`,
@@ -329,7 +329,8 @@ the order that unlocks the most:
    `GEOUNPACK`; DIVERGENCES §28.
    `GEOSHAPE` operations (`functions/geoops.rs`, `GeoXPShapeHelper` and the `Coverage` set
    algebra): `GEO.UNION`, `GEO.INTERSECTION`, `GEO.DIFFERENCE`, `GEO.INTERSECTS`,
-   `GEO.WITHIN`, `GEO.OPTIMIZE`, `GEO.NORMALIZE`, `GEOSHIFT`, `GEO.REGEXP`. The scan of
+   `GEO.WITHIN`, `GEO.OPTIMIZE`, `GEO.NORMALIZE`, `GEOSHIFT`, `GEO.REGEXP`, `GEOSPLIT`
+   (`CoverageHelper.clusters`), and `BBOX`. The scan of
    `Coverage.optimize` that counts the last cell with the group before it is kept, so the
    shapes it optimizes are the ones of Warp 10.
 6. **Geo** (`GeoXPLib` shapes, `HAVERSINE`, `LOCATIONOFFSET`, `GEO.*`), **datastore**
