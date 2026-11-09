@@ -13,8 +13,10 @@
 
 pub mod compat;
 pub mod fault;
+pub mod format;
 pub mod math;
 pub mod stack;
+pub mod text;
 pub mod time;
 
 use std::sync::Arc;
@@ -23,8 +25,10 @@ use std::{fmt, io};
 use self::fault::{
     ArithmeticError, BoundsError, IllegalArgumentError, NumberFormatError, ResourceError,
 };
+use self::format::FormatError;
 use self::math::MathError;
 use self::stack::StackError;
+use self::text::TextError;
 use self::time::TimeError;
 use crate::encoder::EncoderError;
 use crate::finite::NotFinite;
@@ -180,6 +184,29 @@ pub enum Error {
         /// What it expects.
         requirement: String,
     },
+    /// A failure of a format specifier.
+    #[error(transparent)]
+    Format(#[from] FormatError),
+    /// A text that could not be parsed (`java.text.ParseException`): the message and the
+    /// offset of the error.
+    #[error("{message}")]
+    Parse {
+        /// The message.
+        message: String,
+        /// The offset of the error in the parsed text.
+        offset: usize,
+    },
+    /// A failure wrapped by a `WarpScriptException` built from it alone (`new
+    /// WarpScriptException(cause)`): its message is the `toString()` of the cause.
+    #[error("{}: {} ({source})", compat::exception_class(source), source.message())]
+    Wrapped {
+        /// The failure wrapped.
+        #[source]
+        source: Box<Error>,
+    },
+    /// A failure of a text or binary function.
+    #[error(transparent)]
+    Text(#[from] TextError),
     /// A failure of a time function.
     #[error(transparent)]
     Time(#[from] TimeError),
@@ -244,6 +271,21 @@ impl Error {
         }
     }
 
+    /// The failure of parsing a text, at `offset`.
+    pub fn parse(message: impl Into<String>, offset: usize) -> Self {
+        Error::Parse {
+            message: message.into(),
+            offset,
+        }
+    }
+
+    /// `new WarpScriptException(cause)`: `cause` wrapped.
+    pub fn wrapped(cause: impl Into<Error>) -> Self {
+        Error::Wrapped {
+            source: Box::new(cause.into()),
+        }
+    }
+
     /// The failure of a `pop` on an empty stack.
     pub fn empty_stack() -> Self {
         Error::EmptyStack
@@ -298,6 +340,10 @@ impl Error {
             | Error::Usage { .. }
             | Error::Stack(_)
             | Error::Time(_)
+            | Error::Text(_)
+            | Error::Format(_)
+            | Error::Parse { .. }
+            | Error::Wrapped { .. }
             | Error::NotFinite(_) => false,
         }
     }
@@ -306,6 +352,9 @@ impl Error {
     pub fn message(&self) -> String {
         match self {
             Error::Context { context, .. } => context.clone(),
+            Error::Wrapped { source } => {
+                format!("{}: {}", compat::exception_class(source), source.message())
+            }
             other => other.to_string(),
         }
     }
@@ -313,7 +362,7 @@ impl Error {
     /// The failure this one reports with more context.
     pub fn cause(&self) -> Option<&Error> {
         match self {
-            Error::Context { source, .. } => Some(source),
+            Error::Context { source, .. } | Error::Wrapped { source } => Some(source),
             _ => None,
         }
     }

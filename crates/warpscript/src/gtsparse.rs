@@ -9,7 +9,7 @@ use indexmap::IndexMap;
 use crate::encoder::{EncodedValue, GtsEncoder};
 use crate::error::Error;
 use crate::gts::{NO_ELEVATION, NO_LOCATION};
-use crate::selector::parse_labels_selectors;
+use crate::selector::{SelectorFailure, parse_selector_tokens};
 use crate::valueparse::{ParseError, parse_value};
 
 /// One parsed line: the datapoint and, unless it continues the previous series, the class
@@ -51,17 +51,10 @@ fn text(s: &[u16]) -> String {
 
 /// `GTSHelper.parseLabels`: `name=value` pairs (a `~` selector is an error at offset 0).
 fn parse_labels(s: &str) -> Result<IndexMap<String, String>, LineError> {
-    let selectors = parse_labels_selectors(s).map_err(|err| {
-        if err.is_runtime() {
-            LineError::Other(err)
-        } else {
-            // `ParseException(token, 0)`, wrapped by the selector parser.
-            let message = err.message();
-            let token = message
-                .strip_prefix("java.text.ParseException: ")
-                .unwrap_or(&message);
-            parse_error(token, 0)
-        }
+    let selectors = parse_selector_tokens(s).map_err(|failure| match failure {
+        // `ParseException(token, 0)`, wrapped by the selector parser.
+        SelectorFailure::Token(token) => parse_error(&token, 0),
+        SelectorFailure::Decode(err) => LineError::Other(err),
     })?;
     let mut labels = IndexMap::new();
     for (name, value) in selectors {
@@ -79,7 +72,7 @@ fn labels_at(s: &str, offset: usize, message: &str) -> Result<IndexMap<String, S
         LineError::Parse(pe) => LineError::Parse(ParseError {
             message: message.to_owned(),
             offset: pe.offset + offset,
-            cause: Some(Error::new(pe.message)),
+            cause: Some(Error::parse(pe.message, pe.offset)),
         }),
         other @ LineError::Other(_) => other,
     })

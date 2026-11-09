@@ -3,7 +3,8 @@
 
 //! Binary-to-text encodings used by WarpScript: order preserving base64 (`OPB64`), hex.
 
-use crate::error::{Error, Result};
+use crate::error::Result;
+use crate::error::text::TextError;
 
 /// Alphabet of the order preserving base64 encoding (ASCII order is preserved).
 pub(crate) const OPB64_ALPHABET: &[u8; 64] =
@@ -54,11 +55,9 @@ pub fn opb64_decode(text: &str) -> Result<Vec<u8>> {
     let mut acc: u32 = 0;
     let mut nbits = 0;
     for (idx, &c) in bytes.iter().enumerate() {
-        let v = opb64_value(c).ok_or_else(|| {
-            Error::new(format!(
-                "Invalid OPB64 character '{}' at offset {idx}.",
-                c as char
-            ))
+        let v = opb64_value(c).ok_or(TextError::InvalidOpb64Character {
+            c: c as char,
+            offset: idx,
         })?;
         acc = (acc << 6) | u32::from(v);
         nbits += 6;
@@ -86,14 +85,14 @@ pub fn hex_encode(data: &[u8]) -> String {
 /// Java messages.
 pub fn hex_decode(text: &str) -> Result<Vec<u8>> {
     if !text.encode_utf16().count().is_multiple_of(2) {
-        return Err(Error::new("Odd number of hexadecimal digits."));
+        return Err(TextError::OddHexDigits.into());
     }
     let mut out = Vec::with_capacity(text.len() / 2);
     let mut digits = text.chars().map(|c| c.to_digit(16));
     while let Some(hi) = digits.next() {
         match (hi, digits.next().flatten()) {
             (Some(hi), Some(lo)) => out.push((hi * 16 + lo) as u8),
-            _ => return Err(Error::new("Invalid hex character.")),
+            _ => return Err(TextError::InvalidHexCharacter.into()),
         }
     }
     Ok(out)

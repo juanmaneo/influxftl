@@ -229,10 +229,7 @@ fn gethook(stack: &mut Stack) -> Result<()> {
         return Err(fail(NAME, "expects a read token below the hook name."));
     };
     // `new WarpScriptException(ee)`: the message is the cause's `toString()`.
-    Err(Error::with_cause(
-        "io.warp10.script.WarpScriptException: Invalid token.",
-        invalid_token(),
-    ))
+    Err(Error::wrapped(invalid_token()))
 }
 
 /// `KVSTORE` / `DUMP`: a write token on top of the stack.

@@ -49,18 +49,36 @@ fn split(s: &str, separator: char) -> Vec<&str> {
     s.split(separator).collect()
 }
 
-/// The `ParseException` of a selector token, wrapped like `new WarpScriptException(pe)`.
-fn parse_exception(token: &str) -> Error {
-    Error::with_cause(
-        format!("java.text.ParseException: {token}"),
-        Error::runtime("java.text.ParseException", token),
-    )
+/// Why a labels selector is refused.
+#[derive(Debug)]
+pub(crate) enum SelectorFailure {
+    /// A token with neither `=` nor `~` (a `ParseException` of the token).
+    Token(String),
+    /// A name or value that is not percent-encoded text.
+    Decode(Error),
+}
+
+impl From<SelectorFailure> for Error {
+    /// A token is wrapped like `new WarpScriptException(pe)`.
+    fn from(failure: SelectorFailure) -> Self {
+        match failure {
+            SelectorFailure::Token(token) => Error::wrapped(Error::parse(token, 0)),
+            SelectorFailure::Decode(err) => err,
+        }
+    }
 }
 
 /// `GTSHelper.parseLabelsSelectors`: `name=value` / `name~regexp` tokens separated by commas
 /// (names and values percent-encoded) to an ordered map from the name to `=value` or
 /// `~regexp`. Blank tokens are skipped; a token with neither `=` nor `~` is an error.
 pub fn parse_labels_selectors(selectors: &str) -> Result<IndexMap<String, String>> {
+    Ok(parse_selector_tokens(selectors)?)
+}
+
+/// [`parse_labels_selectors`], telling the refused token from the undecodable one.
+pub(crate) fn parse_selector_tokens(
+    selectors: &str,
+) -> core::result::Result<IndexMap<String, String>, SelectorFailure> {
     let mut result = IndexMap::new();
     for token in split(selectors, ',') {
         let token = token.trim_matches(|c: char| c <= ' ');
@@ -72,12 +90,13 @@ pub fn parse_labels_selectors(selectors: &str) -> Result<IndexMap<String, String
         } else if token.contains('~') {
             '~'
         } else {
-            return Err(parse_exception(token));
+            return Err(SelectorFailure::Token(token.to_owned()));
         };
         // Sic: only the first two subtokens are used (`a=b=c` selects `a=b`).
         let subtokens = split(token, separator);
-        let name = url_decode(subtokens[0])?;
-        let value = url_decode(subtokens.get(1).copied().unwrap_or_default())?;
+        let name = url_decode(subtokens[0]).map_err(SelectorFailure::Decode)?;
+        let value = url_decode(subtokens.get(1).copied().unwrap_or_default())
+            .map_err(SelectorFailure::Decode)?;
         result.insert(name, format!("{separator}{value}"));
     }
     Ok(result)

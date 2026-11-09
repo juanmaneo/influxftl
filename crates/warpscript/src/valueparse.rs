@@ -54,7 +54,7 @@ impl ParseError {
     pub fn into_error(self) -> Error {
         match self.cause {
             Some(cause) => Error::with_cause(self.message, cause),
-            None => Error::new(self.message),
+            None => Error::parse(self.message, self.offset),
         }
     }
 }
@@ -146,7 +146,7 @@ fn java_parse_long(s: &str) -> Result<i64, Error> {
     if is_long(s) {
         parse_long(s)
     } else {
-        Err(Error::new(format!("For input string: \"{s}\"")))
+        Err(NumberFormatError::InvalidInput(s.to_owned()).into())
     }
 }
 
@@ -265,17 +265,13 @@ fn parse_decimal(s: &str) -> Result<Decimal, Error> {
         } else if c == '.' && !dot {
             dot = true;
         } else if c == '.' {
-            return Err(Error::new(
-                "Character array contains more than one decimal point.",
-            ));
+            return Err(NumberFormatError::MultipleDecimalPoints.into());
         } else {
-            return Err(Error::new(format!(
-                "Character {c} is neither a decimal digit number, decimal point, nor \"e\" notation exponential mark."
-            )));
+            return Err(NumberFormatError::InvalidDecimalCharacter(c).into());
         }
     }
     if !digits {
-        return Err(Error::new("No digits found."));
+        return Err(NumberFormatError::NoDigits.into());
     }
     Ok(Decimal {
         unscaled: if negative { -unscaled } else { unscaled },

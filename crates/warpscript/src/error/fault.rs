@@ -160,11 +160,11 @@ pub enum BoundsError {
     #[error("Range [{start}, {end}) out of bounds for length {length}")]
     StringRange {
         /// The first index of the range.
-        start: usize,
+        start: i64,
         /// The end of the range.
-        end: usize,
+        end: i64,
         /// The number of characters.
-        length: usize,
+        length: i64,
     },
 }
 

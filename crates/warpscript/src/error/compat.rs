@@ -28,6 +28,9 @@ pub fn exception_class(err: &Error) -> &'static str {
         | Error::Usage { .. }
         | Error::Stack(_)
         | Error::Time(_)
+        | Error::Text(_)
+        | Error::Format(_)
+        | Error::Wrapped { .. }
         | Error::NotFinite(_) => WARP_SCRIPT_EXCEPTION,
         Error::Thrift(err) => thrift_class(err),
         Error::Encoder(err) => encoder_class(err),
@@ -39,6 +42,7 @@ pub fn exception_class(err: &Error) -> &'static str {
         Error::IllegalArgument(_) => "java.lang.IllegalArgumentException",
         Error::ResourceExhausted(_) => "java.lang.OutOfMemoryError",
         Error::Immutable => "java.lang.UnsupportedOperationException",
+        Error::Parse { .. } => "java.text.ParseException",
         Error::Return => "io.warp10.script.WarpScriptReturnException",
         Error::Stop(_) => "io.warp10.script.WarpScriptStopException",
         Error::Break => "io.warp10.script.WarpScriptLoopBreakException",

@@ -8,7 +8,8 @@
 //! * [`parse_long`], [`parse_radix_wrapping`] — `Long.valueOf` / `BigInteger.longValue()`;
 //! * [`url_encode`] / [`url_decode`] — `WarpURLEncoder` / `WarpURLDecoder`.
 
-use crate::error::{Error, Result};
+use crate::error::Result;
+use crate::error::fault::NumberFormatError;
 
 /// `Double.toString(d)`: shortest digits that round-trip, plain notation in `[1e-3, 1e7)`,
 /// computerized scientific notation (`d.dddE±n`) otherwise, always at least one fractional digit.
@@ -169,7 +170,7 @@ pub fn parse_long(s: &str) -> Result<i64> {
     let digits = trimmed.strip_prefix('+').unwrap_or(trimmed);
     digits
         .parse::<i64>()
-        .map_err(|_| Error::new(format!("For input string: \"{s}\"")))
+        .map_err(|_| NumberFormatError::InvalidInput(s.to_owned()).into())
 }
 
 /// `Double.valueOf(s)` for a string accepted by [`is_double`].
@@ -184,7 +185,7 @@ pub fn parse_double(s: &str) -> Result<f64> {
         "Infinity" => f64::INFINITY,
         other => other
             .parse::<f64>()
-            .map_err(|_| Error::new(format!("For input string: \"{s}\"")))?,
+            .map_err(|_| NumberFormatError::InvalidInput(s.to_owned()))?,
     };
     Ok(if trimmed.starts_with('-') {
         -magnitude
@@ -203,13 +204,13 @@ pub fn parse_radix_wrapping(digits: &str, radix: u32) -> Result<i64> {
         _ => (false, 0),
     };
     if start >= bytes.len() {
-        return Err(Error::new(format!("For input string: \"{digits}\"")));
+        return Err(NumberFormatError::InvalidInput(digits.to_owned()).into());
     }
     let mut acc: u64 = 0;
     for &b in &bytes[start..] {
         let digit = (b as char)
             .to_digit(radix)
-            .ok_or_else(|| Error::new(format!("For input string: \"{digits}\"")))?;
+            .ok_or_else(|| NumberFormatError::InvalidInput(digits.to_owned()))?;
         acc = acc
             .wrapping_mul(u64::from(radix))
             .wrapping_add(u64::from(digit));

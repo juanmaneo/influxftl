@@ -15,7 +15,8 @@ use std::iter::repeat_n;
 
 use super::Entry;
 use super::args::{fail, fail_with_cause};
-use crate::error::{Error, Result, compat};
+use crate::error::format::FormatError;
+use crate::error::{Error, Result};
 use crate::format::java_double_to_string;
 use crate::stack::Stack;
 use crate::value::Value;
@@ -131,7 +132,7 @@ impl Flags {
             _ => &mut self.previous,
         };
         if std::mem::replace(slot, true) {
-            return Err(Error::new(format!("Flags = '{c}'")));
+            return Err(FormatError::DuplicateFlag(c).into());
         }
         Ok(())
     }
@@ -213,12 +214,12 @@ fn rules(conversion: char) -> &'static [Rule] {
 
 /// `FormatFlagsConversionMismatchException`: `Conversion = s, Flags = #`.
 fn mismatch(flag: char, conversion: char) -> Error {
-    Error::new(format!("Conversion = {conversion}, Flags = {flag}"))
+    FormatError::FlagMismatch { conversion, flag }.into()
 }
 
 /// `IllegalFormatFlagsException`: `Flags = '+ '`.
 fn illegal_flags(flags: Flags) -> Error {
-    Error::new(format!("Flags = '{}'", flags.to_java_string()))
+    FormatError::IllegalFlags(flags.to_java_string()).into()
 }
 
 impl Spec {
@@ -276,7 +277,7 @@ impl Spec {
             },
             Rule::NeedWidth(list) => {
                 if self.width.is_none() && list.iter().any(|&c| flags.has(c)) {
-                    Err(Error::new(self.text()))
+                    Err(FormatError::MissingWidth(self.text()).into())
                 } else {
                     Ok(())
                 }
@@ -300,11 +301,11 @@ impl Spec {
                 }
             }
             Rule::NoPrecision => match self.precision {
-                Some(precision) => Err(Error::new(precision.to_string())),
+                Some(precision) => Err(FormatError::IllegalPrecision(precision).into()),
                 None => Ok(()),
             },
             Rule::NoWidth => match self.width {
-                Some(width) => Err(Error::new(width.to_string())),
+                Some(width) => Err(FormatError::IllegalWidth(width).into()),
                 None => Ok(()),
             },
             Rule::DateTime => {
@@ -312,7 +313,7 @@ impl Spec {
                 if "HIklMSLNpzZsQBbhAaCYyjmdeRTrDFc".contains(suffix) {
                     Ok(())
                 } else {
-                    Err(Error::new(format!("Conversion = 't{suffix}'")))
+                    Err(FormatError::UnknownDateTimeConversion(suffix).into())
                 }
             }
         }
@@ -325,7 +326,7 @@ impl Spec {
 /// conversion character (when there is one) or the first character after the `%`.
 fn parse_spec(format: &str, start: usize) -> Result<(Spec, usize)> {
     let bytes = format.as_bytes();
-    let unknown = |c: char| Error::new(format!("Conversion = '{c}'"));
+    let unknown = |c: char| FormatError::UnknownConversion(c).into();
     let first = format[start..].chars().next().unwrap_or('%');
     let number = |pos: &mut usize| -> Option<usize> {
         let begin = *pos;
@@ -342,7 +343,7 @@ fn parse_spec(format: &str, start: usize) -> Result<(Spec, usize)> {
         && bytes.get(probe) == Some(&b'$')
     {
         if n == 0 {
-            return Err(Error::new("Illegal format argument index = 0"));
+            return Err(FormatError::ZeroArgumentIndex.into());
         }
         index = Some(n);
         pos = probe + 1;
@@ -393,7 +394,7 @@ fn parse_spec(format: &str, start: usize) -> Result<(Spec, usize)> {
 
 /// `MissingFormatArgumentException`: `Format specifier '%s'`.
 fn missing_argument(spec: &Spec) -> Error {
-    Error::new(format!("Format specifier '{}'", spec.text()))
+    FormatError::MissingArgument(spec.text()).into()
 }
 
 /// `String.format(locale, format, args)`; the error is the message of the
@@ -434,7 +435,7 @@ pub fn java_format(locale: Locale, format: &str, args: &[Value]) -> Result<Strin
         last = Some(index);
         let arg = args.get(index).ok_or_else(|| missing_argument(&spec))?;
         if spec.conversion == 't' {
-            return Err(Error::new("Date/time conversions (%t) are not supported."));
+            return Err(FormatError::DateTimeUnsupported.into());
         }
         out.push_str(&format_arg(locale, &spec, arg)?);
     }
@@ -506,11 +507,11 @@ pub(super) fn java_hash(value: &Value) -> i32 {
 
 /// `IllegalFormatConversionException`: `d != java.lang.Double`.
 fn conversion_error(spec: &Spec, value: &Value) -> Error {
-    Error::new(format!(
-        "{} != {}",
-        spec.conversion,
-        compat::value_class(value.kind())
-    ))
+    FormatError::ConversionMismatch {
+        conversion: spec.conversion,
+        found: value.kind(),
+    }
+    .into()
 }
 
 /// Format one argument with `spec`.

@@ -32,9 +32,11 @@ use super::Entry;
 use super::args::{compute_and_check_index, fail, fail_with_cause, pop_list, pop_long, pop_string};
 use super::math::entropy_error;
 use crate::bitset::BitSet;
+use crate::encoder::EncoderError;
 use crate::encoding::{hex_decode, hex_encode, opb64_decode, opb64_encode};
-use crate::error::fault::IllegalArgumentError;
+use crate::error::fault::{ArithmeticError, BoundsError, IllegalArgumentError};
 use crate::error::stack::StackError;
+use crate::error::text::{RegexFailure, TextError};
 use crate::error::{Error, Result};
 use crate::format::url_encode;
 use crate::stack::Stack;
@@ -167,9 +169,12 @@ fn substring(stack: &mut Stack) -> Result<()> {
             let idx = substring_start(idx, units.len())? as i32;
             let end = n.wrapping_add(idx).min(len);
             if end < idx {
-                return Err(Error::new(format!(
-                    "Range [{idx}, {end}) out of bounds for length {len}"
-                )));
+                return Err(BoundsError::StringRange {
+                    start: i64::from(idx),
+                    end: i64::from(end),
+                    length: i64::from(len),
+                }
+                .into());
             }
             stack.push(String::from_utf16_lossy(&units[idx as usize..end as usize]));
         }
@@ -178,7 +183,7 @@ fn substring(stack: &mut Stack) -> Result<()> {
             let idx = substring_start(idx, bytes.len())? as i32;
             let end = n.wrapping_add(idx).min(len);
             if end < idx {
-                return Err(Error::new(format!("{idx} > {end}")));
+                return Err(TextError::SliceReversed { start: idx, end }.into());
             }
             stack.push(Value::bytes(&bytes[idx as usize..end as usize]));
         }
@@ -211,7 +216,7 @@ fn split(stack: &mut Stack) -> Result<()> {
     let mut top = stack.pop()?;
     let mut limit = usize::MAX;
     if let Value::Long(l) = top {
-        let l = i32::try_from(l).map_err(|_| Error::new("integer overflow"))?;
+        let l = i32::try_from(l).map_err(|_| ArithmeticError::IntegerOverflow)?;
         if l <= 0 {
             return Err(fail(
                 NAME,
@@ -406,7 +411,7 @@ pub(crate) fn base64_decode(text: &str, url_safe: bool) -> Result<Vec<u8>> {
     let trimmed = text.trim_end_matches('=');
     let len = trimmed.encode_utf16().count();
     if len % 4 == 1 {
-        return Err(Error::new(format!("Invalid input length {len}")));
+        return Err(TextError::Base64Length(len).into());
     }
     let (engine, alphabet) = if url_safe {
         (&URL_SAFE_LENIENT, alphabet::URL_SAFE.as_str())
@@ -423,9 +428,9 @@ pub(crate) fn base64_decode(text: &str, url_safe: bool) -> Result<Vec<u8>> {
 /// hexadecimal UTF-16 unit); the crate's own message is kept for any other failure.
 pub(crate) fn base64_decode_error(text: &str, alphabet: &str, err: &base64::DecodeError) -> Error {
     match text.chars().find(|&c| !alphabet.contains(c)) {
-        Some(c) if ('!'..='~').contains(&c) => Error::new(format!("Unrecognized character: {c}")),
-        Some(c) => Error::new(format!("Unrecognized character: 0x{:x}", utf16_lead(c))),
-        None => Error::new(err.to_string()),
+        Some(c) if ('!'..='~').contains(&c) => TextError::Base64Character(c).into(),
+        Some(c) => TextError::Base64CharacterCode(utf16_lead(c)).into(),
+        None => TextError::from(err.clone()).into(),
     }
 }
 
@@ -734,7 +739,7 @@ fn charset_for(name: &str, charset: &str) -> Result<Charset> {
         fail_with_cause(
             name,
             &format!("unsupported encoding '{charset}'"),
-            Error::new(charset),
+            TextError::UnsupportedCharset(charset.to_owned()).into(),
         )
     })
 }
@@ -783,7 +788,7 @@ pub struct CompiledPattern {
 /// The message of a regular expression error (`PatternSyntaxException` and the runtime
 /// limits of the backtracking engine).
 pub(crate) fn regex_error(err: &fancy_regex::Error) -> Error {
-    Error::new(err.to_string())
+    TextError::from(RegexFailure::from(err.clone())).into()
 }
 
 /// Rewrite the Java-only `\Q…\E` quoting into escaped literals (`\E` may be omitted, in
@@ -935,15 +940,13 @@ fn expand_replacement(
         cursor += 1;
         if c == '\\' {
             let Some(&escaped) = replacement.get(cursor) else {
-                return Err(Error::new("character to be escaped is missing"));
+                return Err(TextError::MissingEscaped.into());
             };
             out.push(escaped);
             cursor += 1;
         } else if c == '$' {
             let Some(&next) = replacement.get(cursor) else {
-                return Err(Error::new(
-                    "Illegal group reference: group index is missing",
-                ));
+                return Err(TextError::MissingGroupIndex.into());
             };
             let group = if next == '{' {
                 cursor += 1;
@@ -956,24 +959,22 @@ fn expand_replacement(
                 }
                 let name: String = replacement[start..cursor].iter().collect();
                 if name.is_empty() {
-                    return Err(Error::new("named capturing group has 0 length name"));
+                    return Err(TextError::EmptyGroupName.into());
                 }
                 if replacement.get(cursor) != Some(&'}') {
-                    return Err(Error::new("named capturing group is missing trailing '}'"));
+                    return Err(TextError::UnclosedGroupName.into());
                 }
                 cursor += 1;
                 if name.starts_with(|c: char| c.is_ascii_digit()) {
-                    return Err(Error::new(format!(
-                        "capturing group name {{{name}}} starts with digit character"
-                    )));
+                    return Err(TextError::DigitGroupName(name).into());
                 }
                 regex
                     .capture_names()
                     .position(|n| n == Some(name.as_str()))
-                    .ok_or_else(|| Error::new(format!("No group with name {{{name}}}")))?
+                    .ok_or_else(|| TextError::NoGroupNamed(name.clone()))?
             } else {
                 let Some(first) = next.to_digit(10) else {
-                    return Err(Error::new("Illegal group reference"));
+                    return Err(TextError::IllegalGroupReference.into());
                 };
                 cursor += 1;
                 // The largest legal group number is taken: `$10` is group 10 when it exists,
@@ -990,7 +991,7 @@ fn expand_replacement(
                 group
             };
             if group > group_count {
-                return Err(Error::new(format!("No group {group}")));
+                return Err(TextError::NoGroup(group).into());
             }
             if let Some(m) = caps.get(group) {
                 out.push_str(m.as_str());
@@ -1329,10 +1330,7 @@ fn tolongbytes(stack: &mut Stack) -> Result<()> {
                     return Err(fail_with_cause(
                         NAME,
                         MESSAGE,
-                        Error::new(format!(
-                            "Invalid element type {}, only LONG elements are supported.",
-                            item.type_name()
-                        )),
+                        TextError::LongElementExpected(item.type_name().to_owned()).into(),
                     ));
                 };
                 out.extend_from_slice(&l.to_be_bytes()[skip..]);
@@ -1360,7 +1358,7 @@ fn varint_decode(data: &[u8], pos: &mut usize) -> Result<i64> {
     let mut shift = 0;
     loop {
         let Some(&byte) = data.get(*pos) else {
-            return Err(Error::new("Buffer underflow."));
+            return Err(TextError::RlpBufferUnderflow.into());
         };
         *pos += 1;
         if byte & 0x80 == 0 {
@@ -1369,7 +1367,7 @@ fn varint_decode(data: &[u8], pos: &mut usize) -> Result<i64> {
         value |= u64::from(byte & 0x7F) << shift;
         shift += 7;
         if shift > 63 {
-            return Err(Error::new("Variable length quantity is too long"));
+            return Err(EncoderError::VarintTooLong.into());
         }
     }
 }
@@ -1476,9 +1474,7 @@ fn rlp_encode(value: &Value, out: &mut Vec<u8>) -> Result<()> {
             rlp_string(out, data);
         }
         _ => {
-            return Err(Error::new(
-                "Invalid item type, only LIST, LONG, BYTES and STRING are supported.",
-            ));
+            return Err(TextError::RlpItemType.into());
         }
     }
     Ok(())
@@ -1506,7 +1502,7 @@ fn rlp_byte(data: &[u8], index: usize) -> Result<u8> {
 /// Read a big endian size of `sizebytes` bytes at `offset`.
 fn rlp_size(data: &[u8], offset: &mut usize, sizebytes: usize) -> Result<usize> {
     if sizebytes > 4 {
-        return Err(Error::new("Unable to support size over 2**32."));
+        return Err(TextError::RlpSizeTooLarge.into());
     }
     *offset += 1;
     let mut size = 0usize;
@@ -1521,13 +1517,9 @@ fn rlp_size(data: &[u8], offset: &mut usize, sizebytes: usize) -> Result<usize> 
 /// is an error (Warp 10 would zero-pad it).
 fn rlp_payload<'a>(data: &'a [u8], offset: &mut usize, size: usize) -> Result<&'a [u8]> {
     let end = offset.saturating_add(size);
-    let payload = data.get(*offset..end).ok_or_else(|| {
-        Error::new(format!(
-            "Index {} out of bounds for length {}",
-            end.saturating_sub(1),
-            data.len()
-        ))
-    })?;
+    let payload = data
+        .get(*offset..end)
+        .ok_or_else(|| Error::index_out_of_bounds(end.saturating_sub(1) as i64, data.len()))?;
     *offset = end;
     Ok(payload)
 }

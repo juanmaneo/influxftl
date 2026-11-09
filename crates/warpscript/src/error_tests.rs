@@ -1135,3 +1135,185 @@ fn time_failures_have_the_wording_of_warp10() {
         assert!(!error.is_runtime(), "{message}");
     }
 }
+
+#[test]
+fn text_failures_have_the_wording_of_warp10() {
+    use super::error::text::{RegexFailure, TextError};
+
+    let regex = fancy_regex::Regex::new("(").expect_err("an unclosed group is a syntax error");
+    let failures = [
+        (
+            TextError::SliceReversed { start: 5, end: 2 },
+            "5 > 2".to_owned(),
+        ),
+        (
+            TextError::Base64Length(5),
+            "Invalid input length 5".to_owned(),
+        ),
+        (
+            TextError::Base64Character('!'),
+            "Unrecognized character: !".to_owned(),
+        ),
+        (
+            TextError::Base64CharacterCode(0xe9),
+            "Unrecognized character: 0xe9".to_owned(),
+        ),
+        (
+            TextError::InvalidOpb64Character { c: '#', offset: 3 },
+            "Invalid OPB64 character '#' at offset 3.".to_owned(),
+        ),
+        (
+            TextError::OddHexDigits,
+            "Odd number of hexadecimal digits.".to_owned(),
+        ),
+        (
+            TextError::InvalidHexCharacter,
+            "Invalid hex character.".to_owned(),
+        ),
+        (
+            TextError::UnsupportedCharset("KLINGON".to_owned()),
+            "KLINGON".to_owned(),
+        ),
+        (
+            TextError::MissingEscaped,
+            "character to be escaped is missing".to_owned(),
+        ),
+        (
+            TextError::MissingGroupIndex,
+            "Illegal group reference: group index is missing".to_owned(),
+        ),
+        (
+            TextError::EmptyGroupName,
+            "named capturing group has 0 length name".to_owned(),
+        ),
+        (
+            TextError::UnclosedGroupName,
+            "named capturing group is missing trailing '}'".to_owned(),
+        ),
+        (
+            TextError::DigitGroupName("1a".to_owned()),
+            "capturing group name {1a} starts with digit character".to_owned(),
+        ),
+        (
+            TextError::NoGroupNamed("x".to_owned()),
+            "No group with name {x}".to_owned(),
+        ),
+        (
+            TextError::IllegalGroupReference,
+            "Illegal group reference".to_owned(),
+        ),
+        (TextError::NoGroup(3), "No group 3".to_owned()),
+        (
+            TextError::LongElementExpected("STRING".to_owned()),
+            "Invalid element type STRING, only LONG elements are supported.".to_owned(),
+        ),
+        (
+            TextError::RlpBufferUnderflow,
+            "Buffer underflow.".to_owned(),
+        ),
+        (
+            TextError::RlpItemType,
+            "Invalid item type, only LIST, LONG, BYTES and STRING are supported.".to_owned(),
+        ),
+        (
+            TextError::RlpSizeTooLarge,
+            "Unable to support size over 2**32.".to_owned(),
+        ),
+        (
+            TextError::Regex(RegexFailure::from(regex.clone())),
+            regex.to_string(),
+        ),
+    ];
+    for (failure, message) in failures {
+        let error = Error::from(failure);
+        assert_eq!(error.to_string(), message);
+        assert_eq!(
+            exception_class(&error),
+            "io.warp10.script.WarpScriptException"
+        );
+        assert!(!error.is_runtime(), "{message}");
+    }
+    assert_eq!(
+        RegexFailure::from(regex.clone()),
+        RegexFailure::from(regex.clone())
+    );
+    let other = fancy_regex::Regex::new("[").expect_err("an unclosed class is a syntax error");
+    assert_ne!(RegexFailure::from(regex.clone()), RegexFailure::from(other));
+    assert!(std::error::Error::source(&RegexFailure::from(regex)).is_none());
+    let base64 = base64::Engine::decode(&base64::engine::general_purpose::STANDARD, "a")
+        .expect_err("one character is not base64");
+    let error = Error::from(TextError::from(base64.clone()));
+    assert_eq!(error.to_string(), base64.to_string());
+}
+
+#[test]
+fn format_failures_have_the_wording_of_the_jdk() {
+    use super::error::format::FormatError;
+
+    let failures = [
+        (FormatError::DuplicateFlag('-'), "Flags = '-'"),
+        (
+            FormatError::FlagMismatch {
+                conversion: 's',
+                flag: '#',
+            },
+            "Conversion = s, Flags = #",
+        ),
+        (FormatError::IllegalFlags("+ ".to_owned()), "Flags = '+ '"),
+        (FormatError::MissingWidth("%-d".to_owned()), "%-d"),
+        (FormatError::IllegalPrecision(2), "2"),
+        (FormatError::IllegalWidth(5), "5"),
+        (
+            FormatError::UnknownDateTimeConversion('q'),
+            "Conversion = 'tq'",
+        ),
+        (FormatError::UnknownConversion('y'), "Conversion = 'y'"),
+        (
+            FormatError::ZeroArgumentIndex,
+            "Illegal format argument index = 0",
+        ),
+        (
+            FormatError::MissingArgument("%s".to_owned()),
+            "Format specifier '%s'",
+        ),
+        (
+            FormatError::DateTimeUnsupported,
+            "Date/time conversions (%t) are not supported.",
+        ),
+        (
+            FormatError::ConversionMismatch {
+                conversion: 'd',
+                found: ValueKind::Double,
+            },
+            "d != java.lang.Double",
+        ),
+    ];
+    for (failure, message) in failures {
+        let error = Error::from(failure);
+        assert_eq!(error.to_string(), message);
+        assert_eq!(
+            exception_class(&error),
+            "io.warp10.script.WarpScriptException"
+        );
+        assert!(!error.is_runtime(), "{message}");
+    }
+}
+
+#[test]
+fn parse_and_wrapped_failures() {
+    let parse = Error::parse("tok", 3);
+    assert_eq!(parse.to_string(), "tok");
+    assert_eq!(exception_class(&parse), "java.text.ParseException");
+    assert!(!parse.is_runtime());
+    let wrapped = Error::wrapped(parse.clone());
+    assert_eq!(wrapped.to_string(), "java.text.ParseException: tok (tok)");
+    assert_eq!(wrapped.message(), "java.text.ParseException: tok");
+    assert_eq!(
+        exception_class(&wrapped),
+        "io.warp10.script.WarpScriptException"
+    );
+    assert!(!wrapped.is_runtime());
+    assert_eq!(wrapped.cause(), Some(&parse));
+    assert_eq!(wrapped.root_cause(), &parse);
+    assert!(wrapped.source().is_some());
+}
