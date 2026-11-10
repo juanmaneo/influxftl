@@ -210,7 +210,7 @@ The project is Apache-2.0 and must stay redistributable under it (see `README.md
 
 ## 9. Status and next steps
 
-2031 / 2193 functions are ported (`docs/FUNCTIONS.md`; the inventory includes the names
+2032 / 2193 functions are ported (`docs/FUNCTIONS.md`; the inventory includes the names
 Warp 10 registers through `Builder`s and constants). The Geo Time Series model, the
 `GTSHelper` transforms (time, datapoints, statistics), `BUCKETIZE` and `MAP` with the
 shared aggregators (`sum`, `mean`, `min`, `max`, `first`, `last`, `count`, `and`, `or`,
@@ -314,7 +314,7 @@ the order that unlocks the most:
    `INV`, `->VEC`, `VEC->`, and `+ - * /` on them.
    Platform functions (`functions/platform.rs`, DIVERGENCES §24): the manager switches,
    `WF*`, `TOKENINFO`, `GETHOOK`, `KVSTORE`, `KVLOAD`, `DUMP`, `RUNNER*`, `ACCEL.*`,
-   `LOGMSG`, `NOLOG`, `LOGINIT`, `WSAUDIT`, `WSAUDITMODE`, `SETMACROCONFIG`, `PIGSCHEMA`,
+   `LOGMSG`, `NOLOG`, `LOGINIT`, `WSAUDIT`, `WSAUDITMODE`, `SETMACROCONFIG`, `PIGSCHEMA`, `EVERY`,
    `[[]]`.
    `PARSE` (`gtsparse.rs`, the GTS input format of `GTSHelper.parse`, reusable by `UPDATE`).
    `IMMUTABLE` (frozen copies, DIVERGENCES §25).

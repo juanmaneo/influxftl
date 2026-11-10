@@ -13,7 +13,7 @@
 use indexmap::IndexMap;
 
 use super::Entry;
-use super::args::fail;
+use super::args::{fail, pop_macro};
 use crate::error::platform::PlatformError;
 use crate::error::{Error, Result};
 use crate::stack::Stack;
@@ -53,6 +53,7 @@ pub const FUNCTIONS: &[(&str, Entry)] = &[
     ("WF.ADDREPO", Entry::Stack(wf_addrepo)),
     ("WF.GETREPOS", Entry::Stack(wf_getrepos)),
     ("WF.SETREPOS", Entry::Stack(wf_setrepos)),
+    ("EVERY", Entry::Stack(every)),
     ("TOKENINFO", Entry::Stack(tokeninfo)),
     ("GETHOOK", Entry::Stack(gethook)),
     ("KVSTORE", Entry::Stack(|s| write_token(s, "KVSTORE"))),
@@ -264,6 +265,24 @@ fn runner_nonce(stack: &mut Stack, name: &str) -> Result<()> {
     };
     stack.push(Value::Null);
     Ok(())
+}
+
+/// The stack attribute `EVERY` records the repetition delay of a runner script in.
+const EVERY_STACK_ATTRIBUTE: &str = "08E9C117-6F3C-4A76-85C1-F3A03CBA5C52.every";
+
+/// `EVERY`: `<% … %> delay EVERY`, run a macro, noting that a runner should repeat the script
+/// every `delay` ms.
+fn every(stack: &mut Stack) -> Result<()> {
+    const NAME: &str = "EVERY";
+    let Value::Long(delay) = stack.pop()? else {
+        return Err(fail(
+            NAME,
+            "expects a repetition delay in ms on top of the stack.",
+        ));
+    };
+    stack.set_attribute(EVERY_STACK_ATTRIBUTE, Some(Value::Long(delay)));
+    let macro_ = pop_macro(stack, NAME, "expects a macro below the repetition delay.")?;
+    stack.exec_macro(&macro_)
 }
 
 /// `RUNNERAT` / `RUNNERIN`: reschedule the current runner script at a time or after a period,

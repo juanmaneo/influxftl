@@ -162,6 +162,51 @@ fn platform() {
             r"SETMACROCONFIG",
             Err(r"SETMACROCONFIG missing capability."),
         ),
+        (r"<% 'a' %> 1000 EVERY", Ok(r#"["a"]"#)),
+        (r"<% 1 2 + %> 5 EVERY", Ok(r"[3]")),
+        (r"<% %> 0 EVERY", Ok(r"[]")),
+        (r"<% 'a' 'b' %> -1 EVERY", Ok(r#"["b","a"]"#)),
+        (
+            r"<% 'a' %> 1000.0 EVERY",
+            Err(r"EVERY expects a repetition delay in ms on top of the stack."),
+        ),
+        (
+            r"<% 'a' %> 'x' EVERY",
+            Err(r"EVERY expects a repetition delay in ms on top of the stack."),
+        ),
+        (
+            r"<% 'a' %> NULL EVERY",
+            Err(r"EVERY expects a repetition delay in ms on top of the stack."),
+        ),
+        (
+            r"<% 'a' %> EVERY",
+            Err(r"EVERY expects a repetition delay in ms on top of the stack."),
+        ),
+        (
+            r"'a' 1000 EVERY",
+            Err(r"EVERY expects a macro below the repetition delay."),
+        ),
+        (
+            r"1 1000 EVERY",
+            Err(r"EVERY expects a macro below the repetition delay."),
+        ),
+        (
+            r"NULL 1000 EVERY",
+            Err(r"EVERY expects a macro below the repetition delay."),
+        ),
+        (
+            r"[ ] 1000 EVERY",
+            Err(r"EVERY expects a macro below the repetition delay."),
+        ),
+        (r"1000 EVERY", Err(r"Empty stack.")),
+        (r"EVERY", Err(r"Empty stack.")),
+        (
+            r"<% 1 'a' + %> 1000 EVERY",
+            Err(
+                r"+ can only operate on numeric, string, lists, matrices, vectors, Geo Time Series, byte array and macro values.",
+            ),
+        ),
+        (r"<% 7 %> 1000 EVERY 8", Ok(r"[8,7]")),
     ]);
 }
 
@@ -186,12 +231,12 @@ fn platform_with_capabilities() {
     let runner = |value: &'static str| [("runner.reschedule.min.period", value)];
     assert!(
         run(&manager, "UPDATEON UPDATEOFF")
-            .expect_err("the value should fail")
+            .expect_err("run should fail")
             .contains("Empty stack.")
     );
     assert!(
         run(&[], "1 DUMP")
-            .expect_err("the value should fail")
+            .expect_err("run should fail")
             .contains("DUMP missing token.")
     );
     assert!(
@@ -206,22 +251,22 @@ fn platform_with_capabilities() {
     );
     assert!(
         run(&wf, "WF.SETREPOS")
-            .expect_err("the value should fail")
+            .expect_err("run should fail")
             .contains("Empty stack.")
     );
     assert!(
         run(&runner("1000"), "RUNNERIN")
-            .expect_err("the value should fail")
+            .expect_err("run should fail")
             .contains("Empty stack.")
     );
     assert!(
         run(&config, "SETMACROCONFIG")
-            .expect_err("the value should fail")
+            .expect_err("run should fail")
             .contains("Empty stack.")
     );
     assert!(
         run(&config, "'a@m' SETMACROCONFIG")
-            .expect_err("the value should fail")
+            .expect_err("run should fail")
             .contains("Empty stack.")
     );
     let long = format!("{}@x", "a".repeat(46));
@@ -242,7 +287,7 @@ fn platform_with_capabilities() {
             &wf,
             "'https://a' WF.ADDREPO 'https://b' WF.ADDREPO WF.GETREPOS"
         )
-        .expect("the value should succeed"),
+        .expect("run should succeed"),
         r#"[["https://a","https://b"]]"#
     );
     assert_eq!(
@@ -255,17 +300,17 @@ fn platform_with_capabilities() {
     );
     assert!(
         run(&wf, "[ 1 ] WF.SETREPOS")
-            .expect_err("the value should fail")
+            .expect_err("run should fail")
             .contains("expects a list of repository URLs")
     );
     assert!(
         run(&wf, "1 WF.SETREPOS")
-            .expect_err("the value should fail")
+            .expect_err("run should fail")
             .contains("expects a list of repository URLs")
     );
     assert!(
         run(&wf, "1 WF.ADDREPO")
-            .expect_err("the value should fail")
+            .expect_err("run should fail")
             .contains("expects a repository URL")
     );
     assert_eq!(
@@ -274,22 +319,22 @@ fn platform_with_capabilities() {
     );
     assert!(
         run(&runner("x"), "1 RUNNERIN")
-            .expect_err("the value should fail")
+            .expect_err("run should fail")
             .contains("'x' is not a valid LONG")
     );
     assert!(
         run(&runner("0"), "1 RUNNERIN")
-            .expect_err("the value should fail")
+            .expect_err("run should fail")
             .contains("strictly greater than 0 ms")
     );
     assert!(
         run(&runner("1000"), "'x' RUNNERIN")
-            .expect_err("the value should fail")
+            .expect_err("run should fail")
             .contains("expects a LONG period")
     );
     assert!(
         run(&runner("1000"), "'x' RUNNERAT")
-            .expect_err("the value should fail")
+            .expect_err("run should fail")
             .contains("expects a LONG timestamp")
     );
     assert!(
@@ -299,12 +344,12 @@ fn platform_with_capabilities() {
     );
     assert!(
         run(&runner("1000"), "1 ms RUNNERIN")
-            .expect_err("the value should fail")
+            .expect_err("run should fail")
             .contains("cannot set period below 1000 ms")
     );
     assert!(
         run(&runner("1000"), "NOW RUNNERAT")
-            .expect_err("the value should fail")
+            .expect_err("run should fail")
             .contains("cannot schedule a task before now + 1000 ms")
     );
     assert_eq!(
@@ -320,7 +365,7 @@ fn platform_with_capabilities() {
             &config,
             "'v' 'a@m' SETMACROCONFIG NULL 'a@m' SETMACROCONFIG"
         )
-        .expect("the value should succeed"),
+        .expect("run should succeed"),
         "[]"
     );
     let mut stack = test_stack();
@@ -329,7 +374,7 @@ fn platform_with_capabilities() {
         .insert("setmacroconfig".to_owned(), ".*".to_owned());
     stack
         .exec_checked("'v' 'a@m' SETMACROCONFIG 2 'b@m' SETMACROCONFIG")
-        .expect("the value should succeed");
+        .expect("exec_checked should succeed");
     assert_eq!(stack.config_mut().get("a@m").map(String::as_str), Some("v"));
     assert_eq!(stack.config_mut().get("b@m").map(String::as_str), Some("2"));
     stack
@@ -338,17 +383,17 @@ fn platform_with_capabilities() {
     assert_eq!(stack.config_mut().get("a@m"), None);
     assert!(
         run(&config, "'v' 'b@m' SETMACROCONFIG")
-            .expect_err("the value should fail")
+            .expect_err("run should fail")
             .contains("not modifiable")
     );
     assert!(
         run(&config, "'v' 'am' SETMACROCONFIG")
-            .expect_err("the value should fail")
+            .expect_err("run should fail")
             .contains("name@scope")
     );
     assert!(
         run(&config, "'v' 1 SETMACROCONFIG")
-            .expect_err("the value should fail")
+            .expect_err("run should fail")
             .contains("to be a STRING")
     );
     assert!(run(&[("setmacroconfig", "[")], "'v' 'a@m' SETMACROCONFIG").is_err());
