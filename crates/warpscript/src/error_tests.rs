@@ -564,6 +564,11 @@ fn math_failures_have_the_wording_and_class_of_commons_math() {
             format!("{EXCEPTION}NotStrictlyPositiveException"),
         ),
         (
+            MathError::NotPositive { value: -1.5 },
+            "-1.5 is smaller than the minimum (0)",
+            format!("{EXCEPTION}NotPositiveException"),
+        ),
+        (
             MathError::NoData,
             "no data",
             format!("{EXCEPTION}NoDataException"),

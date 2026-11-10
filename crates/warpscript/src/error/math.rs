@@ -34,6 +34,12 @@ pub enum MathError {
         /// The bound it must exceed.
         minimum: i64,
     },
+    /// A number that must not be negative.
+    #[error("{} is smaller than the minimum (0)", message_decimal(*value))]
+    NotPositive {
+        /// The number given.
+        value: f64,
+    },
     /// A function given no data at all.
     #[error("no data")]
     NoData,

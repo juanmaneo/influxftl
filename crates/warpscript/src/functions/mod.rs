@@ -347,6 +347,10 @@ mod math_tests;
 #[cfg(test)]
 mod matrix_tests;
 #[cfg(test)]
+mod microsphere_errors_tests;
+#[cfg(test)]
+mod microsphere_tests;
+#[cfg(test)]
 mod misc_tests;
 #[cfg(test)]
 mod mv_tests;

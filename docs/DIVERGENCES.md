@@ -1048,3 +1048,15 @@ other order than the cycle is smoothed, and a series with locations or elevation
 The `FFT`-like caveat of §5.1 does not apply: `STL` and the tests use no transcendental function
 but `exp`, `sqrt` and `log` in `HYBRIDTEST2` (the ticks of the outliers are compared).
 
+## 31. `INTERPOLATOR.ND.MICROSPHERE` and `INTERPOLATOR.ND.SMICROSPHERE`
+
+The microsphere is a port of Commons Math's `InterpolatingMicrosphere`. The seeded variant draws
+its normals from the `java.util.Random` that `PRNG` seeded, like Warp 10, so it gives the same
+sphere (the Gaussian numbers use the logarithm and the square root of the platform, which may
+differ from `StrictMath` by an ulp, like §5.1). The unseeded variant draws a random sphere in
+Warp 10 as well, from a Mersenne Twister seeded with the clock; here it is a `java.util.Random`
+seeded from the operating system's entropy: the results are as random, not the same sequence.
+The snapshot of the parameters of a function is built when the function is, so that parameters
+too deep to snapshot fail there and not when the snapshot is asked for. Series given in place
+of lists fail with the `ClassCastException` Warp 10 raises after it checks them.
+

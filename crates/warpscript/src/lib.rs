@@ -62,6 +62,9 @@ pub mod jmath;
 pub mod jrandom;
 pub mod lowess;
 pub mod macros;
+pub mod microsphere;
+#[cfg(test)]
+mod microsphere_tests;
 pub mod pickle;
 pub mod sax;
 pub mod selector;

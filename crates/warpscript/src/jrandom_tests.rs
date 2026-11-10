@@ -64,3 +64,20 @@ fn doubles_are_in_unit_interval() {
         assert!((0.0..1.0).contains(&d), "{d}");
     }
 }
+
+#[test]
+fn gaussian_numbers_come_in_pairs_like_the_jdk_makes_them() {
+    // `new Random(42).nextGaussian()` three times (the second one is the other of the pair).
+    let mut random = JavaRandom::new(42);
+    for expected in [
+        1.141_905_315_473_054_7,
+        0.919_407_948_982_787_9,
+        -0.949_866_636_890_895_9,
+    ] {
+        let actual = random.next_gaussian();
+        assert!(
+            (actual - expected).abs() < 1e-14,
+            "{actual} instead of {expected}"
+        );
+    }
+}

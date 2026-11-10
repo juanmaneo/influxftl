@@ -307,4 +307,19 @@ pub enum SeriesError {
     /// A seasonal test whose period is not that of the decomposition it is given.
     #[error("Incoherence between PERIOD parameter of test and PERIOD parameter of STL")]
     PeriodMismatch,
+    /// `INTERPOLATOR.ND.*` given series of different sizes.
+    #[error("{0}: incoherent GTS sizes.")]
+    MicrosphereSeriesSizes(String),
+    /// `INTERPOLATOR.ND.*` given series that do not have the same ticks.
+    #[error("{0}: GTS are not synchronized.")]
+    MicrosphereNotSynchronized(String),
+    /// `INTERPOLATOR.ND.*` given lists of different sizes.
+    #[error("{0}: incoherent input list sizes.")]
+    MicrosphereListSizes(String),
+    /// `INTERPOLATOR.ND.*` given something that is neither series nor lists.
+    #[error("{0}: wrong argument type")]
+    MicrosphereArgument(String),
+    /// `INTERPOLATOR.ND.*` given more elements than it may.
+    #[error("{0}: argument elements is above the limit interpolation.microsphere.max.elements")]
+    MicrosphereElementsLimit(String),
 }

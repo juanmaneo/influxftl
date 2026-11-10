@@ -158,6 +158,7 @@ fn math_class(err: &MathError) -> &'static str {
         MathError::NotStrictlyPositive { .. } => {
             "org.apache.commons.math3.exception.NotStrictlyPositiveException"
         }
+        MathError::NotPositive { .. } => "org.apache.commons.math3.exception.NotPositiveException",
         MathError::NoData
         | MathError::EmptyPolynomialCoefficients
         | MathError::MatrixWithoutColumn => "org.apache.commons.math3.exception.NoDataException",

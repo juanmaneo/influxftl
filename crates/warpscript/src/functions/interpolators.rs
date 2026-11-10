@@ -4,23 +4,34 @@
 //! Interpolating functions: `INTERPOLATOR.1D.LINEAR`, `INTERPOLATOR.1D.SPLINE` and
 //! `INTERPOLATOR.1D.AKIMA` build a function of one variable usable on the stack and as a
 //! mapper, `INTERPOLATOR.2D.BICUBIC` and `INTERPOLATOR.3D.TRICUBIC` functions of two and
-//! three variables usable on the stack and as reducers.
+//! three variables usable on the stack and as reducers, and `INTERPOLATOR.ND.MICROSPHERE` /
+//! `SMICROSPHERE` functions of any number of variables, usable on the stack and as reducers.
 
 use std::rc::Rc;
 
 use super::Entry;
 use super::args::fail;
 use crate::aggregators::{Aggregated, Aggregator, AggregatorArgs, Roles};
+use indexmap::IndexMap;
+
+use super::math::{ATTRIBUTE_SEEDED_PRNG, entropy_error};
+use super::stringformat::java_hash;
+use crate::error::fault::{BoundsError, NumberFormatError};
 use crate::error::series::SeriesError;
-use crate::error::{Error, Result};
-use crate::gts::{NO_ELEVATION, NO_LOCATION};
+use crate::error::{Class, Error, Result};
+use crate::format::parse_long;
+use crate::gts::{Gts, NO_ELEVATION, NO_LOCATION, Type};
 use crate::interpolation::{
     BicubicInterpolatingFunction, PolynomialSplineFunction, TricubicInterpolatingFunction, akima,
     bicubic, linear, spline, tricubic,
 };
+use crate::javamap::JavaHashMap;
+use crate::jrandom::JavaRandom;
 use crate::macros::{Callable, StackFunction, StackObject};
+use crate::microsphere::{Microsphere, MicrosphereParams, check_exponent};
+use crate::snapshot::add_element;
 use crate::stack::Stack;
-use crate::value::Value;
+use crate::value::{List, Value, ValueKind};
 
 /// The kind of a one dimensional interpolator.
 #[derive(Clone, Copy)]
@@ -46,6 +57,14 @@ pub const FUNCTIONS: &[(&str, Entry)] = &[
     ),
     ("INTERPOLATOR.2D.BICUBIC", Entry::Stack(interpolator_2d)),
     ("INTERPOLATOR.3D.TRICUBIC", Entry::Stack(interpolator_3d)),
+    (
+        "INTERPOLATOR.ND.MICROSPHERE",
+        Entry::Stack(|s| interpolator_nd(s, "INTERPOLATOR.ND.MICROSPHERE", false)),
+    ),
+    (
+        "INTERPOLATOR.ND.SMICROSPHERE",
+        Entry::Stack(|s| interpolator_nd(s, "INTERPOLATOR.ND.SMICROSPHERE", true)),
+    ),
 ];
 
 /// The function `INTERPOLATOR.1D.*` builds: the interpolation of the points, `NaN` outside
@@ -530,5 +549,326 @@ fn interpolator_3d(stack: &mut Stack) -> Result<()> {
     stack.push(StackFunction::value(Callable::Object(Rc::new(Tricube {
         function,
     }))));
+    Ok(())
+}
+
+// -----------------------------------------------------------------------------------------
+// INTERPOLATOR.ND.MICROSPHERE and INTERPOLATOR.ND.SMICROSPHERE
+// -----------------------------------------------------------------------------------------
+
+/// The parameter names of the microsphere interpolators.
+const ELEMENTS: &str = "elements";
+const MAX_DARK_FRACTION: &str = "max.dark.fraction";
+const DARK_THRESHOLD: &str = "dark.threshold";
+const BACKGROUND: &str = "background";
+const EXPONENT: &str = "exponent";
+const NO_INTERPOLATION_TOLERANCE: &str = "no.interpolation.tolerance";
+/// The capability (or configuration) that raises the number of elements.
+const MAX_ELEMENTS_CAPABILITY: &str = "interpolation.microsphere.max.elements";
+/// The number of elements a microsphere may have by default.
+const DEFAULT_MAX_ELEMENTS: i32 = 50;
+
+/// The function `INTERPOLATOR.ND.*` builds (`MICROSPHERE`).
+#[derive(Debug)]
+struct MicrosphereFunction {
+    sphere: Microsphere,
+    samples: Vec<Vec<f64>>,
+    values: Vec<f64>,
+    exponent: f64,
+    tolerance: f64,
+    /// The snapshot of the parameters the script gave, in the order of Java's `HashMap`.
+    parameters: String,
+    /// The function that built this one.
+    generator: &'static str,
+}
+
+impl MicrosphereFunction {
+    fn value(&self, point: &[f64]) -> Result<f64> {
+        self.sphere.value(
+            point,
+            &self.samples,
+            &self.values,
+            self.exponent,
+            self.tolerance,
+        )
+    }
+}
+
+impl StackObject for MicrosphereFunction {
+    fn name(&self) -> &'static str {
+        "MICROSPHERE"
+    }
+
+    fn to_snapshot(&self) -> String {
+        let mut out = String::from("[ ");
+        for sample in &self.samples {
+            out.push_str(&doubles_snapshot(sample));
+            out.push(' ');
+        }
+        out.push_str("] ");
+        out.push_str(&doubles_snapshot(&self.values));
+        out.push(' ');
+        out.push_str(&self.parameters);
+        out.push_str(self.generator);
+        out
+    }
+
+    fn type_name(&self) -> &'static str {
+        "AGGREGATOR"
+    }
+
+    fn as_aggregator(&self) -> Option<&dyn Aggregator> {
+        Some(self)
+    }
+
+    fn apply(&self, stack: &mut Stack) -> Result<()> {
+        let Value::List(list) = stack.pop()? else {
+            return Err(fail("MICROSPHERE", "expects a LIST"));
+        };
+        let point = numbers(
+            &list.borrow(),
+            "MICROSPHERE",
+            "expects a numeric LIST as argument, instead got at least one non numeric element",
+        )?;
+        stack.push(Value::Double(self.value(&point)?));
+        Ok(())
+    }
+}
+
+impl Aggregator for MicrosphereFunction {
+    fn roles(&self) -> Roles {
+        REDUCER
+    }
+
+    fn apply(&self, args: &AggregatorArgs) -> Result<Aggregated> {
+        let point: Option<Vec<f64>> = args.values.iter().map(Value::as_f64).collect();
+        let Some(point) = point else {
+            return Err(fail(
+                "MICROSPHERE",
+                "expects to operate on numeric GTS when used as reducer, instead got at least one non numeric element",
+            ));
+        };
+        Ok(Aggregated {
+            tick: args.tick,
+            location: args.locations[0],
+            elevation: args.elevations[0],
+            value: Value::Double(self.value(&point)?),
+        })
+    }
+}
+
+/// The parameters of the interpolation: their defaults, then those of the script.
+fn microsphere_parameters(given: &[(Value, Value)]) -> IndexMap<Value, Value> {
+    let mut parameters = IndexMap::from([
+        (Value::from(ELEMENTS), Value::Long(2)),
+        (Value::from(MAX_DARK_FRACTION), Value::Double(0.5)),
+        (Value::from(DARK_THRESHOLD), Value::Double(1e-2)),
+        (Value::from(BACKGROUND), Value::Double(f64::NAN)),
+        (Value::from(EXPONENT), Value::Long(2)),
+        (
+            Value::from(NO_INTERPOLATION_TOLERANCE),
+            Value::Double(f64::EPSILON),
+        ),
+    ]);
+    for (key, value) in given {
+        parameters.insert(key.clone(), value.clone());
+    }
+    parameters
+}
+
+/// The snapshot of the parameters of the script, in the iteration order of a Java `HashMap`
+/// built from them (`new HashMap<>(map)`).
+fn parameters_snapshot(given: &[(Value, Value)]) -> Result<String> {
+    // `new HashMap(map)` sizes the table for the number of entries.
+    let table = ((given.len() as f32) / 0.75 + 1.0) as usize;
+    let mut ordered = JavaHashMap::with_capacity(table);
+    for (key, value) in given {
+        ordered.put(java_hash(key), key.clone(), value.clone());
+    }
+    let map = Value::map(
+        ordered
+            .into_entries()
+            .into_iter()
+            .map(|(_, key, value)| (key, value))
+            .collect(),
+    );
+    let mut out = String::new();
+    add_element(&mut out, &map, false)?;
+    Ok(out)
+}
+
+/// A number of the parameters: `((Number) value).doubleValue()`.
+fn parameter(parameters: &IndexMap<Value, Value>, name: &str) -> Result<f64> {
+    match parameters.get(&Value::from(name)) {
+        Some(Value::Null) | None => Err(Error::null_pointer()),
+        Some(value) => value
+            .as_f64()
+            .ok_or_else(|| Error::class_cast(value.kind(), Class::Number)),
+    }
+}
+
+/// The limit of the number of elements: the default or the capability.
+fn elements_limit(stack: &Stack) -> Result<i32> {
+    let Some(text) = stack.capability(MAX_ELEMENTS_CAPABILITY) else {
+        return Ok(DEFAULT_MAX_ELEMENTS);
+    };
+    i32::try_from(parse_long(text)?)
+        .map_err(|_| NumberFormatError::InvalidInput(text.to_owned()).into())
+}
+
+/// The samples of `INTERPOLATOR.ND.*` given as lists: `[ [ x1 x2 … ] … ] [ y … ]`.
+fn microsphere_lists(
+    stack: &mut Stack,
+    name: &str,
+    values: &List,
+) -> Result<(Vec<Vec<f64>>, Vec<f64>)> {
+    let doubles = |value: &Value| match value {
+        Value::Double(double) => Ok(*double),
+        _ => Err(fail(name, "expects values of type DOUBLE.")),
+    };
+    let y = values
+        .borrow()
+        .iter()
+        .map(doubles)
+        .collect::<Result<Vec<f64>>>()?;
+    let Value::List(x) = stack.pop()? else {
+        return Err(fail(name, "expects a List of List as first argument."));
+    };
+    let x = x.borrow();
+    if x.len() != y.len() {
+        return Err(SeriesError::MicrosphereListSizes(name.to_owned()).into());
+    }
+    let mut dimension: Option<usize> = None;
+    let mut samples = Vec::with_capacity(x.len());
+    for sample in x.iter() {
+        let Value::List(sample) = sample else {
+            return Err(fail(name, "expects a List of List as first argument."));
+        };
+        let sample = sample.borrow();
+        if *dimension.get_or_insert(sample.len()) != sample.len() {
+            return Err(SeriesError::MicrosphereListSizes(name.to_owned()).into());
+        }
+        samples.push(sample.iter().map(doubles).collect::<Result<Vec<f64>>>()?);
+    }
+    // `new double[size][dimension]`, the dimension of no sample being `-1`.
+    if dimension.is_none() {
+        return Err(BoundsError::NegativeSize(-1).into());
+    }
+    Ok((samples, y))
+}
+
+/// The failure of `INTERPOLATOR.ND.*` given a series: Warp 10 checks the series it is given
+/// together with a list of series, then casts the list to a series.
+fn microsphere_series(stack: &mut Stack, name: &str, y: &Gts) -> Error {
+    let not_double = || fail(name, "expects GTS wth values of type DOUBLE.");
+    if y.borrow().type_of() != Type::Double {
+        return not_double();
+    }
+    let list = match stack.pop() {
+        Ok(Value::List(list)) => list,
+        Ok(_) => return fail(name, "expects a List of GTS as first argument."),
+        Err(err) => return err,
+    };
+    for element in list.borrow().iter() {
+        let Value::Gts(gts) = element else {
+            return fail(name, "expects a List of GTS as first argument.");
+        };
+        let (gts, y) = (gts.borrow(), y.borrow());
+        if gts.type_of() != Type::Double {
+            return not_double();
+        }
+        if gts.size() != y.size() {
+            return SeriesError::MicrosphereSeriesSizes(name.to_owned()).into();
+        }
+        if gts.ticks != y.ticks {
+            return SeriesError::MicrosphereNotSynchronized(name.to_owned()).into();
+        }
+    }
+    Error::class_cast(ValueKind::List, ValueKind::Gts)
+}
+
+/// The generator of the unseeded interpolation, from 64 bits of entropy.
+fn entropy_random(entropy: core::result::Result<u64, getrandom::Error>) -> Result<JavaRandom> {
+    Ok(JavaRandom::new(entropy.map_err(entropy_error)? as i64))
+}
+
+/// `INTERPOLATOR.ND.MICROSPHERE` and `INTERPOLATOR.ND.SMICROSPHERE`: the interpolation of any
+/// number of variables by a microsphere, `[ [ x1 x2 … ] … ] [ y … ] ({ … })`. The seeded
+/// variant takes its random numbers from the PRNG seeded by `PRNG`.
+fn interpolator_nd(stack: &mut Stack, name: &'static str, seeded: bool) -> Result<()> {
+    interpolate_nd(stack, name, seeded, getrandom::u64)
+}
+
+/// [`interpolator_nd`] with the entropy of the unseeded variant given.
+pub(super) fn interpolate_nd(
+    stack: &mut Stack,
+    name: &'static str,
+    seeded: bool,
+    entropy: fn() -> core::result::Result<u64, getrandom::Error>,
+) -> Result<()> {
+    let mut top = stack.pop()?;
+    let given: Option<Vec<(Value, Value)>> = if let Value::Map(map) = &top {
+        let given = map
+            .borrow()
+            .iter()
+            .map(|(key, value)| (key.clone(), value.clone()))
+            .collect();
+        top = stack.pop()?;
+        Some(given)
+    } else {
+        None
+    };
+    let parameters = microsphere_parameters(given.as_deref().unwrap_or_default());
+    let (samples, values) = match top {
+        Value::Gts(y) => return Err(microsphere_series(stack, name, &y)),
+        Value::List(list) => microsphere_lists(stack, name, &list)?,
+        _ => return Err(SeriesError::MicrosphereArgument(name.to_owned()).into()),
+    };
+    let elements = parameter(&parameters, ELEMENTS)? as i32;
+    if elements > elements_limit(stack)? {
+        return Err(SeriesError::MicrosphereElementsLimit(name.to_owned()).into());
+    }
+    let max_dark_fraction = parameter(&parameters, MAX_DARK_FRACTION)?;
+    let dark_threshold = parameter(&parameters, DARK_THRESHOLD)?;
+    let background = parameter(&parameters, BACKGROUND)?;
+    let exponent = parameter(&parameters, EXPONENT)?;
+    let tolerance = parameter(&parameters, NO_INTERPOLATION_TOLERANCE)?;
+    let mut random = if seeded {
+        let Some(Value::Long(state)) = stack.attribute(ATTRIBUTE_SEEDED_PRNG) else {
+            return Err(fail(name, "seeded PRNG was not initialized."));
+        };
+        let mut prng = JavaRandom::from_state(*state);
+        let seed = prng.next_int();
+        stack.set_attribute(ATTRIBUTE_SEEDED_PRNG, Some(Value::Long(prng.state())));
+        JavaRandom::new(i64::from(seed))
+    } else {
+        entropy_random(entropy())?
+    };
+    let sphere = Microsphere::new(
+        MicrosphereParams {
+            dimension: samples[0].len(),
+            size: elements,
+            max_dark_fraction,
+            dark_threshold,
+            background,
+        },
+        &mut random,
+    )?;
+    check_exponent(exponent)?;
+    let parameters = match &given {
+        Some(given) => parameters_snapshot(given)?,
+        None => String::new(),
+    };
+    stack.push(StackFunction::value(Callable::Object(Rc::new(
+        MicrosphereFunction {
+            sphere,
+            samples,
+            values,
+            exponent,
+            tolerance,
+            parameters,
+            generator: name,
+        },
+    ))));
     Ok(())
 }

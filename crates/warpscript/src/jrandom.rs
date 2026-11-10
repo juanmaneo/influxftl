@@ -17,6 +17,9 @@ const DOUBLE_UNIT: f64 = 1.0 / (1u64 << 53) as f64;
 pub struct JavaRandom {
     /// The 48-bit state (`seed` in the JDK).
     seed: i64,
+    /// The second Gaussian number of the pair `nextGaussian` makes (`nextNextGaussian`), as
+    /// the bits of the double.
+    next_gaussian: Option<u64>,
 }
 
 impl JavaRandom {
@@ -24,12 +27,16 @@ impl JavaRandom {
     pub fn new(seed: i64) -> Self {
         JavaRandom {
             seed: (seed ^ MULTIPLIER) & MASK,
+            next_gaussian: None,
         }
     }
 
     /// Rebuild a generator from a state saved with [`JavaRandom::state`].
     pub fn from_state(state: i64) -> Self {
-        JavaRandom { seed: state & MASK }
+        JavaRandom {
+            seed: state & MASK,
+            next_gaussian: None,
+        }
     }
 
     /// The internal state, to persist the generator between calls.
@@ -84,5 +91,24 @@ impl JavaRandom {
         let high = i64::from(self.next(26)) << 27;
         let low = i64::from(self.next(27));
         (high + low) as f64 * DOUBLE_UNIT
+    }
+
+    /// `Random.nextGaussian()`: a standard normal number, by the polar method of Marsaglia, which
+    /// makes them 2 at a time (the logarithm and the square root may differ from the JDK's
+    /// `StrictMath` by an ulp).
+    pub fn next_gaussian(&mut self) -> f64 {
+        if let Some(bits) = self.next_gaussian.take() {
+            return f64::from_bits(bits);
+        }
+        loop {
+            let v1 = 2.0 * self.next_double() - 1.0;
+            let v2 = 2.0 * self.next_double() - 1.0;
+            let s = v1 * v1 + v2 * v2;
+            if s < 1.0 && s != 0.0 {
+                let multiplier = (-2.0 * s.ln() / s).sqrt();
+                self.next_gaussian = Some((v2 * multiplier).to_bits());
+                return v1 * multiplier;
+            }
+        }
     }
 }
