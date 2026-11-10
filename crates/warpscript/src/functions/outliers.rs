@@ -26,7 +26,7 @@ pub const FUNCTIONS: &[(&str, Entry)] = &[
 ];
 
 /// `GTSOutliersHelper.doubleCheck`: the values of a `DOUBLE` series.
-fn double_values(gts: &GeoTimeSerie) -> Result<&[f64]> {
+pub(super) fn double_values(gts: &GeoTimeSerie) -> Result<&[f64]> {
     match &gts.values {
         Values::Double(values) => Ok(values),
         _ => Err(Error::usage("GTS", "must be of type Double.")),

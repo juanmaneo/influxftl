@@ -53,6 +53,7 @@ pub mod platform;
 pub mod polyfunc;
 pub mod quaternions;
 pub mod runtime;
+pub mod seasonal;
 pub mod selectors;
 pub mod shape;
 pub mod smartparse;
@@ -119,6 +120,7 @@ const TABLES: &[&[(&str, Entry)]] = &[
     gts_points::FUNCTIONS,
     gts_stats::FUNCTIONS,
     spectral::FUNCTIONS,
+    seasonal::FUNCTIONS,
     gts_frameworks::FUNCTIONS,
     gts_reduce::FUNCTIONS,
     gts_apply::FUNCTIONS,
@@ -372,6 +374,10 @@ mod polyfunc_tests;
 mod quaternions_tests;
 #[cfg(test)]
 mod runtime_tests;
+#[cfg(test)]
+mod seasonal_errors_tests;
+#[cfg(test)]
+mod seasonal_tests;
 #[cfg(test)]
 mod selectors_tests;
 #[cfg(test)]

@@ -69,6 +69,14 @@ impl Values {
         }
     }
 
+    /// The values of a `DOUBLE` series; the other types hold none.
+    pub fn doubles(&self) -> &[f64] {
+        match self {
+            Values::Double(values) => values,
+            Values::Undefined | Values::Long(_) | Values::Boolean(_) | Values::String(_) => &[],
+        }
+    }
+
     /// The value at `idx` (`GTSHelper.valueAtIndex`): `null` when out of range.
     pub fn get(&self, idx: usize) -> Value {
         match self {

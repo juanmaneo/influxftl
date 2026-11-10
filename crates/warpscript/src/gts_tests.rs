@@ -371,3 +371,16 @@ fn fullsort_without_values() {
     gts.fullsort(false);
     assert_eq!(gts.ticks, vec![1, 1, 2, 3]);
 }
+
+#[test]
+fn only_double_series_have_doubles() {
+    assert_eq!(Values::Double(vec![1.5, -2.0]).doubles(), [1.5, -2.0]);
+    for values in [
+        Values::Undefined,
+        Values::Long(vec![1]),
+        Values::Boolean(vec![true]),
+        Values::String(vec!["a".into()]),
+    ] {
+        assert_eq!(values.doubles(), Vec::<f64>::new());
+    }
+}

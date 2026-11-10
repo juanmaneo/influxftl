@@ -257,4 +257,36 @@ pub enum SeriesError {
         /// The label.
         label: String,
     },
+    /// A test or a split of a series that is not bucketized.
+    #[error("GTS must be bucketized")]
+    NotBucketized,
+    /// `subCycleSerie` given a bucket that is not one of the series.
+    #[error(
+        "lasbucket parameter of subCycleSerie method must fall on an actual bucket of the gts input"
+    )]
+    CycleOffBucket,
+    /// A piecewise outlier test with more suspected outliers than half of a piece.
+    #[error(
+        "Upper bound of number of outliers must be less than half of the number of observations per piece"
+    )]
+    OutliersUpperBound,
+    /// A piecewise outlier test of a series shorter than a seasonal period.
+    #[error("Not enough buckets to make up at least one seasonal period.")]
+    NoSeasonalPeriod,
+    /// A piecewise outlier test of a series shorter than a piece.
+    #[error(
+        "Not enough seasonal periods to make up at least one piece. Please use a lower number of periods per piece."
+    )]
+    NoPiece,
+    /// A test that needs a series that is bucketized and has a value in every bucket.
+    #[error("{0} operates on bucketized, filled Geo Time Series.")]
+    NotBucketizedFilled(String),
+    /// A piecewise outlier test of a series with a tick that is not on a bucket.
+    #[error("Internal bug method {method}: can't find tick {tick} in seasonal.ticks")]
+    TickNotSeasonal {
+        /// The method of Warp 10.
+        method: String,
+        /// The tick.
+        tick: i64,
+    },
 }

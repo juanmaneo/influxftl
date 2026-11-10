@@ -66,6 +66,9 @@ pub mod sax;
 pub mod selector;
 pub mod snapshot;
 pub mod stack;
+pub mod stl;
+#[cfg(test)]
+mod stl_tests;
 pub mod thrift;
 pub mod unpickle;
 pub mod value;

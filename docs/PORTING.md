@@ -210,7 +210,7 @@ The project is Apache-2.0 and must stay redistributable under it (see `README.md
 
 ## 9. Status and next steps
 
-2025 / 2193 functions are ported (`docs/FUNCTIONS.md`; the inventory includes the names
+2026 / 2193 functions are ported (`docs/FUNCTIONS.md`; the inventory includes the names
 Warp 10 registers through `Builder`s and constants). The Geo Time Series model, the
 `GTSHelper` transforms (time, datapoints, statistics), `BUCKETIZE` and `MAP` with the
 shared aggregators (`sum`, `mean`, `min`, `max`, `first`, `last`, `count`, `and`, `or`,
@@ -302,7 +302,7 @@ the order that unlocks the most:
    `MOTIONSPLIT`.
    Outlier tests (`functions/outliers.rs`, `distribution.rs`): `THRESHOLDTEST`,
    `ZSCORETEST`, `GRUBBSTEST`, `ESDTEST`, `max.tick.sliding.window`,
-   `max.time.sliding.window`. Next: `STL`, `STLESDTEST`, `HYBRIDTEST`, `HYBRIDTEST2`.
+   `max.time.sliding.window`. Next: `STL`, `STLESDTEST`, `HYBRIDTEST`.
    Interpolators (`functions/interpolators.rs`): `INTERPOLATOR.1D.LINEAR`,
    `INTERPOLATOR.1D.SPLINE`, `INTERPOLATOR.1D.AKIMA`, `INTERPOLATOR.2D.BICUBIC`,
    `INTERPOLATOR.3D.TRICUBIC` (Commons Math's bicubic and tricubic splines, with
@@ -341,5 +341,7 @@ the order that unlocks the most:
    an independent transform (`fft.rs`: JTransforms is not Apache-2.0 compatible, DIVERGENCES
    §29), and `FDWT`, `IDWT` and `DWTSPLIT` on the port of the 76 wavelets of
    `io.warp10.script.fwt` (`wavelet.rs`, `wavelet_data.rs`), bit for bit.
+   Seasonal outlier tests (`functions/seasonal.rs`, `stl.rs`): `HYBRIDTEST2`, on the cycle
+   sub-series of `GTSHelper.subCycleSerie`.
 6. **Geo** (`GeoXPLib` shapes, `HAVERSINE`, `LOCATIONOFFSET`, `GEO.*`), **datastore**
    (`FETCH` / `FIND` / `UPDATE` / `META` / `DELETE` on InfluxDB 3), PKI crypto, Processing.
