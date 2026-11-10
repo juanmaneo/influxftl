@@ -193,12 +193,15 @@ fn math_class(err: &MathError) -> &'static str {
 fn bounds_class(err: &BoundsError) -> &'static str {
     match err {
         BoundsError::NegativeSize(_) => "java.lang.NegativeArraySizeException",
-        BoundsError::ArrayIndex { .. } => "java.lang.ArrayIndexOutOfBoundsException",
+        BoundsError::ArrayIndex { .. } | BoundsError::ArrayRange(_) => {
+            "java.lang.ArrayIndexOutOfBoundsException"
+        }
         BoundsError::ListIndex { .. }
         | BoundsError::ListEnd(_)
         | BoundsError::NegativeBitIndex(_) => "java.lang.IndexOutOfBoundsException",
         BoundsError::StringIndex { .. }
         | BoundsError::StringSlice { .. }
+        | BoundsError::StringEnd { .. }
         | BoundsError::StringRange { .. } => "java.lang.StringIndexOutOfBoundsException",
     }
 }

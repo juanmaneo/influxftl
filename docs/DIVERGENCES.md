@@ -1021,3 +1021,30 @@ the only ones:
 (§5.1). The wavelet transforms (`FDWT`, `IDWT`, `DWTSPLIT`) are a port of the Java classes
 and their 76 wavelets (`wavelet_data.rs` is generated from them): they are bit for bit the
 results of Warp 10.
+
+## 30. `STL`, `STLESDTEST`, `HYBRIDTEST` and `HYBRIDTEST2`
+
+`STL` is a port of `GTSHelper.stl` onto explicit arrays that behave like the (oversized, shared)
+arrays of Warp 10, so that series with missing values, with off-bucket ticks or with negative
+ticks give the same decomposition or the same failure, bit for bit (including the quirks:
+the trend takes the ticks of the buckets, the robustness weights of a cycle are read in the
+other order than the cycle is smoothed, and a series with locations or elevations fails with a
+`NullPointerException`). What differs:
+
+- a `PERIOD` in the map given to `STLESDTEST` or `HYBRIDTEST` is accepted when it is the period
+  of the test (and fails with `Incoherence between PERIOD parameter of test and PERIOD parameter
+  of STL` when it is not): Warp 10 casts it to an `Integer` and fails with a `ClassCastException`
+  for the `Long` of a script, but accepts the `Integer` it put there itself on a first call, so
+  that a map can be reused. Values here are `Long`s whatever their origin;
+- the memory a decomposition needs is limited to 2^25 buckets and periods, beyond which it fails
+  with `Java heap space` (`Requested array size exceeds VM limit` above the largest Java array);
+- the index of an `ArrayIndexOutOfBoundsException` comes in the JDK 11 form (`Index -4 out of
+  bounds for length 17`), where the JDK 8 of the oracle only prints the index;
+- `STLESDTEST` of a series with missing values fails with an index out of bounds like Warp 10
+  does, which reads the values of the series at the index of its tick in the seasonal series; the
+  length it reports is the number of values (the capacity of the array of the series in Warp 10);
+- datapoints that share a tick are sorted in a stable order where Java's quicksort is not.
+
+The `FFT`-like caveat of §5.1 does not apply: `STL` and the tests use no transcendental function
+but `exp`, `sqrt` and `log` in `HYBRIDTEST2` (the ticks of the outliers are compared).
+

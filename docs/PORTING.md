@@ -210,7 +210,7 @@ The project is Apache-2.0 and must stay redistributable under it (see `README.md
 
 ## 9. Status and next steps
 
-2026 / 2193 functions are ported (`docs/FUNCTIONS.md`; the inventory includes the names
+2029 / 2193 functions are ported (`docs/FUNCTIONS.md`; the inventory includes the names
 Warp 10 registers through `Builder`s and constants). The Geo Time Series model, the
 `GTSHelper` transforms (time, datapoints, statistics), `BUCKETIZE` and `MAP` with the
 shared aggregators (`sum`, `mean`, `min`, `max`, `first`, `last`, `count`, `and`, `or`,
@@ -268,10 +268,8 @@ the order that unlocks the most:
    `PATTERNDETECTION` / `DISCORDS` and their `Z` forms (`functions/patterns.rs` on the SAX
    breakpoints of `sax.rs`), `POLYFUNC` and `RANDPDF` / `SRANDPDF` (`functions/polyfunc.rs`,
    run-time function objects: `StackObject`s that `EVAL` applies and that may also be
-   aggregators) are in. Next: `STL` (it reuses `pointwise_lowess`, but relies on the
-   capacity of `GeoTimeSerie`'s arrays: port it on explicit arrays), the outlier tests
-   (`THRESHOLDTEST`, `ZSCORETEST`, `GRUBBSTEST`, `ESDTEST`, `HYBRIDTEST`… need Commons
-   Math's `TDistribution`).
+   aggregators), `STL` and the outlier tests (`THRESHOLDTEST`, `ZSCORETEST`, `GRUBBSTEST`,
+   `ESDTEST`, `STLESDTEST`, `HYBRIDTEST`, `HYBRIDTEST2`) are in.
 4. **GTS encoders** (`GTSEncoder` / `GTSDecoder`, Thrift compact + gzip wrappers): the
    library layer is in — `thrift.rs` (the `GTSWrapper` / `Metadata` compact protocol of
    libthrift 0.17, malformed input included) and `encoder.rs` (`GTSEncoder`,
@@ -302,7 +300,7 @@ the order that unlocks the most:
    `MOTIONSPLIT`.
    Outlier tests (`functions/outliers.rs`, `distribution.rs`): `THRESHOLDTEST`,
    `ZSCORETEST`, `GRUBBSTEST`, `ESDTEST`, `max.tick.sliding.window`,
-   `max.time.sliding.window`. Next: `STL`, `STLESDTEST`, `HYBRIDTEST`.
+   `max.time.sliding.window`. The seasonal tests are in.
    Interpolators (`functions/interpolators.rs`): `INTERPOLATOR.1D.LINEAR`,
    `INTERPOLATOR.1D.SPLINE`, `INTERPOLATOR.1D.AKIMA`, `INTERPOLATOR.2D.BICUBIC`,
    `INTERPOLATOR.3D.TRICUBIC` (Commons Math's bicubic and tricubic splines, with
@@ -341,7 +339,10 @@ the order that unlocks the most:
    an independent transform (`fft.rs`: JTransforms is not Apache-2.0 compatible, DIVERGENCES
    §29), and `FDWT`, `IDWT` and `DWTSPLIT` on the port of the 76 wavelets of
    `io.warp10.script.fwt` (`wavelet.rs`, `wavelet_data.rs`), bit for bit.
-   Seasonal outlier tests (`functions/seasonal.rs`, `stl.rs`): `HYBRIDTEST2`, on the cycle
-   sub-series of `GTSHelper.subCycleSerie`.
+   Seasonal analysis (`functions/seasonal.rs`, `stl.rs`, `lowess.rs`): `STL` (the
+   Seasonal-Trend decomposition based on Loess of `GTSHelper.stl`, bit for bit, on arrays that
+   behave like Warp 10's), `STLESDTEST`, `HYBRIDTEST` and `HYBRIDTEST2` (the entropy variant),
+   on the cycle sub-series of `GTSHelper.subCycleSerie` and on the regressions `LOWESS` and
+   `RLOWESS` share (`lowess.rs`); DIVERGENCES §30.
 6. **Geo** (`GeoXPLib` shapes, `HAVERSINE`, `LOCATIONOFFSET`, `GEO.*`), **datastore**
    (`FETCH` / `FIND` / `UPDATE` / `META` / `DELETE` on InfluxDB 3), PKI crypto, Processing.

@@ -1,6 +1,6 @@
 // Copyright 2026 The influxftl Authors. Licensed under the Apache License, Version 2.0.
 
-//! Oracle-checked tests of the seasonal outlier tests: `HYBRIDTEST2`.
+//! Oracle-checked tests of the seasonal outlier tests: `HYBRIDTEST2`, `STLESDTEST` and `HYBRIDTEST`.
 //! The expectations are the answers of Warp 10 3.5.0 to the same scripts:
 //! the JSON stack (top first) or the error message (in its JDK 11+ form).
 
@@ -28,6 +28,8 @@ const E: &str = r"NEWGTS 'x' RENAME";
 const OFF: &str = r"NEWGTS 'x' RENAME { 'l' 'v' } RELABEL 0 NaN NaN NaN 5.274 ADDVALUE 10 NaN NaN NaN 8.239 ADDVALUE 20 NaN NaN NaN 5.157 ADDVALUE 30 NaN NaN NaN 1.922 ADDVALUE 40 NaN NaN NaN 5.22 ADDVALUE 50 NaN NaN NaN 8.21 ADDVALUE 60 NaN NaN NaN 4.742 ADDVALUE 70 NaN NaN NaN 2.234 ADDVALUE 80 NaN NaN NaN 4.99 ADDVALUE 90 NaN NaN NaN 8.056 ADDVALUE 100 NaN NaN NaN 5.216 ADDVALUE 110 NaN NaN NaN 2.168 ADDVALUE 120 NaN NaN NaN 5.267 ADDVALUE 130 NaN NaN NaN 8.25 ADDVALUE 140 NaN NaN NaN 5.086 ADDVALUE 150 NaN NaN NaN 2.134 ADDVALUE 160 NaN NaN NaN 4.925 ADDVALUE 170 NaN NaN NaN 8.084 ADDVALUE 180 NaN NaN NaN 5.241 ADDVALUE 190 NaN NaN NaN 1.711 ADDVALUE 200 NaN NaN NaN 5.215 ADDVALUE 210 NaN NaN NaN 8.24 ADDVALUE 220 NaN NaN NaN 5.129 ADDVALUE 230 NaN NaN NaN 2.237 ADDVALUE 'g' STORE [ $g bucketizer.last 230 10 0 ] BUCKETIZE 0 GET DUP 100 REMOVETICK 103 NaN NaN NaN 4.2 ADDVALUE";
 const OFF0: &str = r"NEWGTS 'x' RENAME { 'l' 'v' } RELABEL 0 NaN NaN NaN 4.798 ADDVALUE 10 NaN NaN NaN 7.791 ADDVALUE 20 NaN NaN NaN 4.709 ADDVALUE 30 NaN NaN NaN 1.709 ADDVALUE 40 NaN NaN NaN 4.736 ADDVALUE 50 NaN NaN NaN 7.901 ADDVALUE 60 NaN NaN NaN 5.286 ADDVALUE 70 NaN NaN NaN 1.843 ADDVALUE 80 NaN NaN NaN 5.01 ADDVALUE 90 NaN NaN NaN 8.168 ADDVALUE 100 NaN NaN NaN 4.793 ADDVALUE 110 NaN NaN NaN 2.2 ADDVALUE 120 NaN NaN NaN 4.725 ADDVALUE 130 NaN NaN NaN 8.25 ADDVALUE 140 NaN NaN NaN 5.191 ADDVALUE 150 NaN NaN NaN 1.915 ADDVALUE 160 NaN NaN NaN 5.014 ADDVALUE 170 NaN NaN NaN 8.035 ADDVALUE 180 NaN NaN NaN 4.765 ADDVALUE 190 NaN NaN NaN 1.852 ADDVALUE 200 NaN NaN NaN 4.708 ADDVALUE 210 NaN NaN NaN 8.187 ADDVALUE 220 NaN NaN NaN 5.005 ADDVALUE 230 NaN NaN NaN 2.023 ADDVALUE 'g' STORE [ $g bucketizer.last 230 10 0 ] BUCKETIZE 0 GET DUP 0 REMOVETICK 3 NaN NaN NaN 4.2 ADDVALUE";
 const DUP: &str = r"NEWGTS 'x' RENAME { 'l' 'v' } RELABEL 0 NaN NaN NaN 4.967 ADDVALUE 10 NaN NaN NaN 8.152 ADDVALUE 20 NaN NaN NaN 5.169 ADDVALUE 30 NaN NaN NaN 2.106 ADDVALUE 40 NaN NaN NaN 4.785 ADDVALUE 50 NaN NaN NaN 8.22 ADDVALUE 60 NaN NaN NaN 4.86 ADDVALUE 70 NaN NaN NaN 1.702 ADDVALUE 80 NaN NaN NaN 5.246 ADDVALUE 90 NaN NaN NaN 7.845 ADDVALUE 100 NaN NaN NaN 4.963 ADDVALUE 110 NaN NaN NaN 1.787 ADDVALUE 120 NaN NaN NaN 4.902 ADDVALUE 130 NaN NaN NaN 8.054 ADDVALUE 140 NaN NaN NaN 4.773 ADDVALUE 150 NaN NaN NaN 1.748 ADDVALUE 160 NaN NaN NaN 5.134 ADDVALUE 170 NaN NaN NaN 7.838 ADDVALUE 180 NaN NaN NaN 5.154 ADDVALUE 190 NaN NaN NaN 2.238 ADDVALUE 200 NaN NaN NaN 4.797 ADDVALUE 210 NaN NaN NaN 7.98 ADDVALUE 220 NaN NaN NaN 5.228 ADDVALUE 230 NaN NaN NaN 1.819 ADDVALUE 'g' STORE [ $g bucketizer.last 230 10 0 ] BUCKETIZE 0 GET DUP 100 REMOVETICK 90 NaN NaN NaN 4.2 ADDVALUE";
+const HOLE: &str = r"NEWGTS 'x' RENAME 0 NaN NaN NaN 4.983 ADDVALUE 10 NaN NaN NaN 7.945 ADDVALUE 20 NaN NaN NaN 5.073 ADDVALUE 30 NaN NaN NaN 1.747 ADDVALUE 40 NaN NaN NaN 5.092 ADDVALUE 50 NaN NaN NaN 8.155 ADDVALUE 60 NaN NaN NaN 5.151 ADDVALUE 70 NaN NaN NaN 2.013 ADDVALUE 80 NaN NaN NaN 5.194 ADDVALUE 90 NaN NaN NaN 8.234 ADDVALUE 100 NaN NaN NaN 5.08 ADDVALUE 110 NaN NaN NaN 2.124 ADDVALUE 'g' STORE [ $g bucketizer.last 230 10 0 ] BUCKETIZE 0 GET";
+const GAPB: &str = r"NEWGTS 'x' RENAME 0 NaN NaN NaN 4.931 ADDVALUE 10 NaN NaN NaN 7.967 ADDVALUE 20 NaN NaN NaN 5.043 ADDVALUE 30 NaN NaN NaN 1.771 ADDVALUE 40 NaN NaN NaN 4.862 ADDVALUE 50 NaN NaN NaN 7.857 ADDVALUE 60 NaN NaN NaN 4.788 ADDVALUE 70 NaN NaN NaN 1.771 ADDVALUE 130 NaN NaN NaN 7.784 ADDVALUE 140 NaN NaN NaN 4.976 ADDVALUE 150 NaN NaN NaN 2.064 ADDVALUE 160 NaN NaN NaN 4.939 ADDVALUE 170 NaN NaN NaN 8.132 ADDVALUE 180 NaN NaN NaN 5.039 ADDVALUE 190 NaN NaN NaN 1.946 ADDVALUE 200 NaN NaN NaN 4.963 ADDVALUE 210 NaN NaN NaN 8.239 ADDVALUE 220 NaN NaN NaN 4.893 ADDVALUE 230 NaN NaN NaN 2.044 ADDVALUE 'g' STORE [ $g bucketizer.last 230 10 0 ] BUCKETIZE 0 GET";
 
 /// The script of a template, its `@NAME` placeholders replaced by the series above.
 fn expand(template: &str) -> String {
@@ -39,6 +41,8 @@ fn expand(template: &str) -> String {
         .replace("@NEGT", NEGT)
         .replace("@LONG", LONG)
         .replace("@OFF0", OFF0)
+        .replace("@HOLE", HOLE)
+        .replace("@GAPB", GAPB)
         .replace("@A24", A24)
         .replace("@A48", A48)
         .replace("@A40", A40)
@@ -818,6 +822,12 @@ fn hybridtest2_alpha_0() {
 #[test]
 fn hybridtest2_errors() {
     check(&[
+        (r"3 HYBRIDTEST2", Err(r"Empty stack.")),
+        (r"2 3 HYBRIDTEST2", Err(r"Empty stack.")),
+        (r"0.05 HYBRIDTEST2", Err(r"Empty stack.")),
+        (r"3 0.05 HYBRIDTEST2", Err(r"Empty stack.")),
+        (r"2 3 0.05 HYBRIDTEST2", Err(r"Empty stack.")),
+        (r"1 2 3 HYBRIDTEST2", Err(r"Empty stack.")),
         (
             r"@PLAIN 4 2 3 HYBRIDTEST2",
             Err(r"HYBRIDTEST2 operates on bucketized, filled Geo Time Series."),
@@ -1201,6 +1211,1348 @@ fn hybridtest2_lists() {
         (
             r"@A24 4 2 3 HYBRIDTEST2 DROP @A24 VALUES 0 GET",
             Ok(r"[1.789]"),
+        ),
+    ]);
+}
+
+#[test]
+fn stlesdtest_0() {
+    check(&[
+        (r"@A24 4 1 { } STLESDTEST", Ok(r"[[]]")),
+        (r"@A24 4 1 0.01 { } STLESDTEST", Ok(r"[[]]")),
+        (r"@A24 4 1 0.2 { } STLESDTEST", Ok(r"[[70]]")),
+        (r"@A24 4 2 { } STLESDTEST", Ok(r"[[70,110]]")),
+        (r"@A24 4 2 0.01 { } STLESDTEST", Ok(r"[[]]")),
+        (r"@A24 4 2 0.2 { } STLESDTEST", Ok(r"[[70,110]]")),
+        (r"@A24 4 3 { } STLESDTEST", Ok(r"[[70,110,150]]")),
+        (r"@A24 4 3 0.01 { } STLESDTEST", Ok(r"[[70,110,150]]")),
+        (r"@A24 4 3 0.2 { } STLESDTEST", Ok(r"[[70,110,150]]")),
+        (r"@A24 4 5 { } STLESDTEST", Ok(r"[[70,110,150,230,170]]")),
+        (
+            r"@A24 4 5 0.01 { } STLESDTEST",
+            Ok(r"[[70,110,150,230,170]]"),
+        ),
+        (
+            r"@A24 4 5 0.2 { } STLESDTEST",
+            Ok(r"[[70,110,150,230,170]]"),
+        ),
+        (r"@A24 4 8 { } STLESDTEST", Ok(r"[[70,110,150,230,170]]")),
+        (
+            r"@A24 4 8 0.01 { } STLESDTEST",
+            Ok(r"[[70,110,150,230,170]]"),
+        ),
+        (
+            r"@A24 4 8 0.2 { } STLESDTEST",
+            Ok(r"[[70,110,150,230,170]]"),
+        ),
+        (r"@A48 6 1 { } STLESDTEST", Ok(r"[[440]]")),
+        (r"@A48 6 1 0.01 { } STLESDTEST", Ok(r"[[440]]")),
+        (r"@A48 6 1 0.2 { } STLESDTEST", Ok(r"[[440]]")),
+        (r"@A48 6 2 { } STLESDTEST", Ok(r"[[440,50]]")),
+        (r"@A48 6 2 0.01 { } STLESDTEST", Ok(r"[[440,50]]")),
+        (r"@A48 6 2 0.2 { } STLESDTEST", Ok(r"[[440,50]]")),
+        (r"@A48 6 3 { } STLESDTEST", Ok(r"[[440,50,430]]")),
+        (r"@A48 6 3 0.01 { } STLESDTEST", Ok(r"[[440,50,430]]")),
+        (r"@A48 6 3 0.2 { } STLESDTEST", Ok(r"[[440,50,430]]")),
+        (r"@A48 6 5 { } STLESDTEST", Ok(r"[[440,50,430,300,450]]")),
+        (
+            r"@A48 6 5 0.01 { } STLESDTEST",
+            Ok(r"[[440,50,430,300,450]]"),
+        ),
+        (
+            r"@A48 6 5 0.2 { } STLESDTEST",
+            Ok(r"[[440,50,430,300,450]]"),
+        ),
+        (r"@A48 6 8 { } STLESDTEST", Ok(r"[[440,50,430,300,450,40]]")),
+        (
+            r"@A48 6 8 0.01 { } STLESDTEST",
+            Ok(r"[[440,50,430,300,450]]"),
+        ),
+        (
+            r"@A48 6 8 0.2 { } STLESDTEST",
+            Ok(r"[[440,50,430,300,450,40,310,60]]"),
+        ),
+        (r"@A40 5 1 { } STLESDTEST", Ok(r"[[]]")),
+        (r"@A40 5 1 0.01 { } STLESDTEST", Ok(r"[[]]")),
+        (r"@A40 5 1 0.2 { } STLESDTEST", Ok(r"[[]]")),
+        (r"@A40 5 2 { } STLESDTEST", Ok(r"[[]]")),
+        (r"@A40 5 2 0.01 { } STLESDTEST", Ok(r"[[]]")),
+        (r"@A40 5 2 0.2 { } STLESDTEST", Ok(r"[[]]")),
+        (r"@A40 5 3 { } STLESDTEST", Ok(r"[[]]")),
+        (r"@A40 5 3 0.01 { } STLESDTEST", Ok(r"[[]]")),
+        (r"@A40 5 3 0.2 { } STLESDTEST", Ok(r"[[0,390,10]]")),
+        (r"@A40 5 5 { } STLESDTEST", Ok(r"[[0,390,10,50,210]]")),
+        (r"@A40 5 5 0.01 { } STLESDTEST", Ok(r"[[0,390,10,50,210]]")),
+        (r"@A40 5 5 0.2 { } STLESDTEST", Ok(r"[[0,390,10,50,210]]")),
+        (r"@A40 5 8 { } STLESDTEST", Ok(r"[[0,390,10,50,210]]")),
+        (r"@A40 5 8 0.01 { } STLESDTEST", Ok(r"[[0,390,10,50,210]]")),
+        (r"@A40 5 8 0.2 { } STLESDTEST", Ok(r"[[0,390,10,50,210]]")),
+        (r"@A30 5 1 { } STLESDTEST", Ok(r"[[290]]")),
+        (r"@A30 5 1 0.01 { } STLESDTEST", Ok(r"[[290]]")),
+        (r"@A30 5 1 0.2 { } STLESDTEST", Ok(r"[[290]]")),
+        (r"@A30 5 2 { } STLESDTEST", Ok(r"[[290]]")),
+        (r"@A30 5 2 0.01 { } STLESDTEST", Ok(r"[[290]]")),
+        (r"@A30 5 2 0.2 { } STLESDTEST", Ok(r"[[290]]")),
+        (r"@A30 5 3 { } STLESDTEST", Ok(r"[[290]]")),
+        (r"@A30 5 3 0.01 { } STLESDTEST", Ok(r"[[290]]")),
+        (r"@A30 5 3 0.2 { } STLESDTEST", Ok(r"[[290,40,80]]")),
+        (r"@A30 5 5 { } STLESDTEST", Ok(r"[[290,40,80,90,130]]")),
+        (r"@A30 5 5 0.01 { } STLESDTEST", Ok(r"[[290,40,80,90,130]]")),
+        (r"@A30 5 5 0.2 { } STLESDTEST", Ok(r"[[290,40,80,90,130]]")),
+        (r"@A30 5 8 { } STLESDTEST", Ok(r"[[290,40,80,90,130,230]]")),
+        (
+            r"@A30 5 8 0.01 { } STLESDTEST",
+            Ok(r"[[290,40,80,90,130,230]]"),
+        ),
+        (
+            r"@A30 5 8 0.2 { } STLESDTEST",
+            Ok(r"[[290,40,80,90,130,230]]"),
+        ),
+        (r"@A12 4 1 { } STLESDTEST", Ok(r"[[110]]")),
+        (r"@A12 4 1 0.01 { } STLESDTEST", Ok(r"[[110]]")),
+        (r"@A12 4 1 0.2 { } STLESDTEST", Ok(r"[[110]]")),
+        (r"@A12 4 2 { } STLESDTEST", Ok(r"[[110,0]]")),
+        (r"@A12 4 2 0.01 { } STLESDTEST", Ok(r"[[110,0]]")),
+        (r"@A12 4 2 0.2 { } STLESDTEST", Ok(r"[[110,0]]")),
+        (r"@A12 4 3 { } STLESDTEST", Ok(r"[[110,0,80]]")),
+        (r"@A12 4 3 0.01 { } STLESDTEST", Ok(r"[[110,0,80]]")),
+        (r"@A12 4 3 0.2 { } STLESDTEST", Ok(r"[[110,0,80]]")),
+        (r"@A12 4 5 { } STLESDTEST", Ok(r"[[110,0,80,30]]")),
+        (r"@A12 4 5 0.01 { } STLESDTEST", Ok(r"[[110,0,80,30]]")),
+        (r"@A12 4 5 0.2 { } STLESDTEST", Ok(r"[[110,0,80,30]]")),
+        (r"@A12 4 8 { } STLESDTEST", Ok(r"[[110,0,80,30]]")),
+        (r"@A12 4 8 0.01 { } STLESDTEST", Ok(r"[[110,0,80,30]]")),
+        (r"@A12 4 8 0.2 { } STLESDTEST", Ok(r"[[110,0,80,30]]")),
+        (r"@A60 12 1 { } STLESDTEST", Ok(r"[[500]]")),
+        (r"@A60 12 1 0.01 { } STLESDTEST", Ok(r"[[500]]")),
+        (r"@A60 12 1 0.2 { } STLESDTEST", Ok(r"[[500]]")),
+        (r"@A60 12 2 { } STLESDTEST", Ok(r"[[500,140]]")),
+        (r"@A60 12 2 0.01 { } STLESDTEST", Ok(r"[[500,140]]")),
+    ]);
+}
+
+#[test]
+fn stlesdtest_1() {
+    check(&[
+        (r"@A60 12 2 0.2 { } STLESDTEST", Ok(r"[[500,140]]")),
+        (r"@A60 12 3 { } STLESDTEST", Ok(r"[[500,140,130]]")),
+        (r"@A60 12 3 0.01 { } STLESDTEST", Ok(r"[[500,140,130]]")),
+        (r"@A60 12 3 0.2 { } STLESDTEST", Ok(r"[[500,140,130]]")),
+        (r"@A60 12 5 { } STLESDTEST", Ok(r"[[500,140,130,150,510]]")),
+        (
+            r"@A60 12 5 0.01 { } STLESDTEST",
+            Ok(r"[[500,140,130,150,510]]"),
+        ),
+        (
+            r"@A60 12 5 0.2 { } STLESDTEST",
+            Ok(r"[[500,140,130,150,510]]"),
+        ),
+        (
+            r"@A60 12 8 { } STLESDTEST",
+            Ok(r"[[500,140,130,150,510,120,160,110]]"),
+        ),
+        (
+            r"@A60 12 8 0.01 { } STLESDTEST",
+            Ok(r"[[500,140,130,150,510,120,160,110]]"),
+        ),
+        (
+            r"@A60 12 8 0.2 { } STLESDTEST",
+            Ok(r"[[500,140,130,150,510,120,160,110]]"),
+        ),
+        (r"@CLEAN 4 1 { } STLESDTEST", Ok(r"[[230]]")),
+        (r"@CLEAN 4 1 0.01 { } STLESDTEST", Ok(r"[[230]]")),
+        (r"@CLEAN 4 1 0.2 { } STLESDTEST", Ok(r"[[230]]")),
+        (r"@CLEAN 4 2 { } STLESDTEST", Ok(r"[[230,190]]")),
+        (r"@CLEAN 4 2 0.01 { } STLESDTEST", Ok(r"[[230,190]]")),
+        (r"@CLEAN 4 2 0.2 { } STLESDTEST", Ok(r"[[230,190]]")),
+        (r"@CLEAN 4 3 { } STLESDTEST", Ok(r"[[230,190]]")),
+        (r"@CLEAN 4 3 0.01 { } STLESDTEST", Ok(r"[[230,190]]")),
+        (r"@CLEAN 4 3 0.2 { } STLESDTEST", Ok(r"[[230,190,70]]")),
+        (r"@CLEAN 4 5 { } STLESDTEST", Ok(r"[[230,190,70,110,150]]")),
+        (
+            r"@CLEAN 4 5 0.01 { } STLESDTEST",
+            Ok(r"[[230,190,70,110,150]]"),
+        ),
+        (
+            r"@CLEAN 4 5 0.2 { } STLESDTEST",
+            Ok(r"[[230,190,70,110,150]]"),
+        ),
+        (r"@CLEAN 4 8 { } STLESDTEST", Ok(r"[[230,190,70,110,150]]")),
+        (
+            r"@CLEAN 4 8 0.01 { } STLESDTEST",
+            Ok(r"[[230,190,70,110,150]]"),
+        ),
+        (
+            r"@CLEAN 4 8 0.2 { } STLESDTEST",
+            Ok(r"[[230,190,70,110,150]]"),
+        ),
+        (r"@FLAT 4 1 { } STLESDTEST", Ok(r"[[]]")),
+        (r"@FLAT 4 1 0.01 { } STLESDTEST", Ok(r"[[]]")),
+        (r"@FLAT 4 1 0.2 { } STLESDTEST", Ok(r"[[]]")),
+        (r"@FLAT 4 2 { } STLESDTEST", Ok(r"[[]]")),
+        (r"@FLAT 4 2 0.01 { } STLESDTEST", Ok(r"[[]]")),
+        (r"@FLAT 4 2 0.2 { } STLESDTEST", Ok(r"[[]]")),
+        (r"@FLAT 4 3 { } STLESDTEST", Ok(r"[[]]")),
+        (r"@FLAT 4 3 0.01 { } STLESDTEST", Ok(r"[[]]")),
+        (r"@FLAT 4 3 0.2 { } STLESDTEST", Ok(r"[[]]")),
+        (r"@FLAT 4 5 { } STLESDTEST", Ok(r"[[]]")),
+        (r"@FLAT 4 5 0.01 { } STLESDTEST", Ok(r"[[]]")),
+        (r"@FLAT 4 5 0.2 { } STLESDTEST", Ok(r"[[]]")),
+        (r"@FLAT 4 8 { } STLESDTEST", Ok(r"[[]]")),
+        (r"@FLAT 4 8 0.01 { } STLESDTEST", Ok(r"[[]]")),
+        (r"@FLAT 4 8 0.2 { } STLESDTEST", Ok(r"[[]]")),
+        (r"@NEG 4 1 { } STLESDTEST", Ok(r"[[230]]")),
+        (r"@NEG 4 1 0.01 { } STLESDTEST", Ok(r"[[230]]")),
+        (r"@NEG 4 1 0.2 { } STLESDTEST", Ok(r"[[230]]")),
+        (r"@NEG 4 2 { } STLESDTEST", Ok(r"[[230,50]]")),
+        (r"@NEG 4 2 0.01 { } STLESDTEST", Ok(r"[[230,50]]")),
+        (r"@NEG 4 2 0.2 { } STLESDTEST", Ok(r"[[230,50]]")),
+        (r"@NEG 4 3 { } STLESDTEST", Ok(r"[[230,50]]")),
+        (r"@NEG 4 3 0.01 { } STLESDTEST", Ok(r"[[230,50]]")),
+        (r"@NEG 4 3 0.2 { } STLESDTEST", Ok(r"[[230,50]]")),
+        (r"@NEG 4 5 { } STLESDTEST", Ok(r"[[230,50]]")),
+        (r"@NEG 4 5 0.01 { } STLESDTEST", Ok(r"[[230,50]]")),
+        (r"@NEG 4 5 0.2 { } STLESDTEST", Ok(r"[[230,50,10,210,90]]")),
+        (
+            r"@NEG 4 8 { } STLESDTEST",
+            Ok(r"[[230,50,10,210,90,130,170]]"),
+        ),
+        (
+            r"@NEG 4 8 0.01 { } STLESDTEST",
+            Ok(r"[[230,50,10,210,90,130,170]]"),
+        ),
+        (
+            r"@NEG 4 8 0.2 { } STLESDTEST",
+            Ok(r"[[230,50,10,210,90,130,170]]"),
+        ),
+        (r"@NL 4 1 { } STLESDTEST", Ok(r"[[]]")),
+        (r"@NL 4 1 0.01 { } STLESDTEST", Ok(r"[[]]")),
+        (r"@NL 4 1 0.2 { } STLESDTEST", Ok(r"[[110]]")),
+        (r"@NL 4 2 { } STLESDTEST", Ok(r"[[110,150]]")),
+        (r"@NL 4 2 0.01 { } STLESDTEST", Ok(r"[[110,150]]")),
+        (r"@NL 4 2 0.2 { } STLESDTEST", Ok(r"[[110,150]]")),
+        (r"@NL 4 3 { } STLESDTEST", Ok(r"[[110,150,190]]")),
+        (r"@NL 4 3 0.01 { } STLESDTEST", Ok(r"[[110,150,190]]")),
+        (r"@NL 4 3 0.2 { } STLESDTEST", Ok(r"[[110,150,190]]")),
+        (r"@NL 4 5 { } STLESDTEST", Ok(r"[[110,150,190,30]]")),
+        (r"@NL 4 5 0.01 { } STLESDTEST", Ok(r"[[110,150,190,30]]")),
+        (r"@NL 4 5 0.2 { } STLESDTEST", Ok(r"[[110,150,190,30]]")),
+        (r"@NL 4 8 { } STLESDTEST", Ok(r"[[110,150,190,30]]")),
+        (r"@NL 4 8 0.01 { } STLESDTEST", Ok(r"[[110,150,190,30]]")),
+        (r"@NL 4 8 0.2 { } STLESDTEST", Ok(r"[[110,150,190,30]]")),
+        (r"@WIDE 4 1 { } STLESDTEST", Ok(r"[[23000]]")),
+        (r"@WIDE 4 1 0.01 { } STLESDTEST", Ok(r"[[23000]]")),
+        (r"@WIDE 4 1 0.2 { } STLESDTEST", Ok(r"[[23000]]")),
+        (r"@WIDE 4 2 { } STLESDTEST", Ok(r"[[23000,3000]]")),
+        (r"@WIDE 4 2 0.01 { } STLESDTEST", Ok(r"[[23000,3000]]")),
+        (r"@WIDE 4 2 0.2 { } STLESDTEST", Ok(r"[[23000,3000]]")),
+        (r"@WIDE 4 3 { } STLESDTEST", Ok(r"[[23000,3000,11000]]")),
+        (
+            r"@WIDE 4 3 0.01 { } STLESDTEST",
+            Ok(r"[[23000,3000,11000]]"),
+        ),
+        (r"@WIDE 4 3 0.2 { } STLESDTEST", Ok(r"[[23000,3000,11000]]")),
+        (r"@WIDE 4 5 { } STLESDTEST", Ok(r"[[23000,3000,11000]]")),
+    ]);
+}
+
+#[test]
+fn stlesdtest_2() {
+    check(&[
+        (
+            r"@WIDE 4 5 0.01 { } STLESDTEST",
+            Ok(r"[[23000,3000,11000]]"),
+        ),
+        (r"@WIDE 4 5 0.2 { } STLESDTEST", Ok(r"[[23000,3000,11000]]")),
+        (r"@WIDE 4 8 { } STLESDTEST", Ok(r"[[23000,3000,11000]]")),
+        (
+            r"@WIDE 4 8 0.01 { } STLESDTEST",
+            Ok(r"[[23000,3000,11000]]"),
+        ),
+        (r"@WIDE 4 8 0.2 { } STLESDTEST", Ok(r"[[23000,3000,11000]]")),
+    ]);
+}
+
+#[test]
+fn stlesdtest_maps_0() {
+    check(&[
+        (r"@A24 4 3 { 'ROBUST' T } STLESDTEST", Ok(r"[[0,70,110]]")),
+        (r"@A48 6 3 { 'ROBUST' T } STLESDTEST", Ok(r"[[440,300,50]]")),
+        (r"@A40 5 3 { 'ROBUST' T } STLESDTEST", Ok(r"[[390]]")),
+        (r"@NL 4 3 { 'ROBUST' T } STLESDTEST", Ok(r"[[70,230,30]]")),
+        (
+            r"@A24 4 3 { 'BANDWIDTH_S' 7 } STLESDTEST",
+            Ok(r"[[90,170]]"),
+        ),
+        (
+            r"@A48 6 3 { 'BANDWIDTH_S' 7 } STLESDTEST",
+            Ok(r"[[300,380,440]]"),
+        ),
+        (
+            r"@A40 5 3 { 'BANDWIDTH_S' 7 } STLESDTEST",
+            Ok(r"[[70,230,220]]"),
+        ),
+        (
+            r"@NL 4 3 { 'BANDWIDTH_S' 7 } STLESDTEST",
+            Ok(r"[[90,50,130]]"),
+        ),
+        (
+            r"@A24 4 3 { 'BANDWIDTH_S' 7 'DEGREE_S' 2 } STLESDTEST",
+            Ok(r"[[170,90,50]]"),
+        ),
+        (
+            r"@A48 6 3 { 'BANDWIDTH_S' 7 'DEGREE_S' 2 } STLESDTEST",
+            Ok(r"[[300,380,360]]"),
+        ),
+        (
+            r"@A40 5 3 { 'BANDWIDTH_S' 7 'DEGREE_S' 2 } STLESDTEST",
+            Ok(r"[[70]]"),
+        ),
+        (
+            r"@NL 4 3 { 'BANDWIDTH_S' 7 'DEGREE_S' 2 } STLESDTEST",
+            Ok(r"[[90,50,130]]"),
+        ),
+        (
+            r"@A24 4 3 { 'PRECISION' 1 } STLESDTEST",
+            Ok(r"[[230,30,190]]"),
+        ),
+        (
+            r"@A48 6 3 { 'PRECISION' 1 } STLESDTEST",
+            Ok(r"[[440,50,300]]"),
+        ),
+        (r"@A40 5 3 { 'PRECISION' 1 } STLESDTEST", Ok(r"[[390]]")),
+        (
+            r"@NL 4 3 { 'PRECISION' 1 } STLESDTEST",
+            Ok(r"[[70,230,30]]"),
+        ),
+        (
+            r"@A24 4 3 { 'BANDWIDTH_T' 9 } STLESDTEST",
+            Ok(r"[[90,170]]"),
+        ),
+        (
+            r"@A48 6 3 { 'BANDWIDTH_T' 9 } STLESDTEST",
+            Ok(r"[[440,50,300]]"),
+        ),
+        (
+            r"@A40 5 3 { 'BANDWIDTH_T' 9 } STLESDTEST",
+            Ok(r"[[70,230,220]]"),
+        ),
+        (
+            r"@NL 4 3 { 'BANDWIDTH_T' 9 } STLESDTEST",
+            Ok(r"[[90,80,100]]"),
+        ),
+        (r"@A24 4 3 { 'SPEED' 1 } STLESDTEST", Ok(r"[[70,110,150]]")),
+        (r"@A48 6 3 { 'SPEED' 1 } STLESDTEST", Ok(r"[[440,50,430]]")),
+        (r"@A40 5 3 { 'SPEED' 1 } STLESDTEST", Ok(r"[[]]")),
+        (r"@NL 4 3 { 'SPEED' 1 } STLESDTEST", Ok(r"[[110,150,190]]")),
+        (
+            r"@A24 4 3 { 'BANDWIDTH_P' 5 } STLESDTEST",
+            Ok(r"[[10,220,0]]"),
+        ),
+        (
+            r"@A48 6 3 { 'BANDWIDTH_P' 5 } STLESDTEST",
+            Ok(r"[[440,50,430]]"),
+        ),
+        (
+            r"@A40 5 3 { 'BANDWIDTH_P' 5 } STLESDTEST",
+            Ok(r"[[380,10,390]]"),
+        ),
+        (
+            r"@NL 4 3 { 'BANDWIDTH_P' 5 } STLESDTEST",
+            Ok(r"[[220,10,0]]"),
+        ),
+        (
+            r"@A24 4 3 { 'ROBUST' T 'ROBUSTNESS' 2 } STLESDTEST",
+            Ok(r"[[0,130]]"),
+        ),
+        (
+            r"@A48 6 3 { 'ROBUST' T 'ROBUSTNESS' 2 } STLESDTEST",
+            Ok(r"[[440,50,300]]"),
+        ),
+        (
+            r"@A40 5 3 { 'ROBUST' T 'ROBUSTNESS' 2 } STLESDTEST",
+            Ok(r"[[390]]"),
+        ),
+        (
+            r"@NL 4 3 { 'ROBUST' T 'ROBUSTNESS' 2 } STLESDTEST",
+            Ok(r"[[70,230,30]]"),
+        ),
+        (
+            r"@A24 4 3 { 'BANDWIDTH_S' 7.5 } STLESDTEST",
+            Ok(r"[[90,170]]"),
+        ),
+        (
+            r"@A48 6 3 { 'BANDWIDTH_S' 7.5 } STLESDTEST",
+            Ok(r"[[300,380,440]]"),
+        ),
+        (
+            r"@A40 5 3 { 'BANDWIDTH_S' 7.5 } STLESDTEST",
+            Ok(r"[[70,230,220]]"),
+        ),
+        (
+            r"@NL 4 3 { 'BANDWIDTH_S' 7.5 } STLESDTEST",
+            Ok(r"[[90,50,130]]"),
+        ),
+        (
+            r"@A24 4 3 { 'BANDWIDTH' 7 } STLESDTEST",
+            Ok(r"[[70,110,150]]"),
+        ),
+        (
+            r"@A48 6 3 { 'BANDWIDTH' 7 } STLESDTEST",
+            Ok(r"[[440,50,430]]"),
+        ),
+        (r"@A40 5 3 { 'BANDWIDTH' 7 } STLESDTEST", Ok(r"[[]]")),
+        (
+            r"@NL 4 3 { 'BANDWIDTH' 7 } STLESDTEST",
+            Ok(r"[[110,150,190]]"),
+        ),
+        (r"@A24 4 3 { 'ZZZ' 'x' } STLESDTEST", Ok(r"[[70,110,150]]")),
+        (r"@A48 6 3 { 'ZZZ' 'x' } STLESDTEST", Ok(r"[[440,50,430]]")),
+        (r"@A40 5 3 { 'ZZZ' 'x' } STLESDTEST", Ok(r"[[]]")),
+        (r"@NL 4 3 { 'ZZZ' 'x' } STLESDTEST", Ok(r"[[110,150,190]]")),
+    ]);
+}
+
+#[test]
+fn stlesdtest_errors() {
+    check(&[
+        (r"3 STLESDTEST", Err(r"Empty stack.")),
+        (r"0.05 STLESDTEST", Err(r"Empty stack.")),
+        (r"3 0.05 STLESDTEST", Err(r"Empty stack.")),
+        (r"{ } STLESDTEST", Err(r"Empty stack.")),
+        (r"3 { } STLESDTEST", Err(r"Empty stack.")),
+        (r"0.05 { } STLESDTEST", Err(r"Empty stack.")),
+        (r"3 0.05 { } STLESDTEST", Err(r"Empty stack.")),
+        (r"1 3 STLESDTEST", Err(r"Empty stack.")),
+        (
+            r"@A24 4 3 { 'DEGREE_S' 'a' } STLESDTEST",
+            Err(r"class java.lang.String cannot be cast to class java.lang.Number"),
+        ),
+        (
+            r"@A24 4 3 { 'SPEED_S' 'a' } STLESDTEST",
+            Err(r"class java.lang.String cannot be cast to class java.lang.Number"),
+        ),
+        (
+            r"@A24 4 3 { 'PRECISION' 'a' } STLESDTEST",
+            Err(r"class java.lang.String cannot be cast to class java.lang.Number"),
+        ),
+        (
+            r"@A24 4 3 { 'ROBUSTNESS' 'a' } STLESDTEST",
+            Err(r"class java.lang.String cannot be cast to class java.lang.Number"),
+        ),
+        (
+            r"@A24 4 3 { 'BANDWIDTH_L' 'a' } STLESDTEST",
+            Err(r"class java.lang.String cannot be cast to class java.lang.Number"),
+        ),
+        (
+            r"@A24 4 3 { 'DEGREE_L' 'a' } STLESDTEST",
+            Err(r"class java.lang.String cannot be cast to class java.lang.Number"),
+        ),
+        (
+            r"@A24 4 3 { 'SPEED_L' 'a' } STLESDTEST",
+            Err(r"class java.lang.String cannot be cast to class java.lang.Number"),
+        ),
+        (
+            r"@A24 4 3 { 'BANDWIDTH_T' 'a' } STLESDTEST",
+            Err(r"class java.lang.String cannot be cast to class java.lang.Number"),
+        ),
+        (
+            r"@A24 4 3 { 'DEGREE_T' 'a' } STLESDTEST",
+            Err(r"class java.lang.String cannot be cast to class java.lang.Number"),
+        ),
+        (
+            r"@A24 4 3 { 'SPEED_T' 'a' } STLESDTEST",
+            Err(r"class java.lang.String cannot be cast to class java.lang.Number"),
+        ),
+        (
+            r"@A24 4 3 { 'BANDWIDTH_P' 'a' } STLESDTEST",
+            Err(r"class java.lang.String cannot be cast to class java.lang.Number"),
+        ),
+        (
+            r"@A24 4 3 { 'DEGREE_P' 'a' } STLESDTEST",
+            Err(r"class java.lang.String cannot be cast to class java.lang.Number"),
+        ),
+        (
+            r"@A24 4 3 { 'SPEED_P' 'a' } STLESDTEST",
+            Err(r"class java.lang.String cannot be cast to class java.lang.Number"),
+        ),
+        (r"@PLAIN 4 3 STLESDTEST", Err(r"GTS must be bucketized")),
+        (r"@LONG 4 3 STLESDTEST", Err(r"GTS must be of type Double.")),
+        (r"@STR 4 3 STLESDTEST", Err(r"GTS must be of type Double.")),
+        (r"@E 4 3 STLESDTEST", Err(r"GTS must be of type Double.")),
+        (
+            r"NEWGTS 4 3 STLESDTEST",
+            Err(r"GTS must be of type Double."),
+        ),
+        (r"@GAP 4 3 STLESDTEST", Err(r"out of bounds for length")),
+        (r"@GAPB 4 3 STLESDTEST", Err(r"out of bounds for length")),
+        (r"@OFF 4 3 STLESDTEST", Err(r"out of bounds for length")),
+        (r"@LOC 4 3 STLESDTEST", Err(r"NullPointerException")),
+        (
+            r"@A24 4 3 { 'PERIOD' 'a' } STLESDTEST",
+            Err(r"cannot be cast to class"),
+        ),
+        (
+            r"@A24 4 3 { 'PERIOD' 4.0 } STLESDTEST",
+            Err(r"cannot be cast to class"),
+        ),
+        (
+            r"@A24 4 3 { 'PERIOD' NULL } STLESDTEST",
+            Ok(r"[[70,110,150]]"),
+        ),
+        (
+            r"@A24 4 3 { 'ROBUST' 1 } STLESDTEST",
+            Err(r"class java.lang.Long cannot be cast to class java.lang.Boolean"),
+        ),
+        (
+            r"@A24 4 3 { 'ROBUST' NULL } STLESDTEST",
+            Ok(r"[[70,110,150]]"),
+        ),
+        (
+            r"@A24 4 3 { 'BANDWIDTH_S' 'a' } STLESDTEST",
+            Err(r"class java.lang.String cannot be cast to class java.lang.Number"),
+        ),
+        (
+            r"@A24 4 3 { 'BANDWIDTH_S' NULL } STLESDTEST",
+            Ok(r"[[70,110,150]]"),
+        ),
+        (
+            r"@A24 4 3 { 'BANDWIDTH_S' 0 } STLESDTEST",
+            Err(r"STL expects BANDWIDTH_S to be different than zero."),
+        ),
+        (
+            r"@A24 4 3 { 'PRECISION' 0 } STLESDTEST",
+            Err(r"STL expects PRECISION to be positive."),
+        ),
+        (
+            r"@A24 4 3 { 'DEGREE_T' 12 } STLESDTEST",
+            Err(r"Degree of polynomial fit should remain small (lower than 10)"),
+        ),
+        (
+            r"@A24 4 3 { 'BANDWIDTH_T' 0 } STLESDTEST",
+            Err(r"Bandwidth parameter must be greater than 0"),
+        ),
+        (
+            r"@A24 4 3 { 'ROBUSTNESS' -1 } STLESDTEST",
+            Err(r"STL expects ROBUSTNESS to be non-negative."),
+        ),
+        (
+            r"@A24 4 3 { 'BANDWIDTH_P' 5 'DEGREE_P' 0 } STLESDTEST",
+            Err(r"Degree of polynomial fit must be greater than 0"),
+        ),
+        (
+            r"[ @A24 @A24 ] 4 3 STLESDTEST",
+            Err(r"NullPointerException"),
+        ),
+        (r"[ @A24 ] 4 3 STLESDTEST", Ok(r"[[[70,110,150]]]")),
+        (r"[ ] 4 3 STLESDTEST", Ok(r"[[]]")),
+        (
+            r"[ @A24 @A48 ] 4 3 { } STLESDTEST",
+            Err(r"NullPointerException"),
+        ),
+        (
+            r"[ @A24 1 ] 4 3 STLESDTEST",
+            Err(r"STLESDTEST can only operate on Geo Time Series instances."),
+        ),
+        (
+            r"@A24 4 STLESDTEST",
+            Err(
+                r"STLESDTEST expects a number of buckets per period (a LONG) below the upper bound of the number of outliers.",
+            ),
+        ),
+        (
+            r"@A24 STLESDTEST",
+            Err(
+                r"STLESDTEST expects a significance level (a DOUBLE) or an upper bound of the number of outliers (a LONG) on top of the stack.",
+            ),
+        ),
+        (r"STLESDTEST", Err(r"Empty stack.")),
+        (
+            r"@A24 4 3 'a' STLESDTEST",
+            Err(
+                r"STLESDTEST expects a significance level (a DOUBLE) or an upper bound of the number of outliers (a LONG) on top of the stack.",
+            ),
+        ),
+        (
+            r"@A24 4 3 NULL STLESDTEST",
+            Err(
+                r"STLESDTEST expects a significance level (a DOUBLE) or an upper bound of the number of outliers (a LONG) on top of the stack.",
+            ),
+        ),
+        (
+            r"@A24 4 'a' STLESDTEST",
+            Err(
+                r"STLESDTEST expects a significance level (a DOUBLE) or an upper bound of the number of outliers (a LONG) on top of the stack.",
+            ),
+        ),
+        (
+            r"@A24 4 'a' 0.05 STLESDTEST",
+            Err(
+                r"STLESDTEST expects an upper bound of the number of outliers (a LONG) below the significance level.",
+            ),
+        ),
+        (
+            r"@A24 'a' 3 STLESDTEST",
+            Err(
+                r"STLESDTEST expects a number of buckets per period (a LONG) below the upper bound of the number of outliers.",
+            ),
+        ),
+        (
+            r"@A24 'a' 3 0.05 STLESDTEST",
+            Err(
+                r"STLESDTEST expects a number of buckets per period (a LONG) below the upper bound of the number of outliers.",
+            ),
+        ),
+        (
+            r"@A24 4.0 3 STLESDTEST",
+            Err(
+                r"STLESDTEST expects a number of buckets per period (a LONG) below the upper bound of the number of outliers.",
+            ),
+        ),
+        (
+            r"@A24 4 3.0 STLESDTEST",
+            Err(
+                r"STLESDTEST expects a number of buckets per period (a LONG) below the upper bound of the number of outliers.",
+            ),
+        ),
+        (
+            r"@A24 4 3.0 0.05 STLESDTEST",
+            Err(
+                r"STLESDTEST expects an upper bound of the number of outliers (a LONG) below the significance level.",
+            ),
+        ),
+        (
+            r"@A24 4 3 T STLESDTEST",
+            Err(
+                r"STLESDTEST expects a significance level (a DOUBLE) or an upper bound of the number of outliers (a LONG) on top of the stack.",
+            ),
+        ),
+        (
+            r"1 4 3 STLESDTEST",
+            Err(r"STLESDTEST can only operate on Geo Time Series instances."),
+        ),
+        (
+            r"'a' 4 3 STLESDTEST",
+            Err(r"STLESDTEST can only operate on Geo Time Series instances."),
+        ),
+        (
+            r"@A24 1 3 STLESDTEST",
+            Err(r"STL expects seasonal periods to be composed by at least 2 buckets."),
+        ),
+        (
+            r"@A24 0 3 STLESDTEST",
+            Err(r"STL expects seasonal periods to be composed by at least 2 buckets."),
+        ),
+        (r"@A24 4 0 STLESDTEST", Ok(r"[[]]")),
+        (r"@A24 4 -1 STLESDTEST", Ok(r"[[]]")),
+        (r"@A24 4 100 STLESDTEST", Ok(r"[[70,110,150,230,170]]")),
+        (r"@A24 30 3 STLESDTEST", Ok(r"[[]]")),
+        (
+            r"{ 'ROBUST' T } 'm' STORE @A24 4 3 $m STLESDTEST $m",
+            Ok(r#"[{"ROBUST":true,"PERIOD":4,"BANDWIDTH_S":-1},[0,70,110]]"#),
+        ),
+        (
+            r"{ 'BANDWIDTH_S' 7 } 'm' STORE @A24 4 3 $m STLESDTEST $m",
+            Ok(r#"[{"BANDWIDTH_S":7,"PERIOD":4,"ROBUST":false},[90,170]]"#),
+        ),
+        (
+            r"{ } 'm' STORE @A24 4 3 $m STLESDTEST $m",
+            Ok(r#"[{"PERIOD":4,"BANDWIDTH_S":-1,"ROBUST":false},[70,110,150]]"#),
+        ),
+        (
+            r"{ } 'm' STORE @A24 4 3 $m STLESDTEST @A24 4 3 $m STLESDTEST",
+            Ok(r"[[70,110,150],[70,110,150]]"),
+        ),
+        (
+            r"{ 'ZZZ' 'x' } 'm' STORE @PLAIN 4 3 $m STLESDTEST $m",
+            Err(r"GTS must be bucketized"),
+        ),
+        (
+            r"{ 'ZZZ' 'x' } 'm' STORE @LONG 4 3 $m STLESDTEST $m",
+            Err(r"GTS must be of type Double."),
+        ),
+        (
+            r"{ 'ZZZ' 'x' } 'm' STORE @A24 4 3 'a' $m STLESDTEST $m",
+            Err(
+                r"STLESDTEST expects a significance level (a DOUBLE) or an upper bound of the number of outliers (a LONG) on top of the stack.",
+            ),
+        ),
+    ]);
+}
+
+#[test]
+fn hybridtest_0() {
+    check(&[
+        (r"@A24 4 1 1  HYBRIDTEST", Ok(r"[[80,160]]")),
+        (
+            r"@A24 4 1 2  HYBRIDTEST",
+            Err(
+                r"Upper bound of number of outliers must be less than half of the number of observations per piece",
+            ),
+        ),
+        (
+            r"@A24 4 1 3  HYBRIDTEST",
+            Err(
+                r"Upper bound of number of outliers must be less than half of the number of observations per piece",
+            ),
+        ),
+        (r"@A24 4 2 1  HYBRIDTEST", Ok(r"[[30,130,210]]")),
+        (r"@A24 4 2 2  HYBRIDTEST", Ok(r"[[30,70,130,90,210,170]]")),
+        (r"@A24 4 2 3  HYBRIDTEST", Ok(r"[[30,70,130,90,210,170]]")),
+        (r"@A24 4 3 1  HYBRIDTEST", Ok(r"[[90,170]]")),
+        (r"@A24 4 3 2  HYBRIDTEST", Ok(r"[[90,50,170,210]]")),
+        (r"@A24 4 3 3  HYBRIDTEST", Ok(r"[[90,50,10,170,210,130]]")),
+        (r"@A48 6 1 1  HYBRIDTEST", Ok(r"[[60,120,230,390,420]]")),
+        (r"@A48 6 1 2  HYBRIDTEST", Ok(r"[[60,120,230,390,420]]")),
+        (
+            r"@A48 6 1 3  HYBRIDTEST",
+            Err(
+                r"Upper bound of number of outliers must be less than half of the number of observations per piece",
+            ),
+        ),
+        (r"@A48 6 2 1  HYBRIDTEST", Ok(r"[[110,240,380]]")),
+        (r"@A48 6 2 2  HYBRIDTEST", Ok(r"[[110,50,240,300,380,440]]")),
+        (
+            r"@A48 6 2 3  HYBRIDTEST",
+            Ok(r"[[110,50,60,240,300,350,380,440]]"),
+        ),
+        (r"@A48 6 3 1  HYBRIDTEST", Ok(r"[[440]]")),
+        (r"@A48 6 3 2  HYBRIDTEST", Ok(r"[[440,300]]")),
+        (r"@A48 6 3 3  HYBRIDTEST", Ok(r"[[440,300,320]]")),
+        (r"@A40 5 1 1  HYBRIDTEST", Ok(r"[[190]]")),
+        (
+            r"@A40 5 1 2  HYBRIDTEST",
+            Err(
+                r"Upper bound of number of outliers must be less than half of the number of observations per piece",
+            ),
+        ),
+        (
+            r"@A40 5 1 3  HYBRIDTEST",
+            Err(
+                r"Upper bound of number of outliers must be less than half of the number of observations per piece",
+            ),
+        ),
+        (r"@A40 5 2 1  HYBRIDTEST", Ok(r"[[70,110,270]]")),
+        (r"@A40 5 2 2  HYBRIDTEST", Ok(r"[[70,20,110,100,270,280]]")),
+        (
+            r"@A40 5 2 3  HYBRIDTEST",
+            Ok(r"[[70,20,110,100,160,270,280,220]]"),
+        ),
+        (r"@A40 5 3 1  HYBRIDTEST", Ok(r"[[230]]")),
+        (r"@A40 5 3 2  HYBRIDTEST", Ok(r"[[230,220]]")),
+        (r"@A40 5 3 3  HYBRIDTEST", Ok(r"[[230,220,130]]")),
+        (r"@A30 5 1 1  HYBRIDTEST", Ok(r"[[]]")),
+        (
+            r"@A30 5 1 2  HYBRIDTEST",
+            Err(
+                r"Upper bound of number of outliers must be less than half of the number of observations per piece",
+            ),
+        ),
+        (
+            r"@A30 5 1 3  HYBRIDTEST",
+            Err(
+                r"Upper bound of number of outliers must be less than half of the number of observations per piece",
+            ),
+        ),
+        (r"@A30 5 2 1  HYBRIDTEST", Ok(r"[[170]]")),
+        (r"@A30 5 2 2  HYBRIDTEST", Ok(r"[[170,120]]")),
+        (r"@A30 5 2 3  HYBRIDTEST", Ok(r"[[170,120,280,290,260]]")),
+        (r"@A30 5 3 1  HYBRIDTEST", Ok(r"[[120]]")),
+        (r"@A30 5 3 2  HYBRIDTEST", Ok(r"[[120,20]]")),
+        (r"@A30 5 3 3  HYBRIDTEST", Ok(r"[[120,20,70]]")),
+        (r"@A12 4 1 1  HYBRIDTEST", Ok(r"[[90]]")),
+        (
+            r"@A12 4 1 2  HYBRIDTEST",
+            Err(
+                r"Upper bound of number of outliers must be less than half of the number of observations per piece",
+            ),
+        ),
+        (
+            r"@A12 4 1 3  HYBRIDTEST",
+            Err(
+                r"Upper bound of number of outliers must be less than half of the number of observations per piece",
+            ),
+        ),
+        (r"@A12 4 2 1  HYBRIDTEST", Ok(r"[[60]]")),
+        (r"@A12 4 2 2  HYBRIDTEST", Ok(r"[[60,100]]")),
+        (r"@A12 4 2 3  HYBRIDTEST", Ok(r"[[60,100]]")),
+        (r"@A12 4 3 1  HYBRIDTEST", Ok(r"[[60]]")),
+        (r"@A12 4 3 2  HYBRIDTEST", Ok(r"[[60,20]]")),
+        (r"@A12 4 3 3  HYBRIDTEST", Ok(r"[[60,20,100]]")),
+        (r"@A60 12 1 1  HYBRIDTEST", Ok(r"[[270]]")),
+        (r"@A60 12 1 2  HYBRIDTEST", Ok(r"[[270]]")),
+        (r"@A60 12 1 3  HYBRIDTEST", Ok(r"[[270]]")),
+        (r"@A60 12 2 1  HYBRIDTEST", Ok(r"[[130,500]]")),
+        (r"@A60 12 2 2  HYBRIDTEST", Ok(r"[[130,250,500,380]]")),
+        (r"@A60 12 2 3  HYBRIDTEST", Ok(r"[[130,250,140,500,380]]")),
+        (r"@A60 12 3 1  HYBRIDTEST", Ok(r"[[500]]")),
+        (r"@A60 12 3 2  HYBRIDTEST", Ok(r"[[500,260]]")),
+        (r"@A60 12 3 3  HYBRIDTEST", Ok(r"[[500,260,380]]")),
+        (r"@CLEAN 4 1 1  HYBRIDTEST", Ok(r"[[80,200]]")),
+        (
+            r"@CLEAN 4 1 2  HYBRIDTEST",
+            Err(
+                r"Upper bound of number of outliers must be less than half of the number of observations per piece",
+            ),
+        ),
+        (
+            r"@CLEAN 4 1 3  HYBRIDTEST",
+            Err(
+                r"Upper bound of number of outliers must be less than half of the number of observations per piece",
+            ),
+        ),
+        (r"@CLEAN 4 2 1  HYBRIDTEST", Ok(r"[[20]]")),
+        (r"@CLEAN 4 2 2  HYBRIDTEST", Ok(r"[[20,60]]")),
+        (r"@CLEAN 4 2 3  HYBRIDTEST", Ok(r"[[20,60]]")),
+        (r"@CLEAN 4 3 1  HYBRIDTEST", Ok(r"[[60,190]]")),
+        (r"@CLEAN 4 3 2  HYBRIDTEST", Ok(r"[[60,190]]")),
+        (r"@CLEAN 4 3 3  HYBRIDTEST", Ok(r"[[60,190]]")),
+        (r"@FLAT 4 1 1  HYBRIDTEST", Ok(r"[[]]")),
+        (
+            r"@FLAT 4 1 2  HYBRIDTEST",
+            Err(
+                r"Upper bound of number of outliers must be less than half of the number of observations per piece",
+            ),
+        ),
+        (
+            r"@FLAT 4 1 3  HYBRIDTEST",
+            Err(
+                r"Upper bound of number of outliers must be less than half of the number of observations per piece",
+            ),
+        ),
+        (r"@FLAT 4 2 1  HYBRIDTEST", Ok(r"[[]]")),
+        (r"@FLAT 4 2 2  HYBRIDTEST", Ok(r"[[]]")),
+        (r"@FLAT 4 2 3  HYBRIDTEST", Ok(r"[[]]")),
+        (r"@FLAT 4 3 1  HYBRIDTEST", Ok(r"[[]]")),
+        (r"@FLAT 4 3 2  HYBRIDTEST", Ok(r"[[]]")),
+        (r"@FLAT 4 3 3  HYBRIDTEST", Ok(r"[[]]")),
+        (r"@NEG 4 1 1  HYBRIDTEST", Ok(r"[[190]]")),
+        (
+            r"@NEG 4 1 2  HYBRIDTEST",
+            Err(
+                r"Upper bound of number of outliers must be less than half of the number of observations per piece",
+            ),
+        ),
+        (
+            r"@NEG 4 1 3  HYBRIDTEST",
+            Err(
+                r"Upper bound of number of outliers must be less than half of the number of observations per piece",
+            ),
+        ),
+        (r"@NEG 4 2 1  HYBRIDTEST", Ok(r"[[30,200]]")),
+        (r"@NEG 4 2 2  HYBRIDTEST", Ok(r"[[30,70,200,160]]")),
+        (r"@NEG 4 2 3  HYBRIDTEST", Ok(r"[[30,70,200,160]]")),
+        (r"@NEG 4 3 1  HYBRIDTEST", Ok(r"[[30,200]]")),
+        (r"@NEG 4 3 2  HYBRIDTEST", Ok(r"[[30,70,200,120]]")),
+    ]);
+}
+
+#[test]
+fn hybridtest_1() {
+    check(&[
+        (r"@NEG 4 3 3  HYBRIDTEST", Ok(r"[[30,70,110,200,120,160]]")),
+        (r"@NL 4 1 1  HYBRIDTEST", Ok(r"[[200]]")),
+        (
+            r"@NL 4 1 2  HYBRIDTEST",
+            Err(
+                r"Upper bound of number of outliers must be less than half of the number of observations per piece",
+            ),
+        ),
+        (
+            r"@NL 4 1 3  HYBRIDTEST",
+            Err(
+                r"Upper bound of number of outliers must be less than half of the number of observations per piece",
+            ),
+        ),
+        (r"@NL 4 2 1  HYBRIDTEST", Ok(r"[[130]]")),
+        (r"@NL 4 2 2  HYBRIDTEST", Ok(r"[[40,60,130,90]]")),
+        (r"@NL 4 2 3  HYBRIDTEST", Ok(r"[[40,60,0,130,90]]")),
+        (r"@NL 4 3 1  HYBRIDTEST", Ok(r"[[90]]")),
+        (r"@NL 4 3 2  HYBRIDTEST", Ok(r"[[90,10]]")),
+        (r"@NL 4 3 3  HYBRIDTEST", Ok(r"[[90,10,50]]")),
+        (r"@WIDE 4 1 1  HYBRIDTEST", Ok(r"[[]]")),
+        (
+            r"@WIDE 4 1 2  HYBRIDTEST",
+            Err(
+                r"Upper bound of number of outliers must be less than half of the number of observations per piece",
+            ),
+        ),
+        (
+            r"@WIDE 4 1 3  HYBRIDTEST",
+            Err(
+                r"Upper bound of number of outliers must be less than half of the number of observations per piece",
+            ),
+        ),
+        (r"@WIDE 4 2 1  HYBRIDTEST", Ok(r"[[9000]]")),
+        (r"@WIDE 4 2 2  HYBRIDTEST", Ok(r"[[9000,13000]]")),
+        (r"@WIDE 4 2 3  HYBRIDTEST", Ok(r"[[9000,13000,15000]]")),
+        (r"@WIDE 4 3 1  HYBRIDTEST", Ok(r"[[9000]]")),
+        (r"@WIDE 4 3 2  HYBRIDTEST", Ok(r"[[9000,5000]]")),
+        (
+            r"@WIDE 4 3 3  HYBRIDTEST",
+            Ok(r"[[9000,5000,1000,18000,23000,13000]]"),
+        ),
+    ]);
+}
+
+#[test]
+fn hybridtest_maps_0() {
+    check(&[
+        (
+            r"@A24 4 2 2 0.1 { 'ROBUST' T } HYBRIDTEST",
+            Ok(r"[[30,70,130,90,210,170]]"),
+        ),
+        (
+            r"@A48 6 2 2 0.1 { 'ROBUST' T } HYBRIDTEST",
+            Ok(r"[[50,300,380,440]]"),
+        ),
+        (
+            r"@A40 5 2 2 0.1 { 'ROBUST' T } HYBRIDTEST",
+            Ok(r"[[70,20,110,100,270,280,350,300]]"),
+        ),
+        (
+            r"@A60 12 2 2 0.1 { 'ROBUST' T } HYBRIDTEST",
+            Ok(r"[[130,250,380,500]]"),
+        ),
+        (
+            r"@A24 4 2 2 0.1 { 'BANDWIDTH_S' 7 } HYBRIDTEST",
+            Ok(r"[[]]"),
+        ),
+        (
+            r"@A48 6 2 2 0.1 { 'BANDWIDTH_S' 7 } HYBRIDTEST",
+            Ok(r"[[]]"),
+        ),
+        (
+            r"@A40 5 2 2 0.1 { 'BANDWIDTH_S' 7 } HYBRIDTEST",
+            Ok(r"[[]]"),
+        ),
+        (
+            r"@A60 12 2 2 0.1 { 'BANDWIDTH_S' 7 } HYBRIDTEST",
+            Ok(r"[[]]"),
+        ),
+        (
+            r"@A24 4 2 2 0.1 { 'PRECISION' 1 } HYBRIDTEST",
+            Ok(r"[[30,70,130,90,210,170]]"),
+        ),
+        (
+            r"@A48 6 2 2 0.1 { 'PRECISION' 1 } HYBRIDTEST",
+            Ok(r"[[50,110,300,240,380,440]]"),
+        ),
+        (
+            r"@A40 5 2 2 0.1 { 'PRECISION' 1 } HYBRIDTEST",
+            Ok(r"[[70,20,110,100,270,280,350,300]]"),
+        ),
+        (
+            r"@A60 12 2 2 0.1 { 'PRECISION' 1 } HYBRIDTEST",
+            Ok(r"[[130,250,500,380]]"),
+        ),
+        (
+            r"@A24 4 2 2 0.1 { 'BANDWIDTH_T' 9 } HYBRIDTEST",
+            Ok(r"[[70,30,90,130,170,210]]"),
+        ),
+        (
+            r"@A48 6 2 2 0.1 { 'BANDWIDTH_T' 9 } HYBRIDTEST",
+            Ok(r"[[110,50,240,300,440,380]]"),
+        ),
+        (
+            r"@A40 5 2 2 0.1 { 'BANDWIDTH_T' 9 } HYBRIDTEST",
+            Ok(r"[[20,70,100,110,280,270]]"),
+        ),
+        (
+            r"@A60 12 2 2 0.1 { 'BANDWIDTH_T' 9 } HYBRIDTEST",
+            Ok(r"[[130,250,500,380]]"),
+        ),
+        (
+            r"@A24 4 2 2 0.1 { 'SPEED' 1 } HYBRIDTEST",
+            Ok(r"[[30,70,130,90,210,170]]"),
+        ),
+        (
+            r"@A48 6 2 2 0.1 { 'SPEED' 1 } HYBRIDTEST",
+            Ok(r"[[110,50,240,300,380,440]]"),
+        ),
+        (
+            r"@A40 5 2 2 0.1 { 'SPEED' 1 } HYBRIDTEST",
+            Ok(r"[[70,20,110,100,270,280,350,300]]"),
+        ),
+        (
+            r"@A60 12 2 2 0.1 { 'SPEED' 1 } HYBRIDTEST",
+            Ok(r"[[130,250,500,380]]"),
+        ),
+        (
+            r"@A24 4 2 2 0.1 { 'BANDWIDTH_P' 5 } HYBRIDTEST",
+            Ok(r"[[60,10,90,130,170,210]]"),
+        ),
+        (
+            r"@A48 6 2 2 0.1 { 'BANDWIDTH_P' 5 } HYBRIDTEST",
+            Ok(r"[[110,50,240,300,380,440]]"),
+        ),
+        (
+            r"@A40 5 2 2 0.1 { 'BANDWIDTH_P' 5 } HYBRIDTEST",
+            Ok(r"[[70,20,110,180,280,270,350,300]]"),
+        ),
+        (
+            r"@A60 12 2 2 0.1 { 'BANDWIDTH_P' 5 } HYBRIDTEST",
+            Ok(r"[[130,250,380,500]]"),
+        ),
+        (
+            r"@A24 4 2 2 0.1 { 'BANDWIDTH_S' 7 'DEGREE_S' 2 } HYBRIDTEST",
+            Ok(r"[[70]]"),
+        ),
+        (
+            r"@A48 6 2 2 0.1 { 'BANDWIDTH_S' 7 'DEGREE_S' 2 } HYBRIDTEST",
+            Ok(r"[[110]]"),
+        ),
+        (
+            r"@A40 5 2 2 0.1 { 'BANDWIDTH_S' 7 'DEGREE_S' 2 } HYBRIDTEST",
+            Ok(r"[[190,180,390,380]]"),
+        ),
+        (
+            r"@A60 12 2 2 0.1 { 'BANDWIDTH_S' 7 'DEGREE_S' 2 } HYBRIDTEST",
+            Ok(r"[[]]"),
+        ),
+        (
+            r"@A24 4 2 2 0.1 { 'ZZZ' 'x' } HYBRIDTEST",
+            Ok(r"[[30,70,130,90,210,170]]"),
+        ),
+        (
+            r"@A48 6 2 2 0.1 { 'ZZZ' 'x' } HYBRIDTEST",
+            Ok(r"[[110,50,240,300,380,440]]"),
+        ),
+        (
+            r"@A40 5 2 2 0.1 { 'ZZZ' 'x' } HYBRIDTEST",
+            Ok(r"[[70,20,110,100,270,280,350,300]]"),
+        ),
+        (
+            r"@A60 12 2 2 0.1 { 'ZZZ' 'x' } HYBRIDTEST",
+            Ok(r"[[130,250,500,380]]"),
+        ),
+        (
+            r"@A24 4 2 2 0.1 { 'BANDWIDTH_S' 5 'ROBUST' T } HYBRIDTEST",
+            Ok(r"[[]]"),
+        ),
+        (
+            r"@A48 6 2 2 0.1 { 'BANDWIDTH_S' 5 'ROBUST' T } HYBRIDTEST",
+            Ok(r"[[]]"),
+        ),
+        (
+            r"@A40 5 2 2 0.1 { 'BANDWIDTH_S' 5 'ROBUST' T } HYBRIDTEST",
+            Ok(r"[[]]"),
+        ),
+        (
+            r"@A60 12 2 2 0.1 { 'BANDWIDTH_S' 5 'ROBUST' T } HYBRIDTEST",
+            Ok(r"[[]]"),
+        ),
+        (
+            r"@A24 4 2 3 0.01 HYBRIDTEST",
+            Ok(r"[[30,70,130,90,210,170]]"),
+        ),
+        (
+            r"@A24 4 2 3 0.2 HYBRIDTEST",
+            Ok(r"[[30,70,130,90,210,170]]"),
+        ),
+        (
+            r"@A24 4 2 3 0.5 HYBRIDTEST",
+            Ok(r"[[30,70,130,90,210,170]]"),
+        ),
+        (
+            r"@A48 6 2 3 0.01 HYBRIDTEST",
+            Ok(r"[[110,50,60,240,300,350,380,440]]"),
+        ),
+        (
+            r"@A48 6 2 3 0.2 HYBRIDTEST",
+            Ok(r"[[110,50,60,240,300,350,380,440]]"),
+        ),
+        (
+            r"@A48 6 2 3 0.5 HYBRIDTEST",
+            Ok(r"[[110,50,60,240,300,350,380,440]]"),
+        ),
+        (
+            r"@A40 5 2 3 0.01 HYBRIDTEST",
+            Ok(r"[[70,20,110,100,160,270,280,220]]"),
+        ),
+        (
+            r"@A40 5 2 3 0.2 HYBRIDTEST",
+            Ok(r"[[70,20,50,110,100,160,270,280,220,350,300]]"),
+        ),
+        (
+            r"@A40 5 2 3 0.5 HYBRIDTEST",
+            Ok(r"[[70,20,50,110,100,160,270,280,220,350,300,380]]"),
+        ),
+        (r"@A12 4 2 3 0.01 HYBRIDTEST", Ok(r"[[60,100]]")),
+        (r"@A12 4 2 3 0.2 HYBRIDTEST", Ok(r"[[60,100]]")),
+        (r"@A12 4 2 3 0.5 HYBRIDTEST", Ok(r"[[60,100]]")),
+    ]);
+}
+
+#[test]
+fn hybridtest_errors() {
+    check(&[
+        (r"3 HYBRIDTEST", Err(r"Empty stack.")),
+        (r"2 3 HYBRIDTEST", Err(r"Empty stack.")),
+        (r"1 2 3 HYBRIDTEST", Err(r"Empty stack.")),
+        (r"0.05 HYBRIDTEST", Err(r"Empty stack.")),
+        (r"3 0.05 HYBRIDTEST", Err(r"Empty stack.")),
+        (r"2 3 0.05 HYBRIDTEST", Err(r"Empty stack.")),
+        (r"{ } HYBRIDTEST", Err(r"Empty stack.")),
+        (r"3 { } HYBRIDTEST", Err(r"Empty stack.")),
+        (r"2 3 { } HYBRIDTEST", Err(r"Empty stack.")),
+        (r"1 2 3 { } HYBRIDTEST", Err(r"Empty stack.")),
+        (
+            r"@HOLE 4 2 1 HYBRIDTEST",
+            Err(r"Can only be applied on numeric Geo Time Series."),
+        ),
+        (
+            r"@HOLE 4 1 1 HYBRIDTEST",
+            Err(r"Can only be applied on numeric Geo Time Series."),
+        ),
+        (
+            r"@HOLE 4 3 1 HYBRIDTEST",
+            Err(r"Can only be applied on numeric Geo Time Series."),
+        ),
+        (
+            r"@HOLE 4 3 { 'BANDWIDTH_S' 7 } STLESDTEST",
+            Ok(r"[[70,60,50]]"),
+        ),
+        (r"@HOLE 4 3 STLESDTEST", Ok(r"[[110,30]]")),
+        (
+            r"@HOLE 4 2 1 HYBRIDTEST2",
+            Err(r"HYBRIDTEST2 operates on bucketized, filled Geo Time Series."),
+        ),
+        (r"@PLAIN 4 2 3 HYBRIDTEST", Err(r"GTS must be bucketized")),
+        (
+            r"@LONG 4 2 3 HYBRIDTEST",
+            Err(r"GTS must be of type Double."),
+        ),
+        (
+            r"@STR 4 2 3 HYBRIDTEST",
+            Err(r"GTS must be of type Double."),
+        ),
+        (r"@E 4 2 3 HYBRIDTEST", Err(r"GTS must be of type Double.")),
+        (
+            r"NEWGTS 4 2 3 HYBRIDTEST",
+            Err(r"GTS must be of type Double."),
+        ),
+        (r"@GAP 4 2 3 HYBRIDTEST", Ok(r"[[200,160]]")),
+        (
+            r"@GAPB 4 1 1 HYBRIDTEST",
+            Err(r"Can only be applied on numeric Geo Time Series."),
+        ),
+        (r"@OFF 4 2 3 HYBRIDTEST", Err(r"out of bounds for length")),
+        (r"@OFF 4 1 1 HYBRIDTEST", Err(r"out of bounds for length")),
+        (r"@LOC 4 2 1 HYBRIDTEST", Err(r"NullPointerException")),
+        (
+            r"@A24 4 2 3 { 'PERIOD' 'a' } HYBRIDTEST",
+            Err(r"cannot be cast to class"),
+        ),
+        (
+            r"@A24 4 2 3 { 'ROBUST' 1 } HYBRIDTEST",
+            Err(r"class java.lang.Long cannot be cast to class java.lang.Boolean"),
+        ),
+        (
+            r"@A24 4 2 3 { 'BANDWIDTH_S' 'a' } HYBRIDTEST",
+            Err(r"class java.lang.String cannot be cast to class java.lang.Number"),
+        ),
+        (
+            r"@A24 4 2 3 { 'BANDWIDTH_S' 0 } HYBRIDTEST",
+            Err(r"STL expects BANDWIDTH_S to be different than zero."),
+        ),
+        (
+            r"@A24 4 2 3 { 'PRECISION' 0 } HYBRIDTEST",
+            Err(r"STL expects PRECISION to be positive."),
+        ),
+        (
+            r"@A24 4 2 4 HYBRIDTEST",
+            Err(
+                r"Upper bound of number of outliers must be less than half of the number of observations per piece",
+            ),
+        ),
+        (
+            r"@A24 4 2 8 HYBRIDTEST",
+            Err(
+                r"Upper bound of number of outliers must be less than half of the number of observations per piece",
+            ),
+        ),
+        (r"@A24 4 2 -1 HYBRIDTEST", Ok(r"[[]]")),
+        (
+            r"@A24 0 2 3 HYBRIDTEST",
+            Err(
+                r"Upper bound of number of outliers must be less than half of the number of observations per piece",
+            ),
+        ),
+        (
+            r"@A24 4 0 3 HYBRIDTEST",
+            Err(
+                r"Upper bound of number of outliers must be less than half of the number of observations per piece",
+            ),
+        ),
+        (r"@A24 0 0 -3 HYBRIDTEST", Err(r"/ by zero")),
+        (r"@A24 0 2 -3 HYBRIDTEST", Err(r"/ by zero")),
+        (r"@A24 4 0 -3 HYBRIDTEST", Err(r"/ by zero")),
+        (
+            r"@A24 30 1 1 HYBRIDTEST",
+            Err(r"Not enough buckets to make up at least one seasonal period."),
+        ),
+        (
+            r"@A24 4 8 1 HYBRIDTEST",
+            Err(
+                r"Not enough seasonal periods to make up at least one piece. Please use a lower number of periods per piece.",
+            ),
+        ),
+        (
+            r"@A24 4 7 1 HYBRIDTEST",
+            Err(
+                r"Not enough seasonal periods to make up at least one piece. Please use a lower number of periods per piece.",
+            ),
+        ),
+        (
+            r"@A24 -4 2 3 HYBRIDTEST",
+            Err(
+                r"Upper bound of number of outliers must be less than half of the number of observations per piece",
+            ),
+        ),
+        (
+            r"@A24 4 -2 3 HYBRIDTEST",
+            Err(
+                r"Upper bound of number of outliers must be less than half of the number of observations per piece",
+            ),
+        ),
+        (r"@A24 4 2 -3 HYBRIDTEST", Ok(r"[[]]")),
+        (r"@A24 4 2 -9 HYBRIDTEST", Ok(r"[[]]")),
+        (
+            r"@NEGT 3 1 0 HYBRIDTEST",
+            Err(r"Can only be applied on bucketized Geo Time Series"),
+        ),
+        (r"@NEGT 3 3 1 HYBRIDTEST", Ok(r"[[-10]]")),
+        (r"@NEGT 3 3 0 HYBRIDTEST", Ok(r"[[]]")),
+        (r"@NEGT 2 4 1 HYBRIDTEST", Ok(r"[[]]")),
+        (r"@NEGT 4 2 1 HYBRIDTEST", Ok(r"[[]]")),
+        (
+            r"[ @A24 @A24 ] 4 2 3 HYBRIDTEST",
+            Err(r"NullPointerException"),
+        ),
+        (
+            r"[ @A24 ] 4 2 3 HYBRIDTEST",
+            Ok(r"[[[30,70,130,90,210,170]]]"),
+        ),
+        (r"[ ] 4 2 3 HYBRIDTEST", Ok(r"[[]]")),
+        (
+            r"[ @A24 @A48 ] 4 2 3 { } HYBRIDTEST",
+            Err(r"NullPointerException"),
+        ),
+        (
+            r"[ @A24 1 ] 4 2 3 HYBRIDTEST",
+            Err(r"HYBRIDTEST can only operate on Geo Time Series instances."),
+        ),
+        (
+            r"@A24 4 2 HYBRIDTEST",
+            Err(
+                r"HYBRIDTEST expects a number of buckets per period (a LONG) below the number of periods per piece.",
+            ),
+        ),
+        (
+            r"@A24 4 HYBRIDTEST",
+            Err(
+                r"HYBRIDTEST expects a number of periods per piece (a LONG) below the upper bound of the number of outliers.",
+            ),
+        ),
+        (
+            r"@A24 HYBRIDTEST",
+            Err(
+                r"HYBRIDTEST expects a significance level (a DOUBLE) or an upper bound of the number of outliers (a LONG) on top of the stack.",
+            ),
+        ),
+        (r"HYBRIDTEST", Err(r"Empty stack.")),
+        (
+            r"@A24 4 2 3 'a' HYBRIDTEST",
+            Err(
+                r"HYBRIDTEST expects a significance level (a DOUBLE) or an upper bound of the number of outliers (a LONG) on top of the stack.",
+            ),
+        ),
+        (
+            r"@A24 4 2 3 NULL HYBRIDTEST",
+            Err(
+                r"HYBRIDTEST expects a significance level (a DOUBLE) or an upper bound of the number of outliers (a LONG) on top of the stack.",
+            ),
+        ),
+        (
+            r"@A24 4 2 'a' HYBRIDTEST",
+            Err(
+                r"HYBRIDTEST expects a significance level (a DOUBLE) or an upper bound of the number of outliers (a LONG) on top of the stack.",
+            ),
+        ),
+        (
+            r"@A24 4 'a' 3 HYBRIDTEST",
+            Err(
+                r"HYBRIDTEST expects a number of periods per piece (a LONG) below the upper bound of the number of outliers.",
+            ),
+        ),
+        (
+            r"@A24 'a' 2 3 HYBRIDTEST",
+            Err(
+                r"HYBRIDTEST expects a number of buckets per period (a LONG) below the number of periods per piece.",
+            ),
+        ),
+        (
+            r"@A24 4 2 3.0 HYBRIDTEST",
+            Err(
+                r"HYBRIDTEST expects a number of buckets per period (a LONG) below the number of periods per piece.",
+            ),
+        ),
+        (
+            r"@A24 4 2.0 3 HYBRIDTEST",
+            Err(
+                r"HYBRIDTEST expects a number of periods per piece (a LONG) below the upper bound of the number of outliers.",
+            ),
+        ),
+        (
+            r"@A24 4.0 2 3 HYBRIDTEST",
+            Err(
+                r"HYBRIDTEST expects a number of buckets per period (a LONG) below the number of periods per piece.",
+            ),
+        ),
+        (
+            r"@A24 4 2 3 T HYBRIDTEST",
+            Err(
+                r"HYBRIDTEST expects a significance level (a DOUBLE) or an upper bound of the number of outliers (a LONG) on top of the stack.",
+            ),
+        ),
+        (
+            r"1 4 2 3 HYBRIDTEST",
+            Err(r"HYBRIDTEST can only operate on Geo Time Series instances."),
+        ),
+        (
+            r"'a' 4 2 3 HYBRIDTEST",
+            Err(r"HYBRIDTEST can only operate on Geo Time Series instances."),
+        ),
+        (
+            r"{ 'BANDWIDTH_S' 7 } 'm' STORE @A24 4 2 3 $m HYBRIDTEST $m",
+            Ok(r#"[{"BANDWIDTH_S":7,"PERIOD":4,"ROBUST":false},[]]"#),
+        ),
+        (
+            r"{ 'ZZZ' 'x' } 'm' STORE @A24 4 2 3 $m HYBRIDTEST $m",
+            Ok(
+                r#"[{"ZZZ":"x","PERIOD":4,"BANDWIDTH_S":-1,"ROBUST":false},[30,70,130,90,210,170]]"#,
+            ),
+        ),
+        (
+            r"{ 'ZZZ' 'x' } 'm' STORE @PLAIN 4 2 3 $m HYBRIDTEST $m",
+            Err(r"GTS must be bucketized"),
+        ),
+        (
+            r"{ } 'm' STORE @A24 4 2 3 $m HYBRIDTEST @A24 4 2 3 $m HYBRIDTEST",
+            Ok(r"[[30,70,130,90,210,170],[30,70,130,90,210,170]]"),
+        ),
+        (
+            r"{ 'ZZZ' 'x' } 'm' STORE @A24 4 2 'a' $m HYBRIDTEST $m",
+            Err(
+                r"HYBRIDTEST expects a significance level (a DOUBLE) or an upper bound of the number of outliers (a LONG) on top of the stack.",
+            ),
+        ),
+        (
+            r"{ 'ZZZ' 'x' } 'm' STORE @A24 4 'a' 3 $m HYBRIDTEST $m",
+            Err(
+                r"HYBRIDTEST expects a number of periods per piece (a LONG) below the upper bound of the number of outliers.",
+            ),
         ),
     ]);
 }

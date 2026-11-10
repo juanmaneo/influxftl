@@ -77,6 +77,16 @@ impl Values {
         }
     }
 
+    /// The numbers of a `LONG` or `DOUBLE` series as doubles (`((Number) value).doubleValue()`);
+    /// the other types hold none.
+    pub fn to_doubles(&self) -> Vec<f64> {
+        match self {
+            Values::Long(values) => values.iter().map(|&value| value as f64).collect(),
+            Values::Double(values) => values.clone(),
+            Values::Undefined | Values::Boolean(_) | Values::String(_) => Vec::new(),
+        }
+    }
+
     /// The value at `idx` (`GTSHelper.valueAtIndex`): `null` when out of range.
     pub fn get(&self, idx: usize) -> Value {
         match self {

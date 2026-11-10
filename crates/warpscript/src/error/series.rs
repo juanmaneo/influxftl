@@ -289,4 +289,22 @@ pub enum SeriesError {
         /// The tick.
         tick: i64,
     },
+    /// `STL` of a series that is not numeric.
+    #[error("Can only be applied on numeric Geo Time Series.")]
+    StlNotNumeric,
+    /// `STL` of a series that is not bucketized.
+    #[error("Can only be applied on bucketized Geo Time Series")]
+    StlNotBucketized,
+    /// `STL` that finds no value to average in a step.
+    #[error("STL found no value in its step {0}, is GTS empty?")]
+    StlNoValue(String),
+    /// `STL` smoothing a cycle that is not bucketized.
+    #[error("lowess_stl method works with bucketized gts only")]
+    StlCycleNotBucketized,
+    /// A regression given robustness weights fewer than the datapoints it reads.
+    #[error("Incoherent array lengths as input of pointwise_lowess")]
+    IncoherentLowessArrays,
+    /// A seasonal test whose period is not that of the decomposition it is given.
+    #[error("Incoherence between PERIOD parameter of test and PERIOD parameter of STL")]
+    PeriodMismatch,
 }

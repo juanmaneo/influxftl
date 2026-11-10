@@ -395,6 +395,8 @@ mod spectral_tests;
 #[cfg(test)]
 mod stack_ops_tests;
 #[cfg(test)]
+mod stl_tests;
+#[cfg(test)]
 mod stringformat_tests;
 #[cfg(test)]
 mod strings_tests;

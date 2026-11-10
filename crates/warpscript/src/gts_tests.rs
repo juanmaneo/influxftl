@@ -384,3 +384,16 @@ fn only_double_series_have_doubles() {
         assert_eq!(values.doubles(), Vec::<f64>::new());
     }
 }
+
+#[test]
+fn numbers_of_a_series_as_doubles() {
+    assert_eq!(Values::Long(vec![1, -2]).to_doubles(), [1.0, -2.0]);
+    assert_eq!(Values::Double(vec![0.5]).to_doubles(), [0.5]);
+    for values in [
+        Values::Undefined,
+        Values::Boolean(vec![true]),
+        Values::String(vec!["a".into()]),
+    ] {
+        assert_eq!(values.to_doubles(), Vec::<f64>::new());
+    }
+}

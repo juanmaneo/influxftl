@@ -60,6 +60,7 @@ mod interpolation_tests;
 pub mod javamap;
 pub mod jmath;
 pub mod jrandom;
+pub mod lowess;
 pub mod macros;
 pub mod pickle;
 pub mod sax;

@@ -127,6 +127,9 @@ pub enum BoundsError {
         /// The number of elements.
         length: usize,
     },
+    /// A range that ends past the end of an array.
+    #[error("Array index out of range: {0}")]
+    ArrayRange(usize),
     /// A bit index below zero.
     #[error("bitIndex < 0: {0}")]
     NegativeBitIndex(i64),
@@ -156,6 +159,14 @@ pub enum BoundsError {
         begin: usize,
         /// The end of the slice.
         end: usize,
+        /// The number of characters.
+        length: usize,
+    },
+    /// A slice from the beginning of a string that ends before it.
+    #[error("begin 0, end {end}, length {length}")]
+    StringEnd {
+        /// The end of the slice.
+        end: i64,
         /// The number of characters.
         length: usize,
     },
