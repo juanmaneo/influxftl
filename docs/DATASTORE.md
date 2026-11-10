@@ -78,6 +78,11 @@ nanoseconds from its microsecond), a `LIMIT` when only `count` and `skip` thin i
 boundaries with one more query each, then applies `skip`, `step`, `timestep` and `count` like the
 datastore in memory. `type` is a condition on `value_type`.
 
+The series of a table are found with `SELECT DISTINCT` over its tag columns (InfluxDB 3 Core
+has no series index to ask), a scan of those columns each time a function needs them, and a
+`FETCH` runs one query per series (plus one per boundary). Both are fine for the tables a script
+selects by class and labels, and worth knowing for a table with very many rows or series.
+
 ### Writes and deletions
 
 `UPDATE` is line protocol (batches of 10 000 lines, nanosecond precision). `DELETE` is limited by
