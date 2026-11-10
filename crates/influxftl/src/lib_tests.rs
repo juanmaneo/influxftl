@@ -24,6 +24,7 @@ fn output(words: &[&str], stdin: &str) -> anyhow::Result<String> {
         &mut Io {
             stdin: &mut input,
             stdout: &mut out,
+            datastore: None,
         },
     )?;
     Ok(String::from_utf8(out).expect("the output is UTF-8"))
@@ -112,6 +113,7 @@ fn eval_reports_a_stdin_that_fails() {
         &mut Io {
             stdin: &mut Broken,
             stdout: &mut out,
+            datastore: None,
         },
     )
     .expect_err("the pipe is broken");
@@ -162,6 +164,7 @@ fn a_failing_stdout_is_reported() {
             &mut Io {
                 stdin: input,
                 stdout: out,
+                datastore: None,
             },
         )
     };
@@ -242,6 +245,7 @@ fn serve_answers_a_request() {
             &mut Io {
                 stdin: &mut input,
                 stdout: &mut writer,
+                datastore: None,
             },
             Some(1),
         )
@@ -285,6 +289,7 @@ fn serve_reports_a_failing_stdout() {
                 accepts: 0,
                 flush_fails: false,
             },
+            datastore: None,
         },
         Some(1),
     )
@@ -299,9 +304,57 @@ fn serve_reports_a_failing_stdout() {
                 accepts: usize::MAX,
                 flush_fails: true,
             },
+            datastore: None,
         },
         Some(1),
     )
     .expect_err("the device is full");
     assert_eq!(err.to_string(), "flushing stdout");
+}
+
+#[test]
+fn the_datastore_is_chosen_by_a_setting() {
+    use std::ffi::OsStr;
+
+    use super::datastore_from;
+
+    assert!(datastore_from(None).expect("no datastore").is_none());
+    assert!(
+        datastore_from(Some(OsStr::new("memory")))
+            .expect("memory")
+            .is_some()
+    );
+    let err = datastore_from(Some(OsStr::new("influx"))).expect_err("unknown");
+    assert_eq!(
+        err.to_string(),
+        "INFLUXFTL_DATASTORE: unknown datastore 'influx' (`memory` is the only one)"
+    );
+    #[cfg(unix)]
+    {
+        use std::os::unix::ffi::OsStrExt;
+
+        let err = datastore_from(Some(OsStr::from_bytes(&[0xff]))).expect_err("not UTF-8");
+        assert_eq!(err.to_string(), "INFLUXFTL_DATASTORE is not UTF-8");
+    }
+}
+
+#[test]
+fn a_script_works_on_the_datastore() {
+    use std::sync::Arc;
+
+    let mut input = Cursor::new(Vec::new());
+    let mut out = Vec::new();
+    run(
+        &args(&[
+            "eval",
+            "NEWGTS 'cpu' RENAME 7 NaN NaN NaN 42 ADDVALUE 'tok' UPDATE [ 'tok' 'cpu' { } 10 10 ] FETCH 0 GET VALUES",
+        ]),
+        &mut Io {
+            stdin: &mut input,
+            stdout: &mut out,
+            datastore: Some(Arc::new(warpscript::datastore::MemoryDatastore::new())),
+        },
+    )
+    .expect("the script should run");
+    assert_eq!(String::from_utf8(out).expect("UTF-8"), "[[42]]\n");
 }

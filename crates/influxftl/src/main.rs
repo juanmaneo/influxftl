@@ -9,9 +9,19 @@ fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
     let mut stdin = io::stdin().lock();
     let mut stdout = io::stdout().lock();
+    let datastore =
+        match influxftl::datastore_from(std::env::var_os(influxftl::DATASTORE_VARIABLE).as_deref())
+        {
+            Ok(datastore) => datastore,
+            Err(err) => {
+                eprintln!("influxftl: {err:#}");
+                return ExitCode::FAILURE;
+            }
+        };
     let mut streams = influxftl::Io {
         stdin: &mut stdin,
         stdout: &mut stdout,
+        datastore,
     };
     match influxftl::run(&args, &mut streams) {
         Ok(()) => ExitCode::SUCCESS,

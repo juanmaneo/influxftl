@@ -33,6 +33,8 @@ pub fn exception_class(err: &Error) -> &'static str {
         | Error::Collection(_)
         | Error::Crypto(_)
         | Error::Platform(_)
+        | Error::Datastore(_)
+        | Error::TimeRange(_)
         | Error::Geo(_)
         | Error::Format(_)
         | Error::Wrapped { .. }

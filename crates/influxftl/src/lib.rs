@@ -8,11 +8,15 @@ pub mod cli;
 pub mod exec;
 pub mod http;
 
+use std::ffi::OsStr;
 use std::io::{Read, Write};
 use std::net::TcpListener;
 use std::path::PathBuf;
+use std::sync::Arc;
 
 use anyhow::Context;
+
+use warpscript::datastore::{Datastore, MemoryDatastore};
 
 use cli::{Command, USAGE};
 
@@ -22,6 +26,28 @@ pub struct Io<'a> {
     pub stdin: &'a mut dyn Read,
     /// Where the results go.
     pub stdout: &'a mut dyn Write,
+    /// The datastore the scripts work on, when there is one.
+    pub datastore: Option<Arc<dyn Datastore>>,
+}
+
+/// The environment variable that chooses the datastore (`memory`).
+pub const DATASTORE_VARIABLE: &str = "INFLUXFTL_DATASTORE";
+
+/// The datastore a setting of [`DATASTORE_VARIABLE`] chooses: none when it is not set, a
+/// datastore in memory (which forgets everything when the process ends) for `memory`.
+///
+/// # Errors
+///
+/// A setting that is not a datastore (the InfluxDB 3 datastore is not connected yet).
+pub fn datastore_from(setting: Option<&OsStr>) -> anyhow::Result<Option<Arc<dyn Datastore>>> {
+    match setting.map(OsStr::to_str) {
+        None => Ok(None),
+        Some(Some("memory")) => Ok(Some(Arc::new(MemoryDatastore::new()))),
+        Some(Some(other)) => anyhow::bail!(
+            "{DATASTORE_VARIABLE}: unknown datastore '{other}' (`memory` is the only one)"
+        ),
+        Some(None) => anyhow::bail!("{DATASTORE_VARIABLE} is not UTF-8"),
+    }
 }
 
 /// Run a command line (without the name of the program).
@@ -62,7 +88,7 @@ pub fn run_with(
                     script
                 }
             };
-            stacks(&[(None, script)])?
+            stacks(&[(None, script)], io.datastore.as_ref())?
         }
         Command::Run(files) => {
             let mut scripts = Vec::new();
@@ -71,7 +97,7 @@ pub fn run_with(
                     .with_context(|| format!("reading {}", file.display()))?;
                 scripts.push((Some(file), script));
             }
-            stacks(&scripts)?
+            stacks(&scripts, io.datastore.as_ref())?
         }
         Command::Serve(address) => return serve(&address, io, connections),
     };
@@ -82,10 +108,13 @@ pub fn run_with(
 }
 
 /// The stacks the scripts leave, top first, as JSON, a line for each script.
-fn stacks(scripts: &[(Option<PathBuf>, String)]) -> anyhow::Result<String> {
+fn stacks(
+    scripts: &[(Option<PathBuf>, String)],
+    datastore: Option<&Arc<dyn Datastore>>,
+) -> anyhow::Result<String> {
     let mut output = String::new();
     for (file, script) in scripts {
-        let execution = exec::execute(script).with_context(|| match file {
+        let execution = exec::execute(script, datastore.cloned()).with_context(|| match file {
             Some(file) => format!("running {}", file.display()),
             None => "running the script".to_owned(),
         })?;
@@ -100,7 +129,7 @@ fn serve(address: &str, io: &mut Io<'_>, connections: Option<usize>) -> anyhow::
     let listener = TcpListener::bind(address).with_context(|| format!("listening on {address}"))?;
     writeln!(io.stdout, "influxftl: listening on http://{address}").context("writing to stdout")?;
     io.stdout.flush().context("flushing stdout")?;
-    http::serve(&listener, connections).context("serving")
+    http::serve(&listener, connections, io.datastore.as_ref()).context("serving")
 }
 
 #[cfg(test)]

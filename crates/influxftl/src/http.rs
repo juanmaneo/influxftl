@@ -10,8 +10,11 @@
 
 use std::io::{self, BufRead, BufReader, Read, Write};
 use std::net::{TcpListener, TcpStream};
+use std::sync::Arc;
 use std::thread;
 use std::time::Instant;
+
+use warpscript::datastore::Datastore;
 
 use crate::exec::{self, ScriptError};
 
@@ -186,10 +189,10 @@ fn header_value(text: &str) -> String {
 }
 
 /// Run the script of a request and answer.
-fn exec(script: &[u8]) -> Result<Response, Rejection> {
+fn exec(script: &[u8], datastore: Option<Arc<dyn Datastore>>) -> Result<Response, Rejection> {
     let script = std::str::from_utf8(script).map_err(|_| Rejection::NotUtf8)?;
     let start = Instant::now();
-    Ok(match exec::execute(script) {
+    Ok(match exec::execute(script, datastore) {
         Ok(execution) => Response {
             status: 200,
             reason: "OK",
@@ -216,9 +219,9 @@ fn exec(script: &[u8]) -> Result<Response, Rejection> {
 }
 
 /// The answer to a request.
-fn route(request: &Request) -> Result<Response, Rejection> {
+fn route(request: &Request, datastore: Option<Arc<dyn Datastore>>) -> Result<Response, Rejection> {
     match (request.method.as_str(), request.path.as_str()) {
-        ("POST", "/api/v0/exec") => exec(&request.body),
+        ("POST", "/api/v0/exec") => exec(&request.body, datastore),
         ("GET", "/health") => Ok(Response::text(200, "OK", "ok")),
         (_, "/api/v0/exec" | "/health") => Err(Rejection::MethodNotAllowed),
         _ => Err(Rejection::NotFound),
@@ -230,7 +233,10 @@ fn route(request: &Request) -> Result<Response, Rejection> {
 /// # Errors
 ///
 /// The connection failed: the request ended early or the answer could not be written.
-pub fn handle(connection: &mut dyn Duplex) -> io::Result<()> {
+pub fn handle(
+    connection: &mut dyn Duplex,
+    datastore: Option<Arc<dyn Datastore>>,
+) -> io::Result<()> {
     let request = {
         let mut reader = BufReader::new(&mut *connection);
         read_request(&mut reader)
@@ -238,7 +244,9 @@ pub fn handle(connection: &mut dyn Duplex) -> io::Result<()> {
     let response = match request {
         Err(ReadFailure::Io(err)) => return Err(err),
         Err(ReadFailure::Rejected(rejection)) => rejection_response(&rejection),
-        Ok(request) => route(&request).unwrap_or_else(|rejection| rejection_response(&rejection)),
+        Ok(request) => {
+            route(&request, datastore).unwrap_or_else(|rejection| rejection_response(&rejection))
+        }
     };
     response.write_to(connection)
 }
@@ -254,8 +262,12 @@ fn rejection_response(rejection: &Rejection) -> Response {
 /// # Errors
 ///
 /// The listener failed to accept a connection.
-pub fn serve(listener: &TcpListener, limit: Option<usize>) -> io::Result<()> {
-    serve_connections(&mut listener.incoming(), limit)
+pub fn serve(
+    listener: &TcpListener,
+    limit: Option<usize>,
+    datastore: Option<&Arc<dyn Datastore>>,
+) -> io::Result<()> {
+    serve_connections(&mut listener.incoming(), limit, datastore)
 }
 
 /// Serve connections, a thread for each one, `limit` of them or all of them.
@@ -266,13 +278,15 @@ pub fn serve(listener: &TcpListener, limit: Option<usize>) -> io::Result<()> {
 pub fn serve_connections(
     connections: &mut dyn Iterator<Item = io::Result<TcpStream>>,
     limit: Option<usize>,
+    datastore: Option<&Arc<dyn Datastore>>,
 ) -> io::Result<()> {
     let mut handlers = Vec::new();
     for (served, connection) in connections.enumerate() {
         let mut connection = connection?;
+        let datastore = datastore.cloned();
         handlers.push(thread::spawn(move || {
             // A client that goes away is not the concern of the server.
-            if let Err(err) = handle(&mut connection) {
+            if let Err(err) = handle(&mut connection, datastore) {
                 eprintln!("influxftl: {err}");
             }
         }));

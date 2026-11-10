@@ -1060,3 +1060,11 @@ The snapshot of the parameters of a function is built when the function is, so t
 too deep to snapshot fail there and not when the snapshot is asked for. Series given in place
 of lists fail with the `ClassCastException` Warp 10 raises after it checks them.
 
+## 32. The datastore functions
+
+`FETCH`, `FIND`, `FINDSETS`, `FINDSTATS`, `UPDATE`, `META`, `METADIFF` and `DELETE` work on the
+datastore a host connects (InfluxDB 3, or the one in memory) and not on Warp 10's Directory and
+Store: tokens are accepted and ignored, there is no producer / owner / application, `METASET`
+and the parameters tied to Warp 10's storage are refused. `docs/DATASTORE.md` lists what is
+supported. The time range of a fetch is Warp 10's (`FETCH.computeTimeRange`).
+

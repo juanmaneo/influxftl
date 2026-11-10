@@ -3,6 +3,9 @@
 //! Running a script and reporting the stack it leaves, like the `/api/v0/exec` endpoint of
 //! Warp 10 does.
 
+use std::sync::Arc;
+
+use warpscript::datastore::Datastore;
 use warpscript::functions::json::{JsonError, JsonOptions, to_json};
 use warpscript::{Error, Stack, Value};
 
@@ -51,14 +54,18 @@ impl ScriptError {
     }
 }
 
-/// Run a script on a new stack with the default limits of Warp 10.
+/// Run a script on a new stack with the default limits of Warp 10, connected to a datastore.
 ///
 /// # Errors
 ///
 /// The failure of the script, with the line it happened on, or a stack that cannot be written
 /// as JSON.
-pub fn execute(script: &str) -> Result<Execution, ScriptError> {
+pub fn execute(
+    script: &str,
+    datastore: Option<Arc<dyn Datastore>>,
+) -> Result<Execution, ScriptError> {
     let mut stack = Stack::new();
+    stack.set_datastore(datastore);
     stack
         .exec_checked(script)
         .map_err(|err| ScriptError::of(&err))?;

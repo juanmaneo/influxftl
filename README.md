@@ -156,8 +156,8 @@ curl --data-binary "40 2 +" http://127.0.0.1:8080/api/v0/exec      # [42]
 `POST /api/v0/exec` answers the stack as JSON (top first) with `X-Warp10-Elapsed` and
 `X-Warp10-Ops`; a failing script gets a `500` with `X-Warp10-Error-Line` and
 `X-Warp10-Error-Message`, like Warp 10's endpoint. The datastore functions (`FETCH`, `FIND`,
-`UPDATE`…) are the next step: until the InfluxDB 3 backend lands they are not registered (see
-`docs/FUNCTIONS.md`); every other function is.
+`UPDATE`, `META`, `DELETE`…) work on a datastore the host connects: the InfluxDB 3 one is the next
+step, and `INFLUXFTL_DATASTORE=memory` connects one in memory (see `docs/DATASTORE.md`).
 
 Embedding the engine:
 

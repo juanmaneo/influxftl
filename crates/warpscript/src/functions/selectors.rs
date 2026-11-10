@@ -95,20 +95,28 @@ fn metamatch(stack: &mut Stack) -> Result<()> {
     Ok(())
 }
 
+/// `PARSESELECTOR.parse`: the class selector and the labels selectors of a selector text.
+pub(super) fn parse_selector_text(
+    selector: &str,
+) -> Result<(String, indexmap::IndexMap<String, String>)> {
+    const NAME: &str = "PARSESELECTOR";
+    let wrap = |cause: Error| Error::with_cause(format!("{NAME} could not parse input."), cause);
+    match parse_selector(selector) {
+        None => Err(wrap(SeriesError::InvalidSelectorSpaced.into())),
+        // The `IllegalArgumentException` of a bad percent-encoding is not wrapped.
+        Some(Err(err)) if err.is_runtime() => Err(err),
+        Some(Err(err)) => Err(wrap(err)),
+        Some(Ok(parts)) => Ok(parts),
+    }
+}
+
 /// `PARSESELECTOR`: push the class selector then the map of labels selectors.
 fn parseselector(stack: &mut Stack) -> Result<()> {
     const NAME: &str = "PARSESELECTOR";
     let Value::String(selector) = stack.pop()? else {
         return Err(Error::usage(NAME, "expects a String on top of the stack."));
     };
-    let wrap = |cause: Error| Error::with_cause(format!("{NAME} could not parse input."), cause);
-    let (class, labels) = match parse_selector(&selector) {
-        None => return Err(wrap(SeriesError::InvalidSelectorSpaced.into())),
-        // The `IllegalArgumentException` of a bad percent-encoding is not wrapped.
-        Some(Err(err)) if err.is_runtime() => return Err(err),
-        Some(Err(err)) => return Err(wrap(err)),
-        Some(Ok(parts)) => parts,
-    };
+    let (class, labels) = parse_selector_text(&selector)?;
     stack.push(Value::from(class));
     stack.push(Value::map(
         labels

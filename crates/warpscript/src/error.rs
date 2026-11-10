@@ -15,6 +15,7 @@ pub mod aggregator;
 pub mod collections;
 pub mod compat;
 pub mod crypto;
+pub mod datastore;
 pub mod fault;
 pub mod format;
 pub mod geo;
@@ -31,6 +32,7 @@ use std::{fmt, io};
 use self::aggregator::AggregatorError;
 use self::collections::CollectionError;
 use self::crypto::CryptoError;
+use self::datastore::{DatastoreError, TimeRangeError};
 use self::fault::{
     ArithmeticError, BoundsError, IllegalArgumentError, NumberFormatError, ResourceError,
 };
@@ -234,6 +236,12 @@ pub enum Error {
     /// A failure of a platform function.
     #[error(transparent)]
     Platform(#[from] PlatformError),
+    /// A failure of the datastore.
+    #[error(transparent)]
+    Datastore(#[from] DatastoreError),
+    /// A time range that cannot be computed.
+    #[error(transparent)]
+    TimeRange(#[from] TimeRangeError),
     /// An input or output failure.
     #[error(transparent)]
     Io(#[from] IoFailure),
@@ -352,6 +360,8 @@ impl Error {
             | Error::Collection(_)
             | Error::Crypto(_)
             | Error::Platform(_)
+            | Error::Datastore(_)
+            | Error::TimeRange(_)
             | Error::Io(_)
             | Error::Format(_)
             | Error::Parse { .. }

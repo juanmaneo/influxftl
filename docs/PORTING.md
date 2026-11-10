@@ -214,9 +214,11 @@ The `influxftl` binary runs scripts (`eval`, `run`) and serves `POST /api/v0/exe
 (`crates/influxftl`): the stack comes back as JSON, top first, with `X-Warp10-Elapsed` /
 `X-Warp10-Ops`, and a failing script as a `500` with `X-Warp10-Error-Line` and
 `X-Warp10-Error-Message`. The InfluxDB 3 datastore (`FETCH`, `FIND`, `UPDATE`…) is not
-connected yet.
+connected yet; a datastore in memory (`INFLUXFTL_DATASTORE=memory`) serves the datastore
+functions (`FETCH`, `FIND`, `FINDSETS`, `FINDSTATS`, `UPDATE`, `META`, `METADIFF`, `DELETE`;
+`docs/DATASTORE.md`).
 
-2032 / 2193 functions are ported (`docs/FUNCTIONS.md`; the inventory includes the names
+2044 / 2193 functions are ported (`docs/FUNCTIONS.md`; the inventory includes the names
 Warp 10 registers through `Builder`s and constants). The Geo Time Series model, the
 `GTSHelper` transforms (time, datapoints, statistics), `BUCKETIZE` and `MAP` with the
 shared aggregators (`sum`, `mean`, `min`, `max`, `first`, `last`, `count`, `and`, `or`,

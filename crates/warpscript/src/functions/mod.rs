@@ -14,6 +14,7 @@ pub mod collections;
 pub mod compression;
 pub mod control;
 pub mod crypto;
+pub mod datastore;
 pub mod dtw;
 pub mod encoders;
 pub mod functional;
@@ -120,6 +121,7 @@ const TABLES: &[&[(&str, Entry)]] = &[
     gts_points::FUNCTIONS,
     gts_stats::FUNCTIONS,
     spectral::FUNCTIONS,
+    datastore::FUNCTIONS,
     seasonal::FUNCTIONS,
     gts_frameworks::FUNCTIONS,
     gts_reduce::FUNCTIONS,
@@ -282,6 +284,8 @@ mod compression_tests;
 mod control_tests;
 #[cfg(test)]
 mod crypto_tests;
+#[cfg(test)]
+mod datastore_tests;
 #[cfg(test)]
 mod dedup_tests;
 #[cfg(test)]

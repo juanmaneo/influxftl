@@ -10,10 +10,12 @@
 
 use std::cell::RefCell;
 use std::rc::Rc;
+use std::sync::Arc;
 use std::time::Instant;
 
 use indexmap::IndexMap;
 
+use crate::datastore::Datastore;
 use crate::error::stack::StackError;
 use crate::error::{Error, Result};
 use crate::format;
@@ -192,6 +194,8 @@ pub struct Stack {
     line_number: Option<usize>,
     deadline: Option<Instant>,
     secure_codec: Option<Rc<dyn SecureCodec>>,
+    /// The datastore the datastore functions (`FETCH`, `FIND`…) work on, when one is connected.
+    datastore: Option<Arc<dyn Datastore>>,
     config: IndexMap<String, String>,
     /// Capabilities granted to the script (`Capabilities`), set by the host from the token.
     capabilities: IndexMap<String, String>,
@@ -244,6 +248,7 @@ impl Stack {
             line_number: None,
             deadline: None,
             secure_codec: None,
+            datastore: None,
             capabilities: IndexMap::new(),
             exported_capabilities: None,
             token_resolver: None,
@@ -649,6 +654,16 @@ impl Stack {
     /// Install (or remove) the secure script codec.
     pub fn set_secure_codec(&mut self, codec: Option<Rc<dyn SecureCodec>>) {
         self.secure_codec = codec;
+    }
+
+    /// The datastore the script works on, if one is connected.
+    pub fn datastore(&self) -> Option<Arc<dyn Datastore>> {
+        self.datastore.clone()
+    }
+
+    /// Connect (or disconnect) the datastore of the datastore functions.
+    pub fn set_datastore(&mut self, datastore: Option<Arc<dyn Datastore>>) {
+        self.datastore = datastore;
     }
 
     /// A stack attribute.

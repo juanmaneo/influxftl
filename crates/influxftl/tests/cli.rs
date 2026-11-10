@@ -75,3 +75,43 @@ fn runs_the_example() {
         "[21.0,\"hello WarpScript\"]\n"
     );
 }
+
+#[test]
+fn a_datastore_in_memory_serves_one_script() {
+    let output = Command::new(env!("CARGO_BIN_EXE_influxftl"))
+        .env("INFLUXFTL_DATASTORE", "memory")
+        .args([
+            "eval",
+            "NEWGTS 'cpu' RENAME 7 NaN NaN NaN 42 ADDVALUE 'tok' UPDATE [ 'tok' 'cpu' { } 10 10 ] FETCH 0 GET VALUES",
+        ])
+        .output()
+        .expect("influxftl should start");
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!(String::from_utf8_lossy(&output.stdout), "[[42]]\n");
+}
+
+#[test]
+fn an_unknown_datastore_fails_the_process() {
+    let output = Command::new(env!("CARGO_BIN_EXE_influxftl"))
+        .env("INFLUXFTL_DATASTORE", "influx")
+        .output()
+        .expect("influxftl should start");
+    assert!(!output.status.success());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("unknown datastore 'influx'"), "{stderr}");
+}
+
+#[test]
+fn without_a_datastore_the_datastore_functions_fail() {
+    let output = Command::new(env!("CARGO_BIN_EXE_influxftl"))
+        .args(["eval", "[ 'tok' 'cpu' { } ] FIND"])
+        .output()
+        .expect("influxftl should start");
+    assert!(!output.status.success());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("FIND needs a datastore"), "{stderr}");
+}

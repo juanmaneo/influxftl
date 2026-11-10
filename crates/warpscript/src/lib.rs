@@ -29,6 +29,9 @@ mod coverage_tests;
 pub mod curvefit;
 #[cfg(test)]
 mod curvefit_tests;
+pub mod datastore;
+#[cfg(test)]
+mod datastore_tests;
 pub mod distribution;
 #[cfg(test)]
 mod distribution_tests;

@@ -53,7 +53,7 @@ impl Write for Fake {
 /// The answer to a request, as text.
 fn answer(request: &[u8]) -> String {
     let mut fake = Fake::new(request);
-    handle(&mut fake).expect("the connection should not fail");
+    handle(&mut fake, None).expect("the connection should not fail");
     String::from_utf8(fake.output).expect("the answer is UTF-8")
 }
 
@@ -252,14 +252,14 @@ impl Write for Unreadable {
 
 #[test]
 fn a_connection_that_cannot_be_read_fails() {
-    let err = handle(&mut Unreadable).expect_err("the connection was reset");
+    let err = handle(&mut Unreadable, None).expect_err("the connection was reset");
     assert_eq!(err.kind(), io::ErrorKind::ConnectionReset);
 }
 
 #[test]
 fn a_connection_that_ends_in_the_body_fails() {
     let mut fake = Fake::new(b"POST /api/v0/exec HTTP/1.1\r\nContent-Length: 10\r\n\r\nabc");
-    let err = handle(&mut fake).expect_err("the body is cut");
+    let err = handle(&mut fake, None).expect_err("the body is cut");
     assert_eq!(err.kind(), io::ErrorKind::UnexpectedEof);
 }
 
@@ -268,7 +268,7 @@ fn a_connection_that_cannot_be_written_fails() {
     for writes in 0.. {
         let mut fake = Fake::new(b"GET /health HTTP/1.1\r\n\r\n");
         fake.writes = Some(writes);
-        match handle(&mut fake) {
+        match handle(&mut fake, None) {
             Ok(()) => {
                 // Every write could be done: the answer has been written whole.
                 assert!(writes > 4, "{writes}");
@@ -288,7 +288,7 @@ fn rejections_have_a_status() {
 fn a_listener_serves_its_connections() {
     let listener = TcpListener::bind("127.0.0.1:0").expect("a port");
     let address = listener.local_addr().expect("an address");
-    let server = thread::spawn(move || serve(&listener, Some(2)));
+    let server = thread::spawn(move || serve(&listener, Some(2), None));
     let mut answers = Vec::new();
     for script in ["1", "'a' 'b'"] {
         let mut client = TcpStream::connect(address).expect("the server should accept");
@@ -315,7 +315,7 @@ fn a_listener_serves_its_connections() {
 fn a_client_that_goes_away_does_not_stop_the_server() {
     let listener = TcpListener::bind("127.0.0.1:0").expect("a port");
     let address = listener.local_addr().expect("an address");
-    let server = thread::spawn(move || serve(&listener, Some(1)));
+    let server = thread::spawn(move || serve(&listener, Some(1), None));
     let mut client = TcpStream::connect(address).expect("the server should accept");
     client
         .write_all(b"POST /api/v0/exec HTTP/1.1\r\nContent-Length: 10\r\n\r\nabc")
@@ -330,7 +330,39 @@ fn a_client_that_goes_away_does_not_stop_the_server() {
 #[test]
 fn a_connection_that_cannot_be_accepted_stops_the_server() {
     let failing = io::Error::new(io::ErrorKind::ConnectionAborted, "aborted");
-    let err = serve_connections(&mut vec![Err(failing)].into_iter(), None)
+    let err = serve_connections(&mut vec![Err(failing)].into_iter(), None, None)
         .expect_err("the connection failed");
     assert_eq!(err.kind(), io::ErrorKind::ConnectionAborted);
+}
+
+#[test]
+fn the_connections_share_the_datastore() {
+    let listener = TcpListener::bind("127.0.0.1:0").expect("a port");
+    let address = listener.local_addr().expect("an address");
+    let datastore: std::sync::Arc<dyn warpscript::datastore::Datastore> =
+        std::sync::Arc::new(warpscript::datastore::MemoryDatastore::new());
+    let server = thread::spawn(move || serve(&listener, Some(2), Some(&datastore)));
+    let mut answers = Vec::new();
+    for script in [
+        "NEWGTS 'cpu' RENAME 1 NaN NaN NaN 5 ADDVALUE 'tok' UPDATE",
+        "[ 'tok' 'cpu' { } 9 9 ] FETCH 0 GET VALUES",
+    ] {
+        let mut client = TcpStream::connect(address).expect("the server should accept");
+        write!(
+            client,
+            "POST /api/v0/exec HTTP/1.1\r\nContent-Length: {}\r\n\r\n{script}",
+            script.len()
+        )
+        .expect("the request should be sent");
+        let mut text = String::new();
+        client
+            .read_to_string(&mut text)
+            .expect("the answer should be read");
+        answers.push(status_and_body(&text).1.to_owned());
+    }
+    server
+        .join()
+        .expect("the server should not panic")
+        .expect("the connections should be accepted");
+    assert_eq!(answers, ["[]", "[[5]]"]);
 }
