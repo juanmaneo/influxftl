@@ -35,6 +35,7 @@ mod datastore_tests;
 pub mod distribution;
 #[cfg(test)]
 mod distribution_tests;
+pub mod ec;
 pub mod encoder;
 #[cfg(test)]
 mod encoder_tests;

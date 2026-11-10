@@ -236,7 +236,8 @@ impl Serializer {
             | Value::BitSet(_)
             | Value::Mark
             | Value::Context(_)
-            | Value::GeoShape(_) => {
+            | Value::GeoShape(_)
+            | Value::Key(_) => {
                 self.out.push_str("null");
             }
             Value::Boolean(b) => self.out.push_str(if *b { "true" } else { "false" }),

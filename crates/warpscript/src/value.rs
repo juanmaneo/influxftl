@@ -122,6 +122,8 @@ pub enum Value {
     Encoder(Encoder),
     /// `GEOSHAPE`: a set of geocells (immutable).
     GeoShape(Rc<GeoShape>),
+    /// An elliptic curve key (`ECPRIVATE`, `ECPUBLIC`: a `java.security.Key` in Warp 10).
+    Key(Rc<crate::ec::Key>),
 }
 
 /// The kind of a [`Value`], without its content. Failures carry it instead of the value; the
@@ -170,6 +172,8 @@ pub enum ValueKind {
     Encoder,
     /// `GEOSHAPE`.
     GeoShape,
+    /// An elliptic curve key.
+    Key,
 }
 
 /// A `GTSENCODER` as held by the stack.
@@ -225,6 +229,7 @@ impl Value {
             Value::Gts(_) => "GTS",
             Value::Encoder(_) => "GTSENCODER",
             Value::GeoShape(_) => "GEOSHAPE",
+            Value::Key(_) => "KEY",
         }
     }
 
@@ -252,6 +257,7 @@ impl Value {
             Value::Gts(_) => ValueKind::Gts,
             Value::Encoder(_) => ValueKind::Encoder,
             Value::GeoShape(_) => ValueKind::GeoShape,
+            Value::Key(_) => ValueKind::Key,
         }
     }
 
@@ -319,6 +325,7 @@ impl Value {
             (Value::Gts(a), Value::Gts(b)) => Rc::ptr_eq(a, b),
             (Value::Encoder(a), Value::Encoder(b)) => Rc::ptr_eq(a, b),
             (Value::GeoShape(a), Value::GeoShape(b)) => Rc::ptr_eq(a, b),
+            (Value::Key(a), Value::Key(b)) => Rc::ptr_eq(a, b),
             (Value::String(a), Value::String(b)) => Rc::ptr_eq(a, b),
             (Value::Bytes(a), Value::Bytes(b)) => Rc::ptr_eq(a, b),
             _ => false,
@@ -403,7 +410,8 @@ impl PartialEq for Value {
             | (Value::Context(_), Value::Context(_))
             | (Value::Counter(_), Value::Counter(_))
             | (Value::Gts(_), Value::Gts(_))
-            | (Value::Encoder(_), Value::Encoder(_)) => self.same_object(other),
+            | (Value::Encoder(_), Value::Encoder(_))
+            | (Value::Key(_), Value::Key(_)) => self.same_object(other),
             // `GeoXPShape` has no `equals`; `EQ` compares the geocells.
             (Value::GeoShape(a), Value::GeoShape(b)) => a == b,
             _ => false,
@@ -458,6 +466,7 @@ impl Hash for Value {
             Value::Encoder(e) => (Rc::as_ptr(e) as usize).hash(state),
             // `GeoXPShape` overrides `equals` but not `hashCode`: sets tell two shapes apart.
             Value::GeoShape(s) => (Rc::as_ptr(s) as usize).hash(state),
+            Value::Key(k) => (Rc::as_ptr(k) as usize).hash(state),
         }
     }
 }
@@ -525,6 +534,8 @@ impl fmt::Display for Value {
                 crate::error::compat::value_class(ValueKind::GeoShape),
                 s.cells().len()
             ),
+            // The identity hash is not shown: the object holds a secret.
+            Value::Key(_) => write!(f, "{}@0", crate::error::compat::value_class(ValueKind::Key)),
         }
     }
 }

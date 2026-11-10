@@ -129,6 +129,7 @@ pub fn value_class(kind: ValueKind) -> &'static str {
         ValueKind::Gts => "io.warp10.continuum.gts.GeoTimeSerie",
         ValueKind::Encoder => "io.warp10.continuum.gts.GTSEncoder",
         ValueKind::GeoShape => "com.geoxp.GeoXPLib$GeoXPShape",
+        ValueKind::Key => "io.warp10.script.functions.ECPRIVATE$1",
     }
 }
 

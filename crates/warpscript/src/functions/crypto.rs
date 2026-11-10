@@ -105,7 +105,7 @@ fn keccak(bits: usize, data: &[u8]) -> Vec<u8> {
 }
 
 /// `SHA3Digest(bits)`: like Keccak with the SHA-3 domain separation.
-fn sha3(bits: usize, data: &[u8]) -> Vec<u8> {
+pub(crate) fn sha3(bits: usize, data: &[u8]) -> Vec<u8> {
     keccak_sponge(200 - bits / 4, 0x06, bits / 8, data)
 }
 

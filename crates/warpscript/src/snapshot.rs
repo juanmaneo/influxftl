@@ -8,6 +8,7 @@
 //! `() … +!`, in the *readable* form (`SNAPSHOTREADABLE`) strings only escape `%`, `'` and
 //! control characters and containers use the `[ … ]`, `{ … }` and `( … )` syntax.
 
+use crate::ec::Key;
 use crate::encoder::{DEFAULT_COMP_RATIO_THRESHOLD, encoder_to_wrapper, gts_to_wrapper};
 use crate::encoding::opb64_encode;
 use crate::error::Result;
@@ -232,6 +233,23 @@ fn append(out: &mut String, value: &Value, depth: usize, readable: bool) -> Resu
             out.push_str(&shape.pack());
             out.push_str("' GEOUNPACK ");
         }
+        // The parameter maps `ECPRIVATE` and `ECPUBLIC` read.
+        Value::Key(key) => match key.as_ref() {
+            Key::Private(private) => {
+                out.push_str("{ 'curve' '");
+                out.push_str(&private.name);
+                out.push_str("' 'd' '");
+                out.push_str(&private.d.to_string());
+                out.push_str("' } ECPRIVATE ");
+            }
+            Key::Public(public) => {
+                out.push_str("{ 'curve' '");
+                out.push_str(&public.name);
+                out.push_str("' 'Q' '");
+                out.push_str(&crate::encoding::hex_encode(&public.point.encode()));
+                out.push_str("' } ECPUBLIC ");
+            }
+        },
     }
     Ok(())
 }

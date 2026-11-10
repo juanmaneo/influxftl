@@ -219,7 +219,7 @@ The `influxftl` binary runs scripts (`eval`, `run`) and serves `POST /api/v0/exe
 reads, line protocol for writes; DIVERGENCES §34) or on a datastore in memory
 (`INFLUXFTL_DATASTORE=memory`). It was checked on InfluxDB 3 Core 3.12.
 
-2046 / 2193 functions are ported (`docs/FUNCTIONS.md`; the inventory includes the names
+2060 / 2193 functions are ported (`docs/FUNCTIONS.md`; the inventory includes the names
 Warp 10 registers through `Builder`s and constants). The Geo Time Series model, the
 `GTSHelper` transforms (time, datapoints, statistics), `BUCKETIZE` and `MAP` with the
 shared aggregators (`sum`, `mean`, `min`, `max`, `first`, `last`, `count`, `and`, `or`,
@@ -358,5 +358,10 @@ the order that unlocks the most:
    Secret sharing (`functions/ssss.rs`, `ssss.rs`): `->SSSS` and `SSSS->`, Shamir over
    GF(256) with the share format of OSS, so that shares are exchanged with Warp 10
    (DIVERGENCES §33).
+   Elliptic curves (`functions/ec.rs`, `ec.rs`): `ECGEN`, `ECPRIVATE`, `ECPUBLIC`, `ECSIGN`,
+   `ECVERIFY`, `ECRECOVER`, `ECDH` and the signed macros `MSIGN`, `MSIG`, `MSIGCOUNT`,
+   `MSIGINFO`, `MVERIFY`, `MCHECKSIG`, `MDETACH`, on the RustCrypto curves `secp256k1`,
+   `secp256r1`, `secp384r1` and `secp521r1` and checked against Warp 10 both ways
+   (DIVERGENCES §35).
 6. **Geo** (`GeoXPLib` shapes, `HAVERSINE`, `LOCATIONOFFSET`, `GEO.*`), PKI crypto,
    Processing. (The datastore functions on InfluxDB 3 are done: DIVERGENCES §34.)

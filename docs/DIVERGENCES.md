@@ -1097,3 +1097,33 @@ script can see that differs from Warp 10:
 - The connection is `http://` only (no TLS in the client; use a proxy).
 - A read of a database that does not exist yet fails with InfluxDB 3's `database not found`:
   the first `UPDATE` creates it.
+
+## 35. Elliptic curves and signed macros
+
+`ECGEN`, `ECPRIVATE`, `ECPUBLIC`, `ECSIGN`, `ECVERIFY`, `ECRECOVER`, `ECDH`, `MSIGN`, `MSIG`,
+`MSIGCOUNT`, `MSIGINFO`, `MVERIFY`, `MCHECKSIG` and `MDETACH` are checked against Warp 10 3.5.0:
+the keys, the secrets of an agreement, the keys `ECRECOVER` finds (in its order), the
+signatures it makes (verified here) and the signatures made here (verified by it, signed macros
+included: the text a macro is signed on is the same). What differs:
+
+- **Curves.** `secp256k1`, `secp256r1` (`prime256v1`, `P-256`), `secp384r1` (`P-384`) and
+  `secp521r1` (`P-521`), named without regard to case as BouncyCastle does. The other curves of
+  BouncyCastle (`curve25519`, the Brainpool, binary, GOST… ones) are refused, and the message of
+  `ECGEN`, `ECPRIVATE` and `ECPUBLIC` lists the curves of this runtime. The messages of a point
+  that cannot be decoded, and of a private number outside of `[1, n - 1]`, are BouncyCastle's.
+- **Algorithms.** `ECSIGN` and `ECVERIFY` know `NONEWITHECDSA`, and `SHA1`, `SHA224`, `SHA256`,
+  `SHA384`, `SHA512`, `SHA3-224`, `SHA3-256`, `SHA3-384`, `SHA3-512` and `RIPEMD160` with
+  `WITHECDSA` (and `ECDSA`, the SHA-1 one), in any case; signatures are DER. The `PLAIN-`,
+  `CVC-` and `ECNR` variants, and the algorithms of other kinds of keys, fail with
+  `ECSIGN error signing content. (no such algorithm: … for provider BC)`.
+- **Keys.** `ECVERIFY` works with every public key. Warp 10 fails with `Point not on curve` with
+  a public key made straight from a private key (its point is not normalised yet) and works
+  once the key went through `ECPUBLIC` twice (a map and back): the failure is not reproduced.
+  Every key is a `KEY` that is not equal to any other object and gives `null` in `->JSON`; the
+  class name an error gives for any of them is `io.warp10.script.functions.ECPRIVATE$1`.
+- **Signatures.** The nonce comes from the operating system (`getrandom`), as BouncyCastle's
+  comes from its `SecureRandom`; a signature is different each time.
+- **`MDETACH`** gives a new macro without the signature: Warp 10 shortens the macro it was given.
+- **`ECRECOVER`** reads `'r'` and `'s'` as `BigInteger`s; a text that is no number gives the
+  message of `new BigInteger` of a JDK 8. The `ecc.h` capability limits the cofactors tried: all
+  the curves here have cofactor 1, so it is never needed.

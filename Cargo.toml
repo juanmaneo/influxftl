@@ -55,6 +55,13 @@ chrono-tz = "0.10"
 num-bigint = { version = "0.4", default-features = false, features = ["std"] }
 num-integer = { version = "0.1", default-features = false, features = ["std"] }
 num-traits = { version = "0.2", default-features = false, features = ["std"] }
+# Elliptic curves of `ECGEN`, `ECSIGN`, `ECRECOVER`… (the named curves of BouncyCastle in Warp 10):
+# the field and point arithmetic only, the ECDSA of the runtime is built on it.
+elliptic-curve = { version = "0.14", default-features = false, features = ["arithmetic", "sec1"] }
+k256 = { version = "0.14", default-features = false, features = ["arithmetic"] }
+p256 = { version = "0.14", default-features = false, features = ["arithmetic"] }
+p384 = { version = "0.14", default-features = false, features = ["arithmetic"] }
+p521 = { version = "0.14", default-features = false, features = ["arithmetic"] }
 
 [workspace.lints.rust]
 unsafe_code = "forbid"

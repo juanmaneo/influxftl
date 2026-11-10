@@ -59,6 +59,32 @@ pub enum CryptoError {
     /// A secret that cannot be split.
     #[error(transparent)]
     Split(#[from] SplitError),
+    /// An elliptic curve operation that failed.
+    #[error(transparent)]
+    Ec(#[from] EcError),
+    /// Bytes that are not a point of the curve.
+    #[error(transparent)]
+    Point(#[from] PointError),
+    /// A hexadecimal text that BouncyCastle cannot read: the reason, which it tells twice.
+    #[error("exception decoding Hex string: {0} ({0})")]
+    HexDecoding(String),
+    /// A signature algorithm that BouncyCastle does not have.
+    #[error("no such algorithm: {0} for provider BC")]
+    NoSuchAlgorithm(String),
+    /// A private key and a public key of different curves.
+    #[error("Point must be on the same curve")]
+    CurveMismatch,
+    /// A byte of a signature that is not there (`ArrayIndexOutOfBoundsException`).
+    #[error("{0}")]
+    SignatureIndex(usize),
+    /// The range of bytes of a signature that ends before it starts (`Arrays.copyOfRange`).
+    #[error("{from} > {to}")]
+    RangeInverted {
+        /// Where the range starts.
+        from: i64,
+        /// Where it ends.
+        to: i64,
+    },
 }
 
 /// A failure of the splitting of a secret in shares.
@@ -75,6 +101,59 @@ pub enum SplitError {
         /// The number of shares needed to recover the secret.
         needed: usize,
     },
+    /// The operating system could not provide entropy.
+    #[error("Unable to obtain random data from the operating system ({0}).")]
+    Entropy(#[from] getrandom::Error),
+}
+
+/// Bytes that are not a point of the curve, worded like the `IllegalArgumentException`s of
+/// BouncyCastle's `ECCurve.decodePoint`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
+pub enum PointError {
+    /// No byte at all (BouncyCastle reads the first one).
+    #[error("0")]
+    Empty,
+    /// The point at infinity (`00`) followed by something.
+    #[error("Incorrect length for infinity encoding")]
+    InfinityLength,
+    /// A compressed point (`02`, `03`) of the wrong length.
+    #[error("Incorrect length for compressed encoding")]
+    CompressedLength,
+    /// An uncompressed point (`04`) of the wrong length.
+    #[error("Incorrect length for uncompressed encoding")]
+    UncompressedLength,
+    /// A hybrid point (`06`, `07`) of the wrong length.
+    #[error("Incorrect length for hybrid encoding")]
+    HybridLength,
+    /// A first byte that is no encoding.
+    #[error("Invalid point encoding 0x{0:x}")]
+    Encoding(u8),
+    /// A coordinate that is not below the prime of the field.
+    #[error("x value invalid for {0}")]
+    FieldElement(&'static str),
+    /// An abscissa that has no point.
+    #[error("Invalid point compression")]
+    Compression,
+    /// Coordinates that are not those of a point of the curve.
+    #[error("Invalid point coordinates")]
+    Coordinates,
+    /// A hybrid point whose tag does not tell the parity of its ordinate.
+    #[error("Inconsistent Y coordinate in hybrid encoding")]
+    HybridParity,
+}
+
+/// A failure of the elliptic curve cryptography.
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+pub enum EcError {
+    /// A signature that is not the DER of two integers.
+    #[error("error decoding signature bytes.")]
+    MalformedSignature,
+    /// A private number that is not in `[1, order - 1]`.
+    #[error("Scalar is not in the interval [1, n - 1]")]
+    ScalarInterval,
+    /// A number that is a multiple of the order, which has no inverse.
+    #[error("BigInteger not invertible.")]
+    NotInvertible,
     /// The operating system could not provide entropy.
     #[error("Unable to obtain random data from the operating system ({0}).")]
     Entropy(#[from] getrandom::Error),
