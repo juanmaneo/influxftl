@@ -1,0 +1,8 @@
+// Greets, then builds a small Geo Time Series and computes the mean of its values.
+'hello' 'greeting' STORE
+$greeting ' WarpScript' +
+NEWGTS 'temperature' RENAME { 'room' 'kitchen' } RELABEL
+0 NaN NaN NaN 20.5 ADDVALUE
+1000000 NaN NaN NaN 21.5 ADDVALUE
+VALUES 'values' STORE
+$values 0 GET $values 1 GET + 2.0 /

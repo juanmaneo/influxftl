@@ -9,12 +9,16 @@ authors.workspace = true
 description = "WarpScript / WarpLib execution engine for InfluxDB 3 — CLI, HTTP exec endpoint and InfluxDB 3 datastore backend"
 default-run = "influxftl"
 
+[lib]
+path = "src/lib.rs"
+
 [[bin]]
 name = "influxftl"
 path = "src/main.rs"
 
 [dependencies]
 anyhow = { workspace = true }
+thiserror = { workspace = true }
 warpscript = { workspace = true }
 
 [lints]

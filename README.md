@@ -145,14 +145,19 @@ Known, documented divergences live in [`docs/DIVERGENCES.md`](docs/DIVERGENCES.m
 # run a script from a file (platform time unit: microseconds, like Warp 10)
 cargo run -p influxftl -- run examples/hello.mc2
 
-# evaluate a one-liner, print the stack as JSON (like /api/v0/exec)
+# evaluate a one-liner, print the stack as JSON, top first (like /api/v0/exec)
 cargo run -p influxftl -- eval "1 2 + 'hello' 3 ->LIST"
 
-# execute against an InfluxDB 3 Core instance
-INFLUXDB3_HOST=http://localhost:8181 INFLUXDB3_DATABASE=iot INFLUXDB3_TOKEN=… \
-  cargo run -p influxftl -- serve --listen 127.0.0.1:8080
-curl --data-binary "[ 'TOKEN' 'temperature' {} NOW -10 ] FETCH" http://127.0.0.1:8080/api/v0/exec
+# serve the execution endpoint
+cargo run -p influxftl -- serve --listen 127.0.0.1:8080
+curl --data-binary "40 2 +" http://127.0.0.1:8080/api/v0/exec      # [42]
 ```
+
+`POST /api/v0/exec` answers the stack as JSON (top first) with `X-Warp10-Elapsed` and
+`X-Warp10-Ops`; a failing script gets a `500` with `X-Warp10-Error-Line` and
+`X-Warp10-Error-Message`, like Warp 10's endpoint. The datastore functions (`FETCH`, `FIND`,
+`UPDATE`…) are the next step: until the InfluxDB 3 backend lands they are not registered (see
+`docs/FUNCTIONS.md`); every other function is.
 
 Embedding the engine:
 
