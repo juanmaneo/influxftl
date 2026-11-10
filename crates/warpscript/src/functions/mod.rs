@@ -59,6 +59,7 @@ pub mod selectors;
 pub mod shape;
 pub mod smartparse;
 pub mod spectral;
+pub mod ssss;
 pub mod stack_ops;
 pub mod stringformat;
 pub mod strings;
@@ -121,6 +122,7 @@ const TABLES: &[&[(&str, Entry)]] = &[
     gts_points::FUNCTIONS,
     gts_stats::FUNCTIONS,
     spectral::FUNCTIONS,
+    ssss::FUNCTIONS,
     datastore::FUNCTIONS,
     seasonal::FUNCTIONS,
     gts_frameworks::FUNCTIONS,
@@ -400,6 +402,8 @@ mod spectral_close_tests;
 mod spectral_errors_tests;
 #[cfg(test)]
 mod spectral_tests;
+#[cfg(test)]
+mod ssss_tests;
 #[cfg(test)]
 mod stack_ops_tests;
 #[cfg(test)]

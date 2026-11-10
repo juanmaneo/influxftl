@@ -72,6 +72,9 @@ pub mod pickle;
 pub mod sax;
 pub mod selector;
 pub mod snapshot;
+pub mod ssss;
+#[cfg(test)]
+mod ssss_tests;
 pub mod stack;
 pub mod stl;
 #[cfg(test)]

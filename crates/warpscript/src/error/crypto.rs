@@ -56,4 +56,37 @@ pub enum CryptoError {
         /// The number of bytes unwrapped.
         unwrapped: usize,
     },
+    /// A secret that cannot be split.
+    #[error(transparent)]
+    Split(#[from] SplitError),
+}
+
+/// A failure of the splitting of a secret in shares.
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+pub enum SplitError {
+    /// A number of shares or of shares needed that cannot be split.
+    #[error(
+        "cannot split a secret in {shares} shares of which {needed} are needed: expected \
+         2 <= needed <= shares <= 255"
+    )]
+    InvalidParameters {
+        /// The number of shares asked.
+        shares: usize,
+        /// The number of shares needed to recover the secret.
+        needed: usize,
+    },
+    /// The operating system could not provide entropy.
+    #[error("Unable to obtain random data from the operating system ({0}).")]
+    Entropy(#[from] getrandom::Error),
+}
+
+/// A failure of the recovery of a secret from its shares.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
+pub enum RecoverError {
+    /// No share at all.
+    #[error("no share to recover the secret from")]
+    NoShares,
+    /// Two shares with the same abscissa: they are not shares of one split, or are repeated.
+    #[error("duplicate abscissa: the shares cannot be combined")]
+    DuplicateAbscissa,
 }

@@ -1525,7 +1525,7 @@ fn series_failures_have_the_wording_of_warp10() {
 fn remaining_domain_failures_have_the_wording_of_warp10() {
     use super::error::aggregator::AggregatorError;
     use super::error::collections::CollectionError;
-    use super::error::crypto::CryptoError;
+    use super::error::crypto::{CryptoError, SplitError};
     use super::error::fault::{BoundsError, IllegalArgumentError, ResourceError};
     use super::error::geo::GeoError;
     use super::error::platform::PlatformError;
@@ -1720,6 +1720,11 @@ fn remaining_domain_failures_have_the_wording_of_warp10() {
         (
             CryptoError::UnwrappedTooShort { nonce: 8, unwrapped: 3 }.into(),
             "8 > 3".to_owned(),
+        ),
+        (
+            CryptoError::Split(SplitError::InvalidParameters { shares: 300, needed: 2 }).into(),
+            "cannot split a secret in 300 shares of which 2 are needed: expected 2 <= needed <= shares <= 255"
+                .to_owned(),
         ),
         (
             AggregatorError::InvalidParameter("mapper.add".to_owned()).into(),

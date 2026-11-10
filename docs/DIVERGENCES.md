@@ -1068,3 +1068,13 @@ Store: tokens are accepted and ignored, there is no producer / owner / applicati
 and the parameters tied to Warp 10's storage are refused. `docs/DATASTORE.md` lists what is
 supported. The time range of a fetch is Warp 10's (`FETCH.computeTimeRange`).
 
+## 33. `->SSSS` and `SSSS->`
+
+The secret sharing is Shamir's scheme over GF(256) with the share format of OSS (the
+`(x, y)` pairs, the `(0, random)` pairs that make the shares look random and that `F ->SSSS`
+strips), so the shares of Warp 10 are recovered here and the other way round; it is written
+from that format and not ported from the polynomial classes of OSS. The coefficients and the
+abscissae come from the operating system's entropy (`getrandom`), where Warp 10 uses its own
+`SecureRandom`; they cannot be the same sequence, and a failing entropy source is an error.
+`SSSS->` of an empty list fails with the `NullPointerException` Warp 10 raises, and of shares
+that share an abscissa (they do not belong to the same split) gives `NULL`.

@@ -218,7 +218,7 @@ connected yet; a datastore in memory (`INFLUXFTL_DATASTORE=memory`) serves the d
 functions (`FETCH`, `FIND`, `FINDSETS`, `FINDSTATS`, `UPDATE`, `META`, `METADIFF`, `DELETE`;
 `docs/DATASTORE.md`).
 
-2044 / 2193 functions are ported (`docs/FUNCTIONS.md`; the inventory includes the names
+2046 / 2193 functions are ported (`docs/FUNCTIONS.md`; the inventory includes the names
 Warp 10 registers through `Builder`s and constants). The Geo Time Series model, the
 `GTSHelper` transforms (time, datapoints, statistics), `BUCKETIZE` and `MAP` with the
 shared aggregators (`sum`, `mean`, `min`, `max`, `first`, `last`, `count`, `and`, `or`,
@@ -354,5 +354,8 @@ the order that unlocks the most:
    `RLOWESS` share (`lowess.rs`); DIVERGENCES §30.
    `INTERPOLATOR.ND.MICROSPHERE` and `SMICROSPHERE` (`microsphere.rs`, Commons Math's
    `InterpolatingMicrosphere`; DIVERGENCES §31).
+   Secret sharing (`functions/ssss.rs`, `ssss.rs`): `->SSSS` and `SSSS->`, Shamir over
+   GF(256) with the share format of OSS, so that shares are exchanged with Warp 10
+   (DIVERGENCES §33).
 6. **Geo** (`GeoXPLib` shapes, `HAVERSINE`, `LOCATIONOFFSET`, `GEO.*`), **datastore**
    (`FETCH` / `FIND` / `UPDATE` / `META` / `DELETE` on InfluxDB 3), PKI crypto, Processing.
