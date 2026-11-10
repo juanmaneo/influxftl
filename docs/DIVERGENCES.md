@@ -1078,3 +1078,22 @@ abscissae come from the operating system's entropy (`getrandom`), where Warp 10 
 `SecureRandom`; they cannot be the same sequence, and a failing entropy source is an error.
 `SSSS->` of an empty list fails with the `NullPointerException` Warp 10 raises, and of shares
 that share an abscissa (they do not belong to the same split) gives `NULL`.
+
+## 34. The InfluxDB 3 datastore
+
+The datastore functions work on InfluxDB 3 Core as `docs/DATASTORE.md` describes (class = table,
+labels = tags, one row per datapoint, the attributes in the table `_influxftl_series`). What a
+script can see that differs from Warp 10:
+
+- `DELETE` deletes whole tables: a range of ticks fails (`InfluxDB 3 Core only deletes whole
+  tables`), and so does a selector that leaves a series in a table it deletes. Core has no
+  deletion of datapoints, and keeps a deleted table under another name.
+- A label cannot be named like a column of the datapoints (`time`, `value_type`, `value_l`,
+  `value_d`, `value_b`, `value_s`, `hhcode`, `elevation`), cannot be empty, and a class cannot
+  be `_influxftl_series`: `UPDATE` fails and says why. Class and label names with a line break and
+  classes that start with `#` are refused (line protocol cannot write them).
+- The labels of a series come back sorted by name (InfluxDB 3 has no order for them).
+- A tick is held in nanoseconds: ticks beyond the year 2262 are refused by InfluxDB 3.
+- The connection is `http://` only (no TLS in the client; use a proxy).
+- A read of a database that does not exist yet fails with InfluxDB 3's `database not found`:
+  the first `UPDATE` creates it.

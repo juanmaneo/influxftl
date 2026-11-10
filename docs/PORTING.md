@@ -213,10 +213,11 @@ The project is Apache-2.0 and must stay redistributable under it (see `README.md
 The `influxftl` binary runs scripts (`eval`, `run`) and serves `POST /api/v0/exec`
 (`crates/influxftl`): the stack comes back as JSON, top first, with `X-Warp10-Elapsed` /
 `X-Warp10-Ops`, and a failing script as a `500` with `X-Warp10-Error-Line` and
-`X-Warp10-Error-Message`. The InfluxDB 3 datastore (`FETCH`, `FIND`, `UPDATE`…) is not
-connected yet; a datastore in memory (`INFLUXFTL_DATASTORE=memory`) serves the datastore
-functions (`FETCH`, `FIND`, `FINDSETS`, `FINDSTATS`, `UPDATE`, `META`, `METADIFF`, `DELETE`;
-`docs/DATASTORE.md`).
+`X-Warp10-Error-Message`. The datastore functions (`FETCH`, `FIND`, `FINDSETS`, `FINDSTATS`,
+`UPDATE`, `META`, `METADIFF`, `DELETE`; `docs/DATASTORE.md`) work on InfluxDB 3
+(`INFLUXFTL_DATASTORE=influxdb3`: `crates/influxftl/src/influx`, a `std` HTTP client, SQL for
+reads, line protocol for writes; DIVERGENCES §34) or on a datastore in memory
+(`INFLUXFTL_DATASTORE=memory`). It was checked on InfluxDB 3 Core 3.12.
 
 2046 / 2193 functions are ported (`docs/FUNCTIONS.md`; the inventory includes the names
 Warp 10 registers through `Builder`s and constants). The Geo Time Series model, the
@@ -357,5 +358,5 @@ the order that unlocks the most:
    Secret sharing (`functions/ssss.rs`, `ssss.rs`): `->SSSS` and `SSSS->`, Shamir over
    GF(256) with the share format of OSS, so that shares are exchanged with Warp 10
    (DIVERGENCES §33).
-6. **Geo** (`GeoXPLib` shapes, `HAVERSINE`, `LOCATIONOFFSET`, `GEO.*`), **datastore**
-   (`FETCH` / `FIND` / `UPDATE` / `META` / `DELETE` on InfluxDB 3), PKI crypto, Processing.
+6. **Geo** (`GeoXPLib` shapes, `HAVERSINE`, `LOCATIONOFFSET`, `GEO.*`), PKI crypto,
+   Processing. (The datastore functions on InfluxDB 3 are done: DIVERGENCES §34.)

@@ -232,6 +232,8 @@ name = "influxftl"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "indexmap",
+ "serde_json",
  "thiserror",
  "warpscript",
 ]

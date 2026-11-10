@@ -103,16 +103,17 @@ Known, documented divergences live in [`docs/DIVERGENCES.md`](docs/DIVERGENCES.m
 
 | Warp 10                         | InfluxDB 3 Core                                                        |
 |---------------------------------|------------------------------------------------------------------------|
-| GTS **class name**              | measurement (table)                                                    |
-| GTS **labels**                  | tags                                                                   |
-| GTS **attributes**              | tags prefixed `_attr_` (attributes are mutable metadata in Warp 10)   |
-| **value** (LONG/DOUBLE/BOOLEAN/STRING) | field `value` (typed columns `value_l`, `value_d`, `value_b`, `value_s`) |
-| **location** (HHCode / lat,lon) | fields `lat`, `lon` (HHCode recomputed on read)                        |
-| **elevation**                   | field `elev`                                                           |
+| GTS **class name**              | table (measurement)                                                    |
+| GTS **labels**                  | tags (a label cannot be named like a column below, and has a value)    |
 | **tick** (µs by default)        | `time` column (ns), converted at the datastore boundary                |
+| **value** (LONG/DOUBLE/BOOLEAN/STRING) | `value_type` (`l`, `d`, `b`, `s`) and one column `value_l`, `value_d`, `value_b` or `value_s` |
+| **location** (HHCode)           | `hhcode` (integer; a marker value when there is none)                  |
+| **elevation** (mm)              | `elevation` (integer; a marker value when there is none)               |
+| GTS **attributes** (mutable metadata) | rows of the table `_influxftl_series` (tags `class`, `labels`; fields `attributes`, `deleted`): the latest row of a series is the current one |
 | read token / write token        | InfluxDB 3 token (`Authorization: Bearer …`)                           |
-| `FETCH` selector `class{labels}`| `SELECT … FROM measurement WHERE tag = … AND time …`                   |
+| `FETCH` selector `class{labels}`| `SELECT … FROM class WHERE tag = … AND time …`; the selector itself is evaluated by `influxftl` so that it means what it means in Warp 10 |
 | `UPDATE` / GTS input format     | line protocol                                                          |
+| `DELETE` of a series            | deletion of the table (InfluxDB 3 Core cannot delete datapoints), see `docs/DATASTORE.md` |
 
 ---
 
@@ -156,8 +157,20 @@ curl --data-binary "40 2 +" http://127.0.0.1:8080/api/v0/exec      # [42]
 `POST /api/v0/exec` answers the stack as JSON (top first) with `X-Warp10-Elapsed` and
 `X-Warp10-Ops`; a failing script gets a `500` with `X-Warp10-Error-Line` and
 `X-Warp10-Error-Message`, like Warp 10's endpoint. The datastore functions (`FETCH`, `FIND`,
-`UPDATE`, `META`, `DELETE`…) work on a datastore the host connects: the InfluxDB 3 one is the next
-step, and `INFLUXFTL_DATASTORE=memory` connects one in memory (see `docs/DATASTORE.md`).
+`UPDATE`, `META`, `DELETE`…) work on the datastore the environment chooses
+(`docs/DATASTORE.md`):
+
+```sh
+# InfluxDB 3 Core: a database (created by the first write) and, if it asks for one, a token
+export INFLUXFTL_DATASTORE=influxdb3 INFLUXDB3_DATABASE_NAME=warp
+export INFLUXDB3_HOST_URL=http://127.0.0.1:8181 INFLUXDB3_AUTH_TOKEN=apiv3_…
+cargo run -p influxftl -- eval "NEWGTS 'cpu' RENAME { 'host' 'a' } RELABEL 10 NaN NaN NaN 42 ADDVALUE \
+  'token' UPDATE [ 'token' 'cpu' { } 100 100 ] FETCH"
+
+# a datastore in memory, which forgets everything when the process ends
+INFLUXFTL_DATASTORE=memory cargo run -p influxftl -- serve
+```
+
 
 Embedding the engine:
 

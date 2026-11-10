@@ -261,8 +261,37 @@ impl MemoryDatastore {
 }
 
 /// A count as a length: a negative count is none.
-fn length(count: i64) -> usize {
+pub fn length(count: i64) -> usize {
     count.max(0) as usize
+}
+
+/// The datapoints of the range of a request, most recent first, that the request keeps: those
+/// left after it skips `skip` of them, one in `step`, `timestep` apart, and `count` of them.
+/// A datastore applies it to the datapoints it selected in the range (and of the wanted type).
+pub fn thin_range<T>(
+    range: impl IntoIterator<Item = (i64, T)>,
+    request: &FetchRequest,
+) -> Vec<(i64, T)> {
+    let mut thinned = Vec::new();
+    let mut last = None;
+    for (seen, (tick, payload)) in range.into_iter().skip(length(request.skip)).enumerate() {
+        if request
+            .count
+            .is_some_and(|count| thinned.len() >= length(count))
+        {
+            break;
+        }
+        let one_in_step = seen as i64 % request.step.max(1) == 0;
+        let spaced = match (request.timestep, last) {
+            (Some(timestep), Some(last)) => last - tick >= timestep,
+            _ => true,
+        };
+        if one_in_step && spaced {
+            thinned.push((tick, payload));
+            last = Some(tick);
+        }
+    }
+    thinned
 }
 
 /// The datapoints of a series a request fetches, the most recent first: those of the wanted
@@ -281,32 +310,14 @@ fn datapoints<'a>(series: &'a Stored, request: &FetchRequest) -> Vec<(i64, &'a P
             .filter(move |(_, point)| wanted(point))
             .map(|(tick, point)| (*tick, point))
     };
-    let mut range = Vec::new();
-    let mut last = None;
-    for (seen, (tick, point)) in points()
-        .filter(|(tick, _)| request.start <= *tick && *tick <= request.end)
-        .collect::<Vec<_>>()
-        .into_iter()
-        .rev()
-        .skip(length(request.skip))
-        .enumerate()
-    {
-        if request
-            .count
-            .is_some_and(|count| range.len() >= length(count))
-        {
-            break;
-        }
-        let one_in_step = seen as i64 % request.step.max(1) == 0;
-        let spaced = match (request.timestep, last) {
-            (Some(timestep), Some(last)) => last - tick >= timestep,
-            _ => true,
-        };
-        if one_in_step && spaced {
-            range.push((tick, point));
-            last = Some(tick);
-        }
-    }
+    let range = thin_range(
+        points()
+            .filter(|(tick, _)| request.start <= *tick && *tick <= request.end)
+            .collect::<Vec<_>>()
+            .into_iter()
+            .rev(),
+        request,
+    );
     // The oldest datapoints after the range come first (the most recent of them last).
     let mut after: Vec<(i64, &Point)> = points()
         .filter(|(tick, _)| *tick > request.end)

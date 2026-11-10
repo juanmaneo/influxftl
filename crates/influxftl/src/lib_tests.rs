@@ -2,6 +2,7 @@
 
 //! Tests of the commands.
 
+use std::ffi::OsString;
 use std::io::{self, Cursor, Read, Write};
 use std::net::{TcpListener, TcpStream};
 use std::path::PathBuf;
@@ -312,30 +313,68 @@ fn serve_reports_a_failing_stdout() {
     assert_eq!(err.to_string(), "flushing stdout");
 }
 
+/// An environment of the given settings.
+fn environment(settings: &[(&'static str, &'static str)]) -> impl Fn(&str) -> Option<OsString> {
+    let settings: Vec<(&'static str, &'static str)> = settings.to_vec();
+    move |name| {
+        settings
+            .iter()
+            .find(|(key, _)| *key == name)
+            .map(|(_, value)| OsString::from(value))
+    }
+}
+
 #[test]
 fn the_datastore_is_chosen_by_a_setting() {
-    use std::ffi::OsStr;
-
     use super::datastore_from;
 
-    assert!(datastore_from(None).expect("no datastore").is_none());
     assert!(
-        datastore_from(Some(OsStr::new("memory")))
+        datastore_from(&environment(&[]))
+            .expect("no datastore")
+            .is_none()
+    );
+    assert!(
+        datastore_from(&environment(&[("INFLUXFTL_DATASTORE", "memory")]))
             .expect("memory")
             .is_some()
     );
-    let err = datastore_from(Some(OsStr::new("influx"))).expect_err("unknown");
+    let err =
+        datastore_from(&environment(&[("INFLUXFTL_DATASTORE", "influx")])).expect_err("unknown");
     assert_eq!(
         err.to_string(),
-        "INFLUXFTL_DATASTORE: unknown datastore 'influx' (`memory` is the only one)"
+        "INFLUXFTL_DATASTORE: unknown datastore 'influx' (`memory` and `influxdb3` are the only ones)"
     );
     #[cfg(unix)]
     {
-        use std::os::unix::ffi::OsStrExt;
+        use std::os::unix::ffi::OsStringExt;
 
-        let err = datastore_from(Some(OsStr::from_bytes(&[0xff]))).expect_err("not UTF-8");
+        let err = datastore_from(&|name| {
+            (name == "INFLUXFTL_DATASTORE").then(|| OsString::from_vec(vec![0xff]))
+        })
+        .expect_err("not UTF-8");
         assert_eq!(err.to_string(), "INFLUXFTL_DATASTORE is not UTF-8");
     }
+}
+
+#[test]
+fn influxdb3_is_connected_from_the_environment() {
+    use super::datastore_from;
+
+    assert!(
+        datastore_from(&environment(&[
+            ("INFLUXFTL_DATASTORE", "influxdb3"),
+            ("INFLUXDB3_DATABASE_NAME", "warp"),
+        ]))
+        .expect("InfluxDB 3 is not reached until it is used")
+        .is_some()
+    );
+    let err = datastore_from(&environment(&[("INFLUXFTL_DATASTORE", "influxdb3")]))
+        .expect_err("no database");
+    assert_eq!(err.to_string(), "connecting InfluxDB 3");
+    assert_eq!(
+        format!("{err:#}"),
+        "connecting InfluxDB 3: INFLUXDB3_DATABASE_NAME must be set to connect InfluxDB 3"
+    );
 }
 
 #[test]

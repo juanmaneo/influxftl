@@ -7,8 +7,9 @@
 pub mod cli;
 pub mod exec;
 pub mod http;
+pub mod influx;
 
-use std::ffi::OsStr;
+use std::ffi::OsString;
 use std::io::{Read, Write};
 use std::net::TcpListener;
 use std::path::PathBuf;
@@ -30,23 +31,31 @@ pub struct Io<'a> {
     pub datastore: Option<Arc<dyn Datastore>>,
 }
 
-/// The environment variable that chooses the datastore (`memory`).
+/// The environment variable that chooses the datastore (`memory` or `influxdb3`).
 pub const DATASTORE_VARIABLE: &str = "INFLUXFTL_DATASTORE";
 
-/// The datastore a setting of [`DATASTORE_VARIABLE`] chooses: none when it is not set, a
-/// datastore in memory (which forgets everything when the process ends) for `memory`.
+/// The datastore the environment chooses, through [`DATASTORE_VARIABLE`]: none when it is not
+/// set, a datastore in memory (which forgets everything when the process ends) for `memory`,
+/// InfluxDB 3 for `influxdb3` (see [`influx::connect`] for the settings it reads).
 ///
 /// # Errors
 ///
-/// A setting that is not a datastore (the InfluxDB 3 datastore is not connected yet).
-pub fn datastore_from(setting: Option<&OsStr>) -> anyhow::Result<Option<Arc<dyn Datastore>>> {
-    match setting.map(OsStr::to_str) {
-        None => Ok(None),
-        Some(Some("memory")) => Ok(Some(Arc::new(MemoryDatastore::new()))),
-        Some(Some(other)) => anyhow::bail!(
-            "{DATASTORE_VARIABLE}: unknown datastore '{other}' (`memory` is the only one)"
+/// A setting that is not a datastore, or that InfluxDB 3 cannot be connected with.
+pub fn datastore_from(
+    lookup: &dyn Fn(&str) -> Option<OsString>,
+) -> anyhow::Result<Option<Arc<dyn Datastore>>> {
+    let Some(setting) = lookup(DATASTORE_VARIABLE) else {
+        return Ok(None);
+    };
+    match setting.to_str() {
+        Some("memory") => Ok(Some(Arc::new(MemoryDatastore::new()))),
+        Some("influxdb3") => Ok(Some(Arc::new(
+            influx::connect(lookup, influx::TIMEOUT).context("connecting InfluxDB 3")?,
+        ))),
+        Some(other) => anyhow::bail!(
+            "{DATASTORE_VARIABLE}: unknown datastore '{other}' (`memory` and `influxdb3` are the only ones)"
         ),
-        Some(None) => anyhow::bail!("{DATASTORE_VARIABLE} is not UTF-8"),
+        None => anyhow::bail!("{DATASTORE_VARIABLE} is not UTF-8"),
     }
 }
 
