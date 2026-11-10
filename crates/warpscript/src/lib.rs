@@ -37,6 +37,9 @@ pub mod encoder;
 mod encoder_tests;
 pub mod encoding;
 pub mod error;
+pub mod fft;
+#[cfg(test)]
+mod fft_tests;
 pub mod fillers;
 #[cfg(test)]
 mod fillers_tests;
@@ -67,6 +70,10 @@ pub mod thrift;
 pub mod unpickle;
 pub mod value;
 pub mod valueparse;
+pub mod wavelet;
+mod wavelet_data;
+#[cfg(test)]
+mod wavelet_tests;
 
 pub use error::{Error, Result};
 pub use macros::{Callable, Macro, Statement};

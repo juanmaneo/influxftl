@@ -998,3 +998,26 @@ shapes. `->PICKLE` writes a shape as the dictionary of its class, like Pyrolite 
 without property. The message of the `NumberFormatException` of a malformed HHCode string is the
 one of JDK 11+ (`For input string: "zz00000000000000" under radix 16`); the JDK 8 oracle reports
 the string without its last character.
+
+## 29. `FFT`, `FFTAP`, `IFFT`, `FFTWINDOW` and the wavelet transforms
+
+Warp 10 computes the Fourier transform with JTransforms 2.4.0 (`DoubleFFT_1D`), which is
+licensed under the MPL 1.1, the GPL 2 or the LGPL 2.1. Porting it would put those terms on this
+Apache-2.0 crate, so `fft.rs` is an independent implementation of the same transform, written
+from the mathematics alone (radix-2 Cooley-Tukey for the power-of-two lengths, Bluestein's
+chirp-z for the others). The coefficients are the same up to rounding errors (the tests compare
+them to the answers of Warp 10 with a relative tolerance of `1e-9`), and these differences are
+the only ones:
+
+- the last digits of every coefficient, hence of the amplitudes and the phases, differ, so a
+  script that compares or prints them exactly will see other digits;
+- the spectrum of real values is made exactly conjugate symmetric, and the mean is real: the
+  phase of the mean is `0` or `pi`, like in Warp 10. The Nyquist coefficient (even lengths) of
+  Warp 10 carries a leftover of rounding, a zero of either sign (`0.0` or `-0.0`, depending on the
+  length) or noise, so when it is negative its phase is `pi` or `-pi` there, `pi` here;
+- the phases of the coefficients whose amplitude is rounding noise are noise in both.
+
+`FFTWINDOW` weighs the values with `sin`, `cos` and `pow`, which may differ from the JDK by one ulp
+(§5.1). The wavelet transforms (`FDWT`, `IDWT`, `DWTSPLIT`) are a port of the Java classes
+and their 76 wavelets (`wavelet_data.rs` is generated from them): they are bit for bit the
+results of Warp 10.

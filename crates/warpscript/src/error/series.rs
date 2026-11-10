@@ -198,4 +198,63 @@ pub enum SeriesError {
     /// An alphabet size outside of the supported range.
     #[error("Alphabet size MUST be a power of two between 2 and 2^{0}")]
     AlphabetRange(u32),
+    /// `FFT` or `FFTAP` of a series that is not numeric (the message always names `FFT`).
+    #[error("FFT can only be applied to numeric Geo Time Series.")]
+    FftNotNumeric,
+    /// `FFT` or `FFTAP` of a series that is not bucketized.
+    #[error("FFT can only be applied to bucketized Geo Time Series.")]
+    FftNotBucketized,
+    /// `FFT` of a series with a tick that is not on a bucket boundary.
+    #[error("Found a tick not on a bucket boundary.")]
+    TickOffBucketBoundary,
+    /// `FFT` of a series with a duplicate tick.
+    #[error("Found duplicate tick.")]
+    FftDuplicateTick,
+    /// `FFT` of a series with a gap between 2 ticks.
+    #[error("Found a displaced tick, should have been 'bucketspan' away from previous.")]
+    DisplacedTick,
+    /// `IFFT` of real and imaginary parts of different lengths.
+    #[error("Real and imaginary Geo Time Series MUST have the same number of values.")]
+    PartsLength,
+    /// `IFFT` of parts that are not `DOUBLE` series.
+    #[error("{0} real and imaginary parts GTS MUST be of type DOUBLE.")]
+    PartsType(String),
+    /// `FFTWINDOW` of a series that is not numeric, with its selector.
+    #[error("{function} expects numeric Geo Time Series. {selector} is not numeric.")]
+    WindowNotNumeric {
+        /// The function.
+        function: String,
+        /// The selector of the series.
+        selector: String,
+    },
+    /// `FFTWINDOW` given an algorithm it does not know.
+    #[error("{function} given an unknown windowing function '{algorithm}'.")]
+    UnknownWindow {
+        /// The function.
+        function: String,
+        /// The algorithm, lowercased.
+        algorithm: String,
+    },
+    /// A wavelet transform given a wavelet it does not know.
+    #[error("{function} could not find wavelet '{wavelet}'.")]
+    UnknownWavelet {
+        /// The function.
+        function: String,
+        /// The name of the wavelet.
+        wavelet: String,
+    },
+    /// A wavelet function applied to a series that is not numeric.
+    #[error("{0} can only be applied to numeric Geo Time Series.")]
+    WaveletNotNumeric(String),
+    /// A wavelet function applied to a series whose length is not a power of 2.
+    #[error("{0} can only operate on Geo Time Series whose length is a power of 2.")]
+    NotPowerOfTwo(String),
+    /// `DWTSPLIT` of a series that already has the level label.
+    #[error("{function} input cannot contain label '{label}'")]
+    LevelLabelPresent {
+        /// The function.
+        function: String,
+        /// The label.
+        label: String,
+    },
 }

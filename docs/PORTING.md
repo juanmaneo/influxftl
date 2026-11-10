@@ -210,7 +210,7 @@ The project is Apache-2.0 and must stay redistributable under it (see `README.md
 
 ## 9. Status and next steps
 
-2018 / 2193 functions are ported (`docs/FUNCTIONS.md`; the inventory includes the names
+2025 / 2193 functions are ported (`docs/FUNCTIONS.md`; the inventory includes the names
 Warp 10 registers through `Builder`s and constants). The Geo Time Series model, the
 `GTSHelper` transforms (time, datapoints, statistics), `BUCKETIZE` and `MAP` with the
 shared aggregators (`sum`, `mean`, `min`, `max`, `first`, `last`, `count`, `and`, `or`,
@@ -337,5 +337,9 @@ the order that unlocks the most:
    non-Bresenham `HHCodeHelper.coverPolyline`), and the `mapper.geo.approximate`,
    `mapper.geo.within`, `mapper.geo.outside` and `mapper.geo.fence` mappers
    (`aggregators/geo.rs`).
+   Spectral analysis (`functions/spectral.rs`): `FFT`, `FFTAP`, `IFFT` and `FFTWINDOW`, on
+   an independent transform (`fft.rs`: JTransforms is not Apache-2.0 compatible, DIVERGENCES
+   §29), and `FDWT`, `IDWT` and `DWTSPLIT` on the port of the 76 wavelets of
+   `io.warp10.script.fwt` (`wavelet.rs`, `wavelet_data.rs`), bit for bit.
 6. **Geo** (`GeoXPLib` shapes, `HAVERSINE`, `LOCATIONOFFSET`, `GEO.*`), **datastore**
    (`FETCH` / `FIND` / `UPDATE` / `META` / `DELETE` on InfluxDB 3), PKI crypto, Processing.

@@ -199,6 +199,9 @@ pub enum IllegalArgumentError {
     /// A `%` ending a URL encoded text.
     #[error("URLDecoder: Incomplete trailing escape (%) pattern")]
     IncompleteEscape,
+    /// A Fourier transform of no value.
+    #[error("n must be greater than 0")]
+    TransformLength,
 }
 
 /// A limit of the machine a request exceeds.
