@@ -8,7 +8,9 @@
 //! their behaviour, quirks included, is what the modules reproduce, from what scripts can see
 //! (see `docs/DIVERGENCES.md`).
 
+pub mod cover;
 pub mod geojson;
 pub mod geometry;
+pub mod outline;
 pub mod wkb;
 pub mod wkt;

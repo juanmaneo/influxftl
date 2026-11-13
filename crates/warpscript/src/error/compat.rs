@@ -90,7 +90,11 @@ fn geometry_class(err: &GeometryError) -> &'static str {
         | GeometryError::NullElement
         | GeometryError::CollectionArgument
         | GeometryError::EmptyPointWkb => "java.lang.IllegalArgumentException",
+        GeometryError::UnknownGeometryType => {
+            "com.vividsolutions.jts.util.AssertionFailedException"
+        }
         GeometryError::Unsupported => "java.lang.UnsupportedOperationException",
+        GeometryError::UnknownFormat => WARP_SCRIPT_EXCEPTION,
     }
 }
 

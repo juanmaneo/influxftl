@@ -1,8 +1,8 @@
 // Copyright 2026 The influxftl Authors. Licensed under the Apache License, Version 2.0.
 
 use super::format::{
-    decimal_value, is_double, is_long, java_double_to_string, parse_double, parse_long,
-    parse_radix_wrapping, snapshot_encode_readable, url_decode, url_encode,
+    decimal_value, is_double, is_long, java_double_to_string, java_float_to_string, parse_double,
+    parse_long, parse_radix_wrapping, snapshot_encode_readable, url_decode, url_encode,
 };
 
 #[test]
@@ -88,6 +88,55 @@ fn tiny_subnormals_pick_the_closest_two_digit_decimal() {
     );
     assert_eq!(java_double_to_string(1e23), "1.0E23");
     assert_eq!(java_double_to_string(9e-324), "9.9E-324");
+}
+
+#[test]
+fn float_to_string_matches_java() {
+    // `Float.toString` on OpenJDK 27.
+    let cases: &[(f32, &str)] = &[
+        (0.0, "0.0"),
+        (-0.0, "-0.0"),
+        (1.0, "1.0"),
+        (-1.5, "-1.5"),
+        (100.0, "100.0"),
+        (1_234_567.9, "1234567.9"),
+        (12_345_678.9, "1.2345679E7"),
+        (0.001, "0.001"),
+        (0.000_1, "1.0E-4"),
+        (1e7, "1.0E7"),
+        (9_999_999.0, "9999999.0"),
+        (f32::MAX, "3.4028235E38"),
+        (f32::MIN_POSITIVE, "1.1754944E-38"),
+        (22.5, "22.5"),
+        (11.25, "11.25"),
+        (0.1, "0.1"),
+        (16_777_216.0, "1.6777216E7"),
+        (89.999_99, "89.99999"),
+        (123_456.79, "123456.79"),
+        (f32::NAN, "NaN"),
+        (f32::INFINITY, "Infinity"),
+        (f32::NEG_INFINITY, "-Infinity"),
+    ];
+    for (value, expected) in cases {
+        assert_eq!(java_float_to_string(*value), *expected, "{value}");
+    }
+}
+
+#[test]
+fn tiny_float_subnormals_pick_the_closest_two_digit_decimal() {
+    let expected = [
+        "1.4E-45", "2.8E-45", "4.2E-45", "5.6E-45", "7.0E-45", "8.4E-45", "9.8E-45", "1.1E-44",
+        "1.3E-44", "1.4E-44", "1.5E-44", "1.7E-44", "1.8E-44", "2.0E-44", "2.1E-44", "2.2E-44",
+        "2.4E-44", "2.5E-44", "2.7E-44", "2.8E-44", "2.9E-44", "3.1E-44", "3.2E-44", "3.4E-44",
+    ];
+    for (m, text) in (1u32..).zip(expected) {
+        assert_eq!(java_float_to_string(f32::from_bits(m)), text, "{m}");
+        assert_eq!(
+            java_float_to_string(-f32::from_bits(m)),
+            format!("-{text}"),
+            "-{m}"
+        );
+    }
 }
 
 #[test]

@@ -63,6 +63,15 @@ pub enum GeometryError {
     /// An empty point written as WKB (`IllegalArgumentException`).
     #[error("Empty Points cannot be represented in WKB")]
     EmptyPointWkb,
+    /// A value that is neither a `STRING` nor `BYTES` where a geometry is expected
+    /// (`WarpScriptException`, the one failure of `->WKT` and its kind that is not an
+    /// "invalid input").
+    #[error("Unknown geometry format.")]
+    UnknownFormat,
+    /// A `null` geometry given to the WKB writer, which has no case for it
+    /// (`AssertionFailedException`).
+    #[error("Should never reach here: Unknown Geometry type")]
+    UnknownGeometryType,
     /// A GeoJSON feature (which the reader does not convert), a `null` where a geometry is
     /// expected, or a linear ring (which the writer does not convert)
     /// (`UnsupportedOperationException`).
@@ -84,6 +93,7 @@ impl GeometryError {
                 | GeometryError::NullElement
                 | GeometryError::CollectionArgument
                 | GeometryError::EmptyPointWkb
+                | GeometryError::UnknownGeometryType
                 | GeometryError::Unsupported
         )
     }

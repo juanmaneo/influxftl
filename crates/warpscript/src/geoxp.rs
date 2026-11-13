@@ -7,9 +7,9 @@
 //! longitude, each a fixed-point fraction of the 180° / 360° span.
 
 /// Degrees per latitude unit (`180 / 2^32`).
-const DEGREES_PER_LAT_UNIT: f64 = 180.0 / 4_294_967_296.0;
+pub(crate) const DEGREES_PER_LAT_UNIT: f64 = 180.0 / 4_294_967_296.0;
 /// Degrees per longitude unit (`360 / 2^32`).
-const DEGREES_PER_LON_UNIT: f64 = 360.0 / 4_294_967_296.0;
+pub(crate) const DEGREES_PER_LON_UNIT: f64 = 360.0 / 4_294_967_296.0;
 
 /// `GeoXPLib.toGeoXPPoint`: the HHCode of a location given in decimal degrees.
 pub fn to_geoxp_point(lat: f64, lon: f64) -> i64 {
@@ -161,11 +161,18 @@ pub fn to_geocell(hhcode: i64, resolution: i32) -> i64 {
 /// `HHCodeHelper.orthodromicDistance`: the great circle distance in meters between two
 /// HHCodes, a nautical mile being a minute of arc.
 pub fn orthodromic_distance(from: i64, to: i64) -> f64 {
+    let (from_lat, from_lon) = split_hhcode(from);
+    let (to_lat, to_lon) = split_hhcode(to);
+    orthodromic_distance_units(from_lat, from_lon, to_lat, to_lon)
+}
+
+/// `HHCodeHelper.orthodromicDistance(lat1, lon1, lat2, lon2)`: the distance between two
+/// locations given as `(latitude, longitude)` units (`0..2^32`, nothing stops others, and
+/// the result is then `NaN` when the haversine goes past 1).
+pub fn orthodromic_distance_units(from_lat: i64, from_lon: i64, to_lat: i64, to_lon: i64) -> f64 {
     use std::f64::consts::PI;
     const RADIANS_PER_LAT_UNIT: f64 = PI / 4_294_967_296.0;
     const RADIANS_PER_LON_UNIT: f64 = (PI + PI) / 4_294_967_296.0;
-    let (from_lat, from_lon) = split_hhcode(from);
-    let (to_lat, to_lon) = split_hhcode(to);
     let flat = from_lat as f64 * RADIANS_PER_LAT_UNIT - PI / 2.0;
     let flon = from_lon as f64 * RADIANS_PER_LON_UNIT - PI;
     let tlat = to_lat as f64 * RADIANS_PER_LAT_UNIT - PI / 2.0;

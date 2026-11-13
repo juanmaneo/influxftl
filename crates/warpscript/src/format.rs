@@ -14,28 +14,108 @@ use crate::error::fault::NumberFormatError;
 /// `Double.toString(d)`: shortest digits that round-trip, plain notation in `[1e-3, 1e7)`,
 /// computerized scientific notation (`d.dddE±n`) otherwise, always at least one fractional digit.
 pub fn java_double_to_string(d: f64) -> String {
-    if d.is_nan() {
-        return "NaN".to_owned();
+    if let Some(special) = special_to_string(d.is_nan(), d.is_infinite(), d == 0.0, d) {
+        return special;
     }
-    if d.is_infinite() {
-        return if d > 0.0 { "Infinity" } else { "-Infinity" }.to_owned();
-    }
-    if d == 0.0 {
-        return if d.is_sign_negative() { "-0.0" } else { "0.0" }.to_owned();
-    }
-    let sign = if d < 0.0 { "-" } else { "" };
-    // `{:e}` yields the shortest round-tripping digits as `d[.ddd]e[-]x`.
-    let sci = format!("{:e}", d.abs());
-    let (mantissa, exponent) = sci.split_once('e').unwrap_or((sci.as_str(), "0"));
-    let exponent = decimal_value(exponent) as i32;
-    let digits: String = mantissa.chars().filter(|c| *c != '.').collect();
+    let (digits, exponent) = shortest_digits(&closest_shortest(d.abs()));
     let (digits, exponent) = match digits.parse::<u32>() {
         Ok(digit) if digits.len() == 1 && d.abs() < f64::MIN_POSITIVE => {
-            let (two_digits, exponent) = closest_two_digits(d.abs(), digit, exponent);
+            let (two_digits, exponent) = closest_two_digits(
+                d.abs().to_bits(),
+                1074,
+                |text| {
+                    text.parse::<f64>()
+                        .is_ok_and(|c| c.to_bits() == d.abs().to_bits())
+                },
+                digit,
+                exponent,
+            );
             (two_digits.to_string(), exponent)
         }
         _ => (digits, exponent),
     };
+    layout(d < 0.0, &digits, exponent)
+}
+
+/// `Float.toString(f)`: the same notation as [`java_double_to_string`], for the shortest digits
+/// that round-trip as a `float`.
+pub fn java_float_to_string(f: f32) -> String {
+    if let Some(special) = special_to_string(f.is_nan(), f.is_infinite(), f == 0.0, f64::from(f)) {
+        return special;
+    }
+    let (digits, exponent) = shortest_digits(&closest_shortest(f.abs()));
+    let (digits, exponent) = match digits.parse::<u32>() {
+        Ok(digit) if digits.len() == 1 && f.abs() < f32::MIN_POSITIVE => {
+            let (two_digits, exponent) = closest_two_digits(
+                u64::from(f.abs().to_bits()),
+                149,
+                |text| {
+                    text.parse::<f32>()
+                        .is_ok_and(|c| c.to_bits() == f.abs().to_bits())
+                },
+                digit,
+                exponent,
+            );
+            (two_digits.to_string(), exponent)
+        }
+        _ => (digits, exponent),
+    };
+    layout(f < 0.0, &digits, exponent)
+}
+
+/// The text of a `NaN`, an infinity or a zero (`value` is the number, as a double), `None` for
+/// any other number.
+fn special_to_string(nan: bool, infinite: bool, zero: bool, value: f64) -> Option<String> {
+    let text = if nan {
+        "NaN"
+    } else if infinite {
+        if value > 0.0 { "Infinity" } else { "-Infinity" }
+    } else if zero {
+        if value.is_sign_negative() {
+            "-0.0"
+        } else {
+            "0.0"
+        }
+    } else {
+        return None;
+    };
+    Some(text.to_owned())
+}
+
+/// The scientific text of the shortest decimal that reads back as `value`. When several decimals
+/// of that length do, Java takes the one closest to `value`, and the one with an even last digit
+/// when two are equally close (`28.4765625f` is `28.476562`), where the shortest digits of Rust
+/// go to the upper one.
+fn closest_shortest<T>(value: T) -> String
+where
+    T: std::fmt::LowerExp + std::str::FromStr + PartialEq + Copy,
+{
+    let shortest = format!("{value:e}");
+    let digits = shortest
+        .chars()
+        .take_while(|c| *c != 'e')
+        .filter(char::is_ascii_digit)
+        .count();
+    let closest = format!("{value:.*e}", digits - 1);
+    if closest.parse::<T>().is_ok_and(|read| read == value) {
+        closest
+    } else {
+        shortest
+    }
+}
+
+/// The digits and the decimal exponent of a number written `d[.ddd]e[-]x` (Rust's `{:e}`).
+fn shortest_digits(scientific: &str) -> (String, i32) {
+    let (mantissa, exponent) = scientific.split_once('e').unwrap_or((scientific, "0"));
+    (
+        mantissa.chars().filter(|c| *c != '.').collect(),
+        decimal_value(exponent) as i32,
+    )
+}
+
+/// The Java layout of a number of the given `digits` and decimal `exponent`.
+fn layout(negative: bool, digits: &str, exponent: i32) -> String {
+    let sign = if negative { "-" } else { "" };
     if (-3..7).contains(&exponent) {
         if exponent >= 0 {
             let int_len = (exponent + 1) as usize;
@@ -57,25 +137,32 @@ pub fn java_double_to_string(d: f64) -> String {
     }
 }
 
-/// When the shortest decimal that rounds to `v` has a single digit, `Double.toString` picks
-/// instead, among all decimals of one or two digits that round to `v`, the one closest to `v`.
-/// For a normal double the single digit followed by `0` is already that decimal; only the
-/// subnormals below 1e-322 have several candidates (`Double.MIN_VALUE` prints as `4.9E-324`,
-/// not `5.0E-324`). Returns the two digits (`10..=99`) and the exponent of the first one.
-fn closest_two_digits(v: f64, digit: u32, exponent: i32) -> (u32, i32) {
-    // `v` is subnormal, i.e. exactly `bits * 2^-1074`: measure everything in that unit, where
-    // `j * 10^x` is `j * 2^(1074 + x) / 5^-x`. The f64 evaluation is accurate to ~1e-13 while
-    // candidates are at least 0.2 units apart, and no candidate can tie exactly.
-    let target = v.to_bits() as f64;
+/// When the shortest decimal that rounds to a subnormal has a single digit, `Double.toString`
+/// and `Float.toString` pick instead, among all decimals of one or two digits that round to
+/// it, the one closest to it. For a normal number the single digit followed by `0` is already
+/// that decimal; only the subnormals have several candidates (`Double.MIN_VALUE` prints as
+/// `4.9E-324`, not `5.0E-324`). Returns the two digits (`10..=99`) and the exponent of the
+/// first one.
+///
+/// `bits` is the representation of the subnormal, that is `bits * 2^-unit`; `round_trips` tells
+/// whether a decimal text reads back as that number.
+fn closest_two_digits(
+    bits: u64,
+    unit: i32,
+    round_trips: impl Fn(&str) -> bool,
+    digit: u32,
+    exponent: i32,
+) -> (u32, i32) {
+    // Measure everything in that unit, where `j * 10^x` is `j * 2^(unit + x) / 5^-x`. The f64
+    // evaluation is accurate to ~1e-13 while candidates are at least 0.2 units apart, and no
+    // candidate can tie exactly.
+    let target = bits as f64;
     let distance =
-        |j: u32, x: i32| (f64::from(j) * 2f64.powi(1074 + x) / 5f64.powi(-x) - target).abs();
+        |j: u32, x: i32| (f64::from(j) * 2f64.powi(unit + x) / 5f64.powi(-x) - target).abs();
     let mut best = (distance(digit * 10, exponent - 1), digit * 10, exponent);
     for x in [exponent - 2, exponent - 1] {
         for j in 10u32..=99 {
-            let round_trips = format!("{j}e{x}")
-                .parse::<f64>()
-                .is_ok_and(|c| c.to_bits() == v.to_bits());
-            if round_trips && distance(j, x) < best.0 {
+            if round_trips(&format!("{j}e{x}")) && distance(j, x) < best.0 {
                 best = (distance(j, x), j, x + 1);
             }
         }

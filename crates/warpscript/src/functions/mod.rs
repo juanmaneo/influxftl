@@ -20,6 +20,7 @@ pub mod ec;
 pub mod encoders;
 pub mod functional;
 pub mod geo;
+pub mod geoimport;
 pub mod geoops;
 pub mod geoshape;
 pub mod gts;
@@ -142,6 +143,7 @@ const TABLES: &[&[(&str, Entry)]] = &[
     polyfunc::FUNCTIONS,
     mv::FUNCTIONS,
     geo::FUNCTIONS,
+    geoimport::FUNCTIONS,
     geoops::FUNCTIONS,
     geoshape::FUNCTIONS,
     shape::FUNCTIONS,
@@ -308,6 +310,8 @@ mod geo_tests;
 mod geocover_errors_tests;
 #[cfg(test)]
 mod geocover_tests;
+#[cfg(test)]
+mod geoimport_tables_tests;
 #[cfg(test)]
 mod geoops_errors_tests;
 #[cfg(test)]
