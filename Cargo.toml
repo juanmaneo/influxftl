@@ -19,6 +19,7 @@ indexmap = "2"
 # binaries (`influxftl`).
 thiserror = "2"
 anyhow = "1"
+serde = { version = "1", default-features = false, features = ["std"] }
 serde_json = "1"
 getrandom = "0.4"
 # Java-style regular expressions (lookaround, backreferences) for MATCH / MATCHER / REPLACE.
@@ -67,6 +68,7 @@ p521 = { version = "0.14", default-features = false, features = ["arithmetic"] }
 # padding schemes around them are what BouncyCastle does and are built in the crate.
 crypto-bigint = { version = "0.7", default-features = false, features = ["alloc"] }
 crypto-primes = { version = "0.7", default-features = false, features = ["alloc"] }
+geo = { version = "0.33", default-features = false }
 
 [workspace.lints.rust]
 unsafe_code = "forbid"

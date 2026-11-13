@@ -7,6 +7,7 @@
 use super::aggregator::AggregatorError;
 use super::fault::{BoundsError, ResourceError};
 use super::geo::GeoError;
+use super::geometry::GeometryError;
 use super::math::MathError;
 use super::text::ReplacementClass;
 use super::{Class, Error};
@@ -39,6 +40,8 @@ pub fn exception_class(err: &Error) -> &'static str {
         | Error::Format(_)
         | Error::Wrapped { .. }
         | Error::NotFinite(_) => WARP_SCRIPT_EXCEPTION,
+        Error::Geometry(err) => geometry_class(err),
+        Error::GeoJson(err) => err.exception_class(),
         Error::Thrift(err) => thrift_class(err),
         Error::Encoder(err) => encoder_class(err),
         Error::Math(err) => math_class(err),
@@ -69,6 +72,25 @@ pub fn exception_class(err: &Error) -> &'static str {
         Error::EmptyStack => "io.warp10.script.InformativeEmptyStackException",
         Error::ClassCast { .. } => "java.lang.ClassCastException",
         Error::NullPointer => "java.lang.NullPointerException",
+    }
+}
+
+/// The class of the JTS / JDK exception a geometry failure stands for.
+fn geometry_class(err: &GeometryError) -> &'static str {
+    match err {
+        GeometryError::UnknownType { .. }
+        | GeometryError::Expected { .. }
+        | GeometryError::InvalidNumber { .. }
+        | GeometryError::UnknownWkbType(_)
+        | GeometryError::WkbMemberType(_) => "com.vividsolutions.jts.io.ParseException",
+        GeometryError::LineStringTooShort
+        | GeometryError::RingNotClosed
+        | GeometryError::RingTooShort(_)
+        | GeometryError::HolesWithoutShell
+        | GeometryError::NullElement
+        | GeometryError::CollectionArgument
+        | GeometryError::EmptyPointWkb => "java.lang.IllegalArgumentException",
+        GeometryError::Unsupported => "java.lang.UnsupportedOperationException",
     }
 }
 

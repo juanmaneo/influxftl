@@ -19,6 +19,8 @@ pub mod datastore;
 pub mod fault;
 pub mod format;
 pub mod geo;
+pub mod geojson;
+pub mod geometry;
 pub mod math;
 pub mod platform;
 pub mod series;
@@ -38,6 +40,8 @@ use self::fault::{
 };
 use self::format::FormatError;
 use self::geo::GeoError;
+use self::geojson::GeoJsonError;
+use self::geometry::GeometryError;
 use self::math::MathError;
 use self::platform::PlatformError;
 use self::series::SeriesError;
@@ -233,6 +237,12 @@ pub enum Error {
     /// A failure of a geo function.
     #[error(transparent)]
     Geo(#[from] GeoError),
+    /// A failure of a geometry reader, writer or predicate.
+    #[error(transparent)]
+    Geometry(#[from] GeometryError),
+    /// A failure of the GeoJSON reader.
+    #[error(transparent)]
+    GeoJson(#[from] GeoJsonError),
     /// A failure of a platform function.
     #[error(transparent)]
     Platform(#[from] PlatformError),
@@ -333,6 +343,7 @@ impl Error {
         match self {
             Error::Aggregator(err) => matches!(err, AggregatorError::NotNumeric(_)),
             Error::Geo(err) => matches!(err, GeoError::InvalidGeoHash { .. }),
+            Error::Geometry(err) => err.is_runtime(),
             Error::Thrift(err) => !err.is_malformed_input(),
             Error::Encoder(err) => err.is_runtime(),
             Error::Pickle(err) => err.is_runtime(),
@@ -366,6 +377,7 @@ impl Error {
             | Error::Format(_)
             | Error::Parse { .. }
             | Error::Wrapped { .. }
+            | Error::GeoJson(_)
             | Error::NotFinite(_) => false,
         }
     }
