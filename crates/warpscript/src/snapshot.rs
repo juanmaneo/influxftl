@@ -15,6 +15,7 @@ use crate::error::Result;
 use crate::error::platform::PlatformError;
 use crate::format::{java_double_to_string, snapshot_encode_readable, url_encode};
 use crate::macros::{Macro, Statement};
+use crate::rsa::RsaKey;
 use crate::thrift::serialize_wrapper;
 use crate::value::Value;
 
@@ -249,7 +250,21 @@ fn append(out: &mut String, value: &Value, depth: usize, readable: bool) -> Resu
                 out.push_str(&crate::encoding::hex_encode(&public.point.encode()));
                 out.push_str("' } ECPUBLIC ");
             }
+            // The parameter maps `RSAPRIVATE` and `RSAPUBLIC` read, their keys sorted.
+            Key::RsaPrivate(key) => rsa_snapshot(out, key, "RSAPRIVATE"),
+            Key::RsaPublic(key) => rsa_snapshot(out, key, "RSAPUBLIC"),
         },
     }
     Ok(())
+}
+
+/// The `SNAPSHOT` of an RSA key: its parameter map and the function that reads it.
+fn rsa_snapshot(out: &mut String, key: &RsaKey, function: &str) {
+    out.push_str("{ 'algorithm' 'RSA' 'exponent' '");
+    out.push_str(&key.exponent.to_string());
+    out.push_str("' 'modulus' '");
+    out.push_str(&key.modulus.to_string());
+    out.push_str("' } ");
+    out.push_str(function);
+    out.push(' ');
 }

@@ -306,6 +306,15 @@ fn platform_failures_have_the_wording_and_class_of_warp10() {
             "java.lang.NumberFormatException",
         ),
         (
+            NumberFormatError::InvalidRadixInput {
+                input: "x".to_owned(),
+                radix: 10,
+            }
+            .into(),
+            "For input string: \"x\"",
+            "java.lang.NumberFormatException",
+        ),
+        (
             NumberFormatError::NegativeUnsigned("-1".to_owned()).into(),
             "Illegal leading minus sign on unsigned string -1.",
             "java.lang.NumberFormatException",

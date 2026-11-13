@@ -18,6 +18,8 @@ aes = { workspace = true }
 base64 = { workspace = true }
 chrono = { workspace = true }
 chrono-tz = { workspace = true }
+crypto-bigint = { workspace = true }
+crypto-primes = { workspace = true }
 digest = { workspace = true }
 elliptic-curve = { workspace = true }
 fancy-regex = { workspace = true }

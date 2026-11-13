@@ -15,7 +15,7 @@ use crate::ec::{Curve, Key, PrivateKey};
 use crate::error::Error;
 use crate::macros::{Macro, Statement};
 use crate::stack::Stack;
-use crate::tests::{assert_fails, assert_top, exec, top};
+use crate::tests::{assert_fails, assert_top, exec, scripted, top};
 use crate::value::Value;
 
 const KEYS_VALUES: &[(&str, &str)] = &[
@@ -2444,19 +2444,6 @@ fn recover_are_those_of_warp_10() {
 fn macros_are_those_of_warp_10() {
     assert_values(MACROS_VALUES);
     assert_all_fail(MACROS_ERRORS);
-}
-
-/// A source of random bytes that delivers `bytes`, then fails.
-fn scripted(bytes: Vec<u8>) -> impl FnMut(&mut [u8]) -> Result<(), getrandom::Error> {
-    let mut offset = 0;
-    move |buffer: &mut [u8]| {
-        let chunk = bytes
-            .get(offset..offset + buffer.len())
-            .ok_or(getrandom::Error::UNSUPPORTED)?;
-        buffer.copy_from_slice(chunk);
-        offset += buffer.len();
-        Ok(())
-    }
 }
 
 /// `size` bytes holding the number `n`.

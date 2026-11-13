@@ -779,12 +779,13 @@ pub fn from_byte_array(bytes: &[u8]) -> ParseResult<BigInt> {
     Ok(BigInt::from_signed_bytes_be(bytes))
 }
 
-/// `new BigInteger(text, radix)` for the radixes 2 and 16.
+/// `new BigInteger(text, radix)` for the radixes 2, 10 and 16.
+///
+/// # Errors
+///
+/// A text that is empty, has a sign that is not the first character, or has a character that is
+/// not a digit of the radix: the error tells the group of digits that `BigInteger` fails on.
 pub fn parse_bigint(text: &str, radix: u32) -> ParseResult<BigInt> {
-    let invalid = || NumberFormatError::InvalidRadixInput {
-        input: text.to_owned(),
-        radix,
-    };
     let minus = text.rfind('-');
     let plus = text.rfind('+');
     if matches!(minus, Some(i) if i != 0)
@@ -803,9 +804,41 @@ pub fn parse_bigint(text: &str, radix: u32) -> ParseResult<BigInt> {
         return Err(NumberFormatError::ZeroLengthBigInteger);
     }
     // `num-bigint` accepts `_` separators, Java does not.
-    if digits.contains('_') {
-        return Err(invalid());
-    }
-    let magnitude = BigInt::parse_bytes(digits.as_bytes(), radix).ok_or_else(invalid)?;
+    let parsed = if digits.contains('_') {
+        None
+    } else {
+        BigInt::parse_bytes(digits.as_bytes(), radix)
+    };
+    let magnitude = parsed.ok_or_else(|| NumberFormatError::InvalidRadixInput {
+        input: bad_group(digits, radix),
+        radix,
+    })?;
     Ok(if negative { -magnitude } else { magnitude })
+}
+
+/// The group of digits of a text that `new BigInteger(text, radix)` fails on. It skips the leading
+/// zeroes and reads the digits by groups that fit an `int` (the first one is the short one), each
+/// with `Integer.parseInt`, which tells the group it fails on. The whole text, when no group is bad.
+pub(crate) fn bad_group(digits: &str, radix: u32) -> String {
+    // The digits of an `int` in the radixes that are read.
+    let per_int = match radix {
+        2 => 30,
+        16 => 7,
+        _ => 9,
+    };
+    let significant: Vec<char> = digits
+        .trim_start_matches(|c: char| c.to_digit(radix) == Some(0))
+        .chars()
+        .collect();
+    let first = match significant.len() % per_int {
+        0 => per_int,
+        short => short,
+    };
+    let (head, tail) = significant.split_at(first.min(significant.len()));
+    std::iter::once(head)
+        .chain(tail.chunks(per_int))
+        .find(|group| group.iter().any(|c| c.to_digit(radix).is_none()))
+        .unwrap_or(&significant)
+        .iter()
+        .collect()
 }

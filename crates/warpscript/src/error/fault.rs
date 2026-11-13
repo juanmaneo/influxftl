@@ -59,6 +59,15 @@ pub enum ArithmeticError {
     BitLengthTooSmall,
 }
 
+/// What JDK 11 adds to the text of a `NumberFormatException` when the radix is not 10.
+fn radix_suffix(radix: u32) -> String {
+    if radix == 10 {
+        String::new()
+    } else {
+        format!(" under radix {radix}")
+    }
+}
+
 /// A text that is not the number it must be.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum NumberFormatError {
@@ -68,8 +77,8 @@ pub enum NumberFormatError {
     /// A text that is not a decimal number.
     #[error("For input string: \"{0}\"")]
     InvalidInput(String),
-    /// A text that is not a number in `radix`.
-    #[error("For input string: \"{input}\" under radix {radix}")]
+    /// A text that is not a number in `radix` (JDK 11 tells the radix when it is not 10).
+    #[error("For input string: \"{input}\"{}", radix_suffix(*.radix))]
     InvalidRadixInput {
         /// The text read.
         input: String,

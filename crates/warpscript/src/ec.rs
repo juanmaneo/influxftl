@@ -18,6 +18,7 @@ use num_integer::Integer;
 use num_traits::Zero;
 
 use crate::error::crypto::{EcError, PointError};
+use crate::rsa::RsaKey;
 
 /// A named curve.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -549,13 +550,58 @@ pub struct PublicKey {
     pub point: Point,
 }
 
-/// A key of the `EC*` functions.
+/// A key of the `EC*` and `RSA*` functions (a `java.security.Key` in Warp 10).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Key {
-    /// A private key (`ECPRIVATE`).
+    /// An elliptic curve private key (`ECPRIVATE`).
     Private(PrivateKey),
-    /// A public key (`ECPUBLIC`).
+    /// An elliptic curve public key (`ECPUBLIC`).
     Public(Box<PublicKey>),
+    /// An RSA private key (`RSAPRIVATE`).
+    RsaPrivate(RsaKey),
+    /// An RSA public key (`RSAPUBLIC`).
+    RsaPublic(RsaKey),
+}
+
+impl Key {
+    /// The key, when it is an elliptic curve private key.
+    #[must_use]
+    pub fn ec_private(&self) -> Option<&PrivateKey> {
+        match self {
+            Key::Private(private) => Some(private),
+            Key::Public(_) | Key::RsaPrivate(_) | Key::RsaPublic(_) => None,
+        }
+    }
+
+    /// The key, when it is an elliptic curve public key.
+    #[must_use]
+    pub fn ec_public(&self) -> Option<&PublicKey> {
+        match self {
+            Key::Public(public) => Some(public),
+            Key::Private(_) | Key::RsaPrivate(_) | Key::RsaPublic(_) => None,
+        }
+    }
+
+    /// The key, when it is an RSA key (private or public).
+    #[must_use]
+    pub fn rsa(&self) -> Option<&RsaKey> {
+        match self {
+            Key::RsaPrivate(key) | Key::RsaPublic(key) => Some(key),
+            Key::Private(_) | Key::Public(_) => None,
+        }
+    }
+
+    /// Whether the key is a private key (`java.security.PrivateKey`).
+    #[must_use]
+    pub fn is_private(&self) -> bool {
+        matches!(self, Key::Private(_) | Key::RsaPrivate(_))
+    }
+
+    /// Whether the key is a public key (`java.security.PublicKey`).
+    #[must_use]
+    pub fn is_public(&self) -> bool {
+        matches!(self, Key::Public(_) | Key::RsaPublic(_))
+    }
 }
 
 impl PublicKey {

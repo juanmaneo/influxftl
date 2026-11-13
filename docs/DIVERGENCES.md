@@ -1127,3 +1127,46 @@ included: the text a macro is signed on is the same). What differs:
 - **`ECRECOVER`** reads `'r'` and `'s'` as `BigInteger`s; a text that is no number gives the
   message of `new BigInteger` of a JDK 8. The `ecc.h` capability limits the cofactors tried: all
   the curves here have cofactor 1, so it is never needed.
+
+## 36. RSA
+
+`RSAGEN`, `RSAPRIVATE`, `RSAPUBLIC`, `RSAENCRYPT`, `RSADECRYPT`, `RSASIGN` and `RSAVERIFY` are
+checked against Warp 10 3.5.0 (BouncyCastle): the keys and their errors, the signatures (every
+name and identifier of PKCS#1 v1.5 with MD2, MD4, MD5, SHA-1, SHA-2 or RIPEMD, byte for byte;
+PSS with a salt it is given), the verification of signatures crafted apart from both
+implementations (bad padding, bad trailer, moduli that are not a whole number of bytes…), the
+blocks of an encryption in both directions, and what it says of every argument. What differs:
+
+- **Keys that are not those of RSA.** Warp 10 takes any map of numbers for a key and does what
+  the arithmetic gives, including endless loops, `NegativeArraySizeException` and
+  `ArrayIndexOutOfBoundsException`. Here an even modulus, a modulus that is not positive, a
+  modulus of 88 bits or less (no PKCS#1 block holds a byte of data), and an exponent that is not
+  positive, are typed errors: `RSA modulus is even`, `BigInteger: modulus not positive`, `RSA
+  modulus of N bits is too small for PKCS#1 blocks`, `RSA exponent is not positive`.
+- **`RSAGEN`.** The pairs are drawn from the operating system (`getrandom`) like BouncyCastle's
+  `SecureRandom`, and a candidate is redrawn instead of walking up by 2 to the next prime. A
+  key is never the same twice. BouncyCastle retries the second prime only when the primes are
+  too close or the modulus has too few bits, and it loops forever for the exponent 1; here both
+  primes are drawn again and the search stops after 100 pairs
+  (`unable to generate prime number for RSA key`). The distribution of the keys is the same.
+  The failures of BouncyCastle are reproduced: it rejects every prime up to 211
+  (`Primes.hasAnySmallFactors` divides by them, the prime itself included), so strengths 12, 14
+  and 16 never give a key, and neither does any odd strength (the square of the second prime is
+  always below the bound).
+- **`RSAVERIFY` of a `DigestInfo` without `NULL` parameters.** BouncyCastle accepts it but
+  leaves the last two bytes of the digest unchecked; here the digest is compared in full.
+- **Names that BouncyCastle has and this runtime reports as an invalid algorithm** (`RSASIGN`)
+  **or a failed verification** (`RSAVERIFY`): ISO 9796-2 (`SHA1WITHRSA/ISO9796-2`), X9.31
+  (`SHA1WITHRSA/X9.31`) and PSS without a digest (`NONEWITHRSAANDMGF1`, `RAWRSASSA-PSS`,
+  `NONEWITHRSASSA-PSS`). SHA-3, Whirlpool, SM3, GOST and the like have no RSA name in Warp 10
+  either.
+- **Numbers.** The texts of the maps of keys are read like `new BigInteger(text)` of a JDK 11,
+  the message of a malformed one included (the group of digits it fails on, `For input
+  string: "…"`, with ` under radix N` for a radix that is not 10). The non-ASCII digits Java
+  takes for numbers (Arabic-Indic and others) are not.
+- **Class names.** The `ClassCastException` messages of the oracle (a JDK 8) say `java.lang.…`
+  differently from a JDK 11; the wording of a JDK 11 and later is the one given.
+- **Signatures and encryptions.** PSS salts and the 8 bytes of nonce an encryption starts with
+  are random (from the operating system), so those are different each time; PKCS#1 signatures
+  are deterministic and equal to Warp 10's.
+- **PGP.** The `PGP*` functions are not part of this port (`docs/PORTING.md`).

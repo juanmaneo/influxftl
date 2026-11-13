@@ -54,6 +54,7 @@ pub mod pickle;
 pub mod platform;
 pub mod polyfunc;
 pub mod quaternions;
+pub mod rsa;
 pub mod runtime;
 pub mod seasonal;
 pub mod selectors;
@@ -124,6 +125,7 @@ const TABLES: &[&[(&str, Entry)]] = &[
     gts_stats::FUNCTIONS,
     spectral::FUNCTIONS,
     ec::FUNCTIONS,
+    rsa::FUNCTIONS,
     ssss::FUNCTIONS,
     datastore::FUNCTIONS,
     seasonal::FUNCTIONS,
@@ -386,6 +388,11 @@ mod platform_tests;
 mod polyfunc_tests;
 #[cfg(test)]
 mod quaternions_tests;
+#[cfg(test)]
+#[rustfmt::skip]
+pub(crate) mod rsa_tables_tests;
+#[cfg(test)]
+mod rsa_tests;
 #[cfg(test)]
 mod runtime_tests;
 #[cfg(test)]

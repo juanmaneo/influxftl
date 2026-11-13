@@ -62,6 +62,11 @@ k256 = { version = "0.14", default-features = false, features = ["arithmetic"] }
 p256 = { version = "0.14", default-features = false, features = ["arithmetic"] }
 p384 = { version = "0.14", default-features = false, features = ["arithmetic"] }
 p521 = { version = "0.14", default-features = false, features = ["arithmetic"] }
+# RSA of `RSAGEN`, `RSAENCRYPT`, `RSASIGN`… : the modular exponentiation of the keys (constant time
+# in the exponent, which is the secret) and the primality test of the generation of a key. The
+# padding schemes around them are what BouncyCastle does and are built in the crate.
+crypto-bigint = { version = "0.7", default-features = false, features = ["alloc"] }
+crypto-primes = { version = "0.7", default-features = false, features = ["alloc"] }
 
 [workspace.lints.rust]
 unsafe_code = "forbid"
@@ -96,6 +101,13 @@ unnecessary_wraps = "allow"
 format_push_string = "allow"
 single_match_else = "allow"
 struct_excessive_bools = "allow"
+
+# The big integers of the RSA keys are far too slow to test unoptimised.
+[profile.dev.package.crypto-bigint]
+opt-level = 3
+
+[profile.dev.package.crypto-primes]
+opt-level = 3
 
 [profile.release]
 lto = "thin"

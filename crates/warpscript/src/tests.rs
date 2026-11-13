@@ -75,6 +75,19 @@ pub(crate) fn assert_top(script: &str, expected: impl Into<Value>) {
     assert_eq!(actual, expected, "{script}");
 }
 
+/// A source of random bytes that delivers `bytes`, then fails.
+pub(crate) fn scripted(bytes: Vec<u8>) -> impl FnMut(&mut [u8]) -> Result<(), getrandom::Error> {
+    let mut offset = 0;
+    move |buffer: &mut [u8]| {
+        let chunk = bytes
+            .get(offset..offset + buffer.len())
+            .ok_or(getrandom::Error::UNSUPPORTED)?;
+        buffer.copy_from_slice(chunk);
+        offset += buffer.len();
+        Ok(())
+    }
+}
+
 #[test]
 fn registry_has_names() {
     assert!(crate::functions::registered_names().contains(&"DUP"));

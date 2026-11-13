@@ -219,7 +219,7 @@ The `influxftl` binary runs scripts (`eval`, `run`) and serves `POST /api/v0/exe
 reads, line protocol for writes; DIVERGENCES §34) or on a datastore in memory
 (`INFLUXFTL_DATASTORE=memory`). It was checked on InfluxDB 3 Core 3.12.
 
-2060 / 2193 functions are ported (`docs/FUNCTIONS.md`; the inventory includes the names
+2067 / 2193 functions are ported (`docs/FUNCTIONS.md`; the inventory includes the names
 Warp 10 registers through `Builder`s and constants). The Geo Time Series model, the
 `GTSHelper` transforms (time, datapoints, statistics), `BUCKETIZE` and `MAP` with the
 shared aggregators (`sum`, `mean`, `min`, `max`, `first`, `last`, `count`, `and`, `or`,
@@ -363,5 +363,10 @@ the order that unlocks the most:
    `MSIGINFO`, `MVERIFY`, `MCHECKSIG`, `MDETACH`, on the RustCrypto curves `secp256k1`,
    `secp256r1`, `secp384r1` and `secp521r1` and checked against Warp 10 both ways
    (DIVERGENCES §35).
-6. **Geo** (`GeoXPLib` shapes, `HAVERSINE`, `LOCATIONOFFSET`, `GEO.*`), PKI crypto,
+   RSA (`functions/rsa.rs`, `rsa.rs`): `RSAGEN`, `RSAPRIVATE`, `RSAPUBLIC`, `RSAENCRYPT`,
+   `RSADECRYPT`, `RSASIGN`, `RSAVERIFY`: PKCS#1 v1.5 blocks and signatures (every digest and
+   name BouncyCastle has for them) and PSS, on `crypto-bigint` and `crypto-primes`, with the
+   key generation of BouncyCastle's `RSAKeyPairGenerator`; checked against Warp 10 both ways
+   (DIVERGENCES §36).
+6. **Geo** (`GeoXPLib` shapes, `HAVERSINE`, `LOCATIONOFFSET`, `GEO.*`), PGP,
    Processing. (The datastore functions on InfluxDB 3 are done: DIVERGENCES §34.)

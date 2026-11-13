@@ -97,10 +97,10 @@ fn public_map(key: &PublicKey) -> Value {
 /// A private key popped from the stack.
 fn pop_private(stack: &mut Stack, function: &str, message: &str) -> Result<PrivateKey> {
     match stack.pop()? {
-        Value::Key(key) => match key.as_ref() {
-            Key::Private(private) => Ok(private.clone()),
-            Key::Public(_) => Err(fail(function, message)),
-        },
+        Value::Key(key) => key
+            .ec_private()
+            .cloned()
+            .ok_or_else(|| fail(function, message)),
         _ => Err(fail(function, message)),
     }
 }
@@ -108,10 +108,10 @@ fn pop_private(stack: &mut Stack, function: &str, message: &str) -> Result<Priva
 /// A public key popped from the stack.
 fn pop_public(stack: &mut Stack, function: &str, message: &str) -> Result<PublicKey> {
     match stack.pop()? {
-        Value::Key(key) => match key.as_ref() {
-            Key::Public(public) => Ok(PublicKey::clone(public)),
-            Key::Private(_) => Err(fail(function, message)),
-        },
+        Value::Key(key) => key
+            .ec_public()
+            .cloned()
+            .ok_or_else(|| fail(function, message)),
         _ => Err(fail(function, message)),
     }
 }
@@ -184,13 +184,13 @@ fn ecprivate(stack: &mut Stack) -> Result<()> {
     const NAME: &str = "ECPRIVATE";
     const MESSAGE: &str = "expects a parameter map or an ECC private key instance.";
     match stack.pop()? {
-        Value::Key(key) => match key.as_ref() {
-            Key::Private(private) => {
-                stack.push(private_map(private));
-                Ok(())
-            }
-            Key::Public(_) => Err(fail(NAME, MESSAGE)),
-        },
+        Value::Key(key) => {
+            let Some(private) = key.ec_private() else {
+                return Err(fail(NAME, MESSAGE));
+            };
+            stack.push(private_map(private));
+            Ok(())
+        }
         Value::Map(params) => {
             let params = params.borrow();
             let (name, curve) = curve_of(&params);
@@ -214,10 +214,16 @@ fn ecpublic(stack: &mut Stack) -> Result<()> {
     const NAME: &str = "ECPUBLIC";
     match stack.pop()? {
         Value::Key(key) => {
-            match key.as_ref() {
-                Key::Public(public) => stack.push(public_map(public)),
-                Key::Private(private) => {
+            match (key.ec_public(), key.ec_private()) {
+                (Some(public), _) => stack.push(public_map(public)),
+                (None, Some(private)) => {
                     stack.push(key_value(Key::Public(Box::new(private.public()))));
+                }
+                (None, None) => {
+                    return Err(fail(
+                        NAME,
+                        "expects a parameter map, or a public or private key.",
+                    ));
                 }
             }
             Ok(())
@@ -373,10 +379,9 @@ fn recover_number(text: &str) -> core::result::Result<BigInt, NumberFormatError>
         None => (lower, 10),
     };
     parse_bigint(&digits, radix).map_err(|err| match err {
-        // `new BigInteger(String, radix)` skips the leading zeroes and reads the digits by
-        // groups: a short text is the one group the message tells.
+        // The message of the oracle is the one of JDK 8, which does not tell the radix.
         NumberFormatError::InvalidRadixInput { input, .. } => {
-            NumberFormatError::InvalidInput(input.trim_start_matches('0').to_owned())
+            NumberFormatError::InvalidInput(input)
         }
         other => other,
     })

@@ -70,6 +70,7 @@ pub mod microsphere;
 #[cfg(test)]
 mod microsphere_tests;
 pub mod pickle;
+pub mod rsa;
 pub mod sax;
 pub mod selector;
 pub mod snapshot;
@@ -125,6 +126,8 @@ mod jmath_tests;
 mod jrandom_tests;
 #[cfg(test)]
 mod macros_tests;
+#[cfg(test)]
+mod rsa_tests;
 #[cfg(test)]
 mod snapshot_tests;
 #[cfg(test)]
