@@ -7,7 +7,9 @@ use indexmap::IndexMap;
 
 use crate::error::Error;
 use crate::gts::Metadata;
-use crate::thrift::{GtsWrapper, ThriftError, deserialize_wrapper, serialize_wrapper};
+use crate::thrift::{
+    GtsWrapper, MetaSet, ThriftError, deserialize_wrapper, serialize_metaset, serialize_wrapper,
+};
 
 pub(crate) fn hex(text: &str) -> Vec<u8> {
     (0..text.len())
@@ -332,4 +334,49 @@ fn malformed_input_is_told_from_reader_defects() {
         assert_eq!(error.is_runtime(), !malformed, "{error}");
         assert_eq!(crate::error::compat::exception_class(&error), class);
     }
+}
+
+#[test]
+fn metaset_is_laid_out_like_libthrift() {
+    // Hand-encoded from the compact protocol: the field headers (delta and type), the zigzag
+    // varints, the binary token and the struct of the one series, then the list of the sets.
+    let set = MetaSet {
+        expiry: 1,
+        token: "t".to_owned(),
+        metadatas: vec![Metadata {
+            name: Some("c".to_owned()),
+            ..Metadata::default()
+        }],
+        maxduration: Some(5),
+        notbefore: None,
+        notafter: Some(-1),
+    };
+    assert_eq!(
+        serialize_metaset(&set),
+        vec![
+            0x16, 0x02, // expiry 1 (i64, zigzag)
+            0x18, 0x01, b't', // token (binary)
+            0x19, 0x1c, // metadatas: a list of one struct
+            0x18, 0x01, b'c', // name
+            0x1b, 0x00, // labels: an empty map
+            0x16, 0x00, // classId
+            0x16, 0x00, // labelsId
+            0x1b, 0x00, // attributes: an empty map
+            0x00, // end of the Metadata
+            0x16, 0x0a, // maxduration 5
+            0x26, 0x01, // notafter -1 (the field 5 is skipped, unset)
+            0x00, // end of the MetaSet
+        ]
+    );
+}
+
+#[test]
+fn metaset_lists_of_fifteen_series_or_more_have_a_size_varint() {
+    let set = MetaSet {
+        metadatas: vec![Metadata::default(); 15],
+        ..MetaSet::default()
+    };
+    let bytes = serialize_metaset(&set);
+    // The list header is 0xf0 | struct (12) followed by the size as a varint (15).
+    assert_eq!(bytes[..8], [0x16, 0x00, 0x18, 0x00, 0x19, 0xfc, 0x0f, 0x2b]);
 }

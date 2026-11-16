@@ -1064,9 +1064,9 @@ of lists fail with the `ClassCastException` Warp 10 raises after it checks them.
 
 `FETCH`, `FIND`, `FINDSETS`, `FINDSTATS`, `UPDATE`, `META`, `METADIFF` and `DELETE` work on the
 datastore a host connects (InfluxDB 3, or the one in memory) and not on Warp 10's Directory and
-Store: tokens are accepted and ignored, there is no producer / owner / application, `METASET`
-and the parameters tied to Warp 10's storage are refused. `docs/DATASTORE.md` lists what is
-supported. The time range of a fetch is Warp 10's (`FETCH.computeTimeRange`).
+Store: tokens are accepted and ignored, there is no producer / owner / application, and the
+parameters tied to Warp 10's storage are refused. `METASET` builds the sets of Warp 10 (§39).
+`docs/DATASTORE.md` lists what is supported. The time range of a fetch is Warp 10's (`FETCH.computeTimeRange`).
 
 ## 33. `->SSSS` and `SSSS->`
 
@@ -1231,3 +1231,23 @@ differs:
   does `UNIQUE`. The port hashes a shape by its cells, like its `equals`, so a set holds one of two
   equal shapes and those two cases answer `1`. Reproducing Warp 10 needs a set member type that
   compares shapes by identity (about forty call sites hold a `Set`). `==` and `DUP` are unchanged.
+
+## 39. `METASET`
+
+`METASET` builds the MetaSet of `FIND.java` (`store.thrift`): the metadata of the series the
+selectors select, with the expiry (the time of the call plus the TTL), the token and the bounds.
+The Thrift structure is written with the compact protocol, gzipped, wrapped with the AES key
+(RFC 3394 with the PKCS#7 padding of `CryptoUtils.wrap`) and written in OrderPreservingBase64.
+The divergences:
+
+- The token is recorded, not verified: the runtime reads no Warp 10 token, so the constraints of
+  a read token (`nofind`, `nofetch`, the labels a token adds) do not apply.
+- The gzip bytes come from the Rust deflate, not from Java's zlib, so the output can differ from
+  Warp 10's for the same series (the bytes were not compared). The unwrapped content is the same structure, and the field
+  order is that of the IDL; a Warp 10 `FETCH` reading the set back was not checked here.
+- `FETCH` does not read a set back (its `metaset` parameter is refused), so the sets only serve
+  Warp 10.
+- The key is the configuration property `warp.aes.metasets`. The binary sets no configuration,
+  so there `METASET` is disabled, as Warp 10 is without a key.
+- The series limit that Warp 10 applies to the series of `FIND` and `METASET` is not applied,
+  as for `FIND`.

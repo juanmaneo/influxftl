@@ -121,7 +121,17 @@ supported; `selectors` with several selectors and `active.after` / `quiet.after`
 `FIND` gives series without datapoints; `FINDSETS` the classes, the values of each label and of
 each attribute; `FINDSTATS` the counts (exact, where Warp 10 estimates) under `gts.estimate`,
 `classes.estimate`, `labelnames.estimate`, `labelvalues.estimate`, `per.label.value.estimate`
-and `error.rate` (`0.0`). `METASET` needs Warp 10's keys and is not provided.
+and `error.rate` (`0.0`).
+
+## `METASET`
+
+`[ token class labels notbefore notafter maxduration ttl ] METASET` seals the series that the
+class and labels selectors select into a MetaSet, the way Warp 10 does (DIVERGENCES §39). The
+bounds are `NaN` when unset and the TTL is in time units. The result is an OrderPreservingBase64
+string. The AES key is the stack's configuration property `warp.aes.metasets` (`hex:` or
+`base64:`, 128, 192 or 256 bits): without it `METASET` is disabled, as in Warp 10. The influxftl
+binary sets no configuration property, so there `METASET` is disabled. `FETCH` does not read the
+sets back yet (its `metaset` parameter is refused).
 
 ## `UPDATE`, `META`, `METADIFF`, `DELETE`
 

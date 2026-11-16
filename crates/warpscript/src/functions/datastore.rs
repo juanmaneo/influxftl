@@ -2,7 +2,7 @@
 // Derived from Warp 10 (Copyright 2018-2026 SenX S.A.S., Apache-2.0), ported to Rust and modified.
 
 //! The datastore functions: `FETCH` (and its typed variants), `FIND`, `FINDSETS`, `FINDSTATS`,
-//! `UPDATE`, `META`, `METADIFF` and `DELETE`. They parse their parameters like Warp 10's and
+//! `METASET`, `UPDATE`, `META`, `METADIFF` and `DELETE`. They parse their parameters like Warp 10's and
 //! work on the [`Datastore`] connected to the stack; a script that has none fails with
 //! [`DatastoreError::NotConnected`].
 //!
@@ -18,17 +18,23 @@ use std::sync::Arc;
 use indexmap::IndexMap;
 
 use super::Entry;
-use super::args::fail;
+use super::args::{fail, fail_with_cause};
+use super::compression::gzip_vec;
+use super::crypto::{Kek, aes_wrap};
+use super::misc::TIME_UNITS_PER_MS;
 use super::runtime::current_time;
 use super::selectors::parse_selector_text;
+use super::strings::base64_decode;
 use crate::datastore::{
     Datastore, DeleteRequest, FetchRequest, RangeNames, Selector, compute_time_range, get_timestamp,
 };
 use crate::encoder::GtsEncoder;
+use crate::encoding::{hex_decode, opb64_encode};
 use crate::error::datastore::DatastoreError;
 use crate::error::{Error, Result};
 use crate::gts::{GeoTimeSerie, Metadata, Type};
 use crate::stack::Stack;
+use crate::thrift::{MetaSet, serialize_metaset};
 use crate::value::{Value, ValueKind};
 
 /// The functions of this module.
@@ -53,6 +59,7 @@ pub const FUNCTIONS: &[(&str, Entry)] = &[
     ("FIND", Entry::Stack(|s| find(s, "FIND", false))),
     ("FINDSETS", Entry::Stack(|s| find(s, "FINDSETS", true))),
     ("FINDSTATS", Entry::Stack(findstats)),
+    ("METASET", Entry::Stack(metaset)),
     ("UPDATE", Entry::Stack(update)),
     ("META", Entry::Stack(|s| meta(s, "META", false))),
     ("METADIFF", Entry::Stack(|s| meta(s, "METADIFF", true))),
@@ -518,6 +525,119 @@ fn find(stack: &mut Stack, name: &str, elements: bool) -> Result<()> {
     stack.push(strings(&classes));
     stack.push(sets(&labels));
     stack.push(sets(&attributes));
+    Ok(())
+}
+
+/// The configuration property of the AES key that wraps the sets `METASET` builds.
+const METASETS_KEY: &str = "warp.aes.metasets";
+
+/// The AES key of `METASET`, decoded like `KeyStore.decodeKey` decodes the property: a `hex:`
+/// or `base64:` prefix. Without a key, or with another prefix, `METASET` is disabled.
+fn metasets_key(stack: &Stack, name: &str) -> Result<Kek> {
+    let disabled = || {
+        fail(
+            name,
+            &format!("is disabled, as no key is set in '{METASETS_KEY}'."),
+        )
+    };
+    let encoded = stack.config_property(METASETS_KEY).ok_or_else(disabled)?;
+    let key = if let Some(hex) = encoded.strip_prefix("hex:") {
+        hex_decode(hex).map_err(|cause| {
+            fail_with_cause(
+                name,
+                &format!("the key in '{METASETS_KEY}' is not hexadecimal."),
+                cause,
+            )
+        })?
+    } else if let Some(base64) = encoded.strip_prefix("base64:") {
+        base64_decode(base64, false).map_err(|cause| {
+            fail_with_cause(
+                name,
+                &format!("the key in '{METASETS_KEY}' is not base64."),
+                cause,
+            )
+        })?
+    } else {
+        return Err(disabled());
+    };
+    Kek::new(&key).ok_or_else(|| fail(name, "AES key length not 128/192/256 bits."))
+}
+
+/// A bound of a MetaSet: a `LONG`, or `NaN` when the bound is not set.
+fn metaset_bound(value: &Value, name: &str, requirement: &str) -> Result<Option<i64>> {
+    match value {
+        Value::Long(bound) => Ok(Some(*bound)),
+        Value::Double(bound) if bound.is_nan() => Ok(None),
+        _ => Err(fail(name, requirement)),
+    }
+}
+
+/// `METASET`: the series that a class selector and labels selectors select, sealed in a
+/// MetaSet the way Warp 10 seals it: the Thrift structure, gzipped, wrapped with the AES key and
+/// written in OrderPreservingBase64. Its parameters are a list of 7: the token, the class and the
+/// labels selectors, the `notbefore`, `notafter` and `maxduration` bounds (or `NaN`) and, on top,
+/// the TTL in time units. The token is recorded, not verified: this runtime reads no token.
+fn metaset(stack: &mut Stack) -> Result<()> {
+    const NAME: &str = "METASET";
+    let kek = metasets_key(stack, NAME)?;
+    let parameters = match stack.pop()? {
+        Value::List(list) => list.borrow().clone(),
+        Value::Map(_) => {
+            return Err(fail(
+                NAME,
+                "expects a list of parameters on top of the stack.",
+            ));
+        }
+        _ => return Err(fail(NAME, "expects a list of parameters.")),
+    };
+    let [token, class, labels, notbefore, notafter, maxduration, ttl] =
+        <[Value; 7]>::try_from(parameters).map_err(|_| fail(NAME, "expects 7 parameters."))?;
+    let Value::Long(ttl) = ttl else {
+        return Err(fail(
+            NAME,
+            "expects a metaset TTL (in time units) on top of the stack.",
+        ));
+    };
+    let maxduration = metaset_bound(
+        &maxduration,
+        NAME,
+        "expects a maximum duration or NaN below the expiration.",
+    )?;
+    let notafter = metaset_bound(
+        &notafter,
+        NAME,
+        "expects a 'notafter' parameter below the maximum duration.",
+    )?;
+    let notbefore = metaset_bound(
+        &notbefore,
+        NAME,
+        "expects a 'notbefore' parameter below 'notafter'.",
+    )?;
+    let selector = selector_of(NAME, &class, &labels)?;
+    if !matches!(class, Value::String(_)) {
+        return Err(fail(NAME, "Class selector must be a string."));
+    }
+    let Value::String(token) = token else {
+        return Err(fail(NAME, "Token must be a string."));
+    };
+    let metadatas = datastore(stack, NAME)?.find(&[selector])?;
+    if metadatas.is_empty() {
+        return Err(fail(
+            NAME,
+            "couldn't find any metadata matching the given class and label selectors.",
+        ));
+    }
+    let set = MetaSet {
+        // `System.currentTimeMillis() + ttl / TIME_UNITS_PER_MS`, where Java's longs wrap around.
+        expiry: (current_time() / TIME_UNITS_PER_MS).wrapping_add(ttl / TIME_UNITS_PER_MS),
+        token: token.to_string(),
+        metadatas,
+        maxduration,
+        notbefore,
+        notafter,
+    };
+    let sealed = aes_wrap(&kek, &gzip_vec(&serialize_metaset(&set)));
+    stack.push(Value::String(opb64_encode(&sealed).into()));
     Ok(())
 }
 

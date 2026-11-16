@@ -7,14 +7,20 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 use std::sync::Arc;
+use std::time::{SystemTime, UNIX_EPOCH};
+
+use indexmap::IndexMap;
 
 use crate::datastore::{Datastore, DeleteRequest, FetchRequest, MemoryDatastore, Selector};
 use crate::encoder::{EncodedValue, GtsEncoder, wrapper_to_encoder};
+use crate::encoding::opb64_decode;
 use crate::error::datastore::DatastoreError;
+use crate::functions::compression::ungzip_bytes;
+use crate::functions::crypto::{Kek, aes_unwrap};
 use crate::gts::{GeoTimeSerie, Metadata, NO_ELEVATION, NO_LOCATION};
 use crate::stack::Stack;
 use crate::tests::test_stack;
-use crate::thrift::GtsWrapper;
+use crate::thrift::{GtsWrapper, MetaSet, serialize_metaset};
 use crate::value::Value;
 
 /// The series the tests find in the datastore.
@@ -956,4 +962,224 @@ fn an_encoder_that_cannot_be_read_is_not_written() {
         .exec_checked("'tok' UPDATE")
         .expect_err("the content is garbage");
     assert!(!err.root_cause().to_string().is_empty(), "{err}");
+}
+
+// -----------------------------------------------------------------------------------------
+// METASET
+// -----------------------------------------------------------------------------------------
+
+/// The AES key of the `METASET` tests, written the way the configuration writes it.
+const METASET_KEY: &str = "hex:000102030405060708090a0b0c0d0e0f";
+
+/// A stack on the datastore of [`SETUP`], with `warp.aes.metasets` set to `key` when there is one.
+fn metaset_stack(key: Option<&str>) -> Stack {
+    let mut stack = stack();
+    if let Some(key) = key {
+        stack
+            .config_mut()
+            .insert("warp.aes.metasets".to_owned(), key.to_owned());
+    }
+    stack
+}
+
+/// The error of a script that must fail, as text.
+fn metaset_error(key: Option<&str>, script: &str) -> String {
+    metaset_stack(key)
+        .exec_checked(script)
+        .expect_err("METASET should fail")
+        .to_string()
+}
+
+/// Check that a script fails with `expected`: the error is reported in the line and section it
+/// failed in, `... (METASET message)`, with the cause, if any, in brackets after the message.
+fn assert_metaset_error(key: Option<&str>, script: &str, expected: &str) {
+    let text = metaset_error(key, script);
+    assert!(text.contains(&format!("({expected}")), "{script}: {text}");
+}
+
+#[test]
+fn metaset_is_disabled_without_a_key_and_refuses_a_bad_one() {
+    let script = "[ 'tok' 'cpu' {} NaN NaN NaN 1000 ] METASET";
+    let disabled = "METASET is disabled, as no key is set in 'warp.aes.metasets'.";
+    assert_metaset_error(None, script, disabled);
+    assert_metaset_error(Some("raw:00"), script, disabled);
+    assert_metaset_error(
+        Some("hex:zz"),
+        script,
+        "METASET the key in 'warp.aes.metasets' is not hexadecimal.",
+    );
+    assert_metaset_error(
+        Some("base64:!!"),
+        script,
+        "METASET the key in 'warp.aes.metasets' is not base64.",
+    );
+    assert_metaset_error(
+        Some("hex:0011"),
+        script,
+        "METASET AES key length not 128/192/256 bits.",
+    );
+}
+
+#[test]
+fn metaset_checks_its_parameters_in_warp_10s_order() {
+    let cases = [
+        ("METASET", "Empty stack."),
+        ("1 METASET", "METASET expects a list of parameters."),
+        (
+            "{ 'a' 'b' } METASET",
+            "METASET expects a list of parameters on top of the stack.",
+        ),
+        (
+            "[ 'tok' 'cpu' {} NaN NaN 1000 ] METASET",
+            "METASET expects 7 parameters.",
+        ),
+        (
+            "[ 'tok' 'cpu' {} NaN NaN NaN 'x' ] METASET",
+            "METASET expects a metaset TTL (in time units) on top of the stack.",
+        ),
+        (
+            "[ 'tok' 'cpu' {} NaN NaN 1.5 1000 ] METASET",
+            "METASET expects a maximum duration or NaN below the expiration.",
+        ),
+        (
+            "[ 'tok' 'cpu' {} NaN 'x' NaN 1000 ] METASET",
+            "METASET expects a 'notafter' parameter below the maximum duration.",
+        ),
+        (
+            "[ 'tok' 'cpu' {} 'x' NaN NaN 1000 ] METASET",
+            "METASET expects a 'notbefore' parameter below 'notafter'.",
+        ),
+        (
+            "[ 'tok' 'cpu' 'x' NaN NaN NaN 1000 ] METASET",
+            "METASET label selector must be a map.",
+        ),
+        (
+            "[ 'tok' 'cpu' { 1 'x' } NaN NaN NaN 1000 ] METASET",
+            "METASET keys and values of label selector must be STRINGs.",
+        ),
+        (
+            "[ 'tok' 1 {} NaN NaN NaN 1000 ] METASET",
+            "METASET Class selector must be a string.",
+        ),
+        (
+            "[ 1 'cpu' {} NaN NaN NaN 1000 ] METASET",
+            "METASET Token must be a string.",
+        ),
+        (
+            "[ 'tok' 'nope' {} NaN NaN NaN 1000 ] METASET",
+            "METASET couldn't find any metadata matching the given class and label selectors.",
+        ),
+    ];
+    for (script, expected) in cases {
+        assert_metaset_error(Some(METASET_KEY), script, expected);
+    }
+}
+
+#[test]
+fn metaset_needs_a_datastore_that_answers() {
+    let mut stack = test_stack();
+    stack
+        .config_mut()
+        .insert("warp.aes.metasets".to_owned(), METASET_KEY.to_owned());
+    let err = stack
+        .exec_checked("[ 'tok' 'cpu' {} NaN NaN NaN 1000 ] METASET")
+        .expect_err("no datastore");
+    assert_eq!(
+        err.root_cause().to_string(),
+        "METASET needs a datastore, and none is connected to this runtime."
+    );
+
+    let mut stack = test_stack();
+    stack
+        .config_mut()
+        .insert("warp.aes.metasets".to_owned(), METASET_KEY.to_owned());
+    stack.set_datastore(Some(Arc::new(Failing { finds: false })));
+    let err = stack
+        .exec_checked("[ 'tok' 'cpu' {} NaN NaN NaN 1000 ] METASET")
+        .expect_err("the datastore is down");
+    assert_eq!(
+        err.root_cause().to_string(),
+        "find failed on the datastore: down"
+    );
+}
+
+/// The expiry of a serialized MetaSet: the zigzag varint that follows the `0x16` of field 1.
+fn expiry_of(thrift: &[u8]) -> i64 {
+    assert_eq!(thrift.first(), Some(&0x16), "field 1 is the expiry");
+    let mut value = 0u64;
+    let mut shift = 0;
+    for byte in &thrift[1..] {
+        value |= u64::from(byte & 0x7f) << shift;
+        shift += 7;
+        if byte & 0x80 == 0 {
+            break;
+        }
+    }
+    ((value >> 1) as i64) ^ -((value & 1) as i64)
+}
+
+fn now_millis() -> i64 {
+    let since_epoch = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("the clock is after the epoch");
+    i64::try_from(since_epoch.as_millis()).expect("the milliseconds fit in a long")
+}
+
+#[test]
+fn metaset_seals_the_series_of_the_selector_as_warp_10_does() {
+    let mut stack = metaset_stack(Some(METASET_KEY));
+    let before = now_millis();
+    stack
+        .exec_checked("[ 'tok' 'cpu' {} NaN 100 9 3600000000 ] METASET")
+        .expect("the set should be built");
+    let after = now_millis();
+    let sealed = match stack.pop().expect("the MetaSet") {
+        Value::String(sealed) => sealed,
+        other => panic!("not a string: {other:?}"),
+    };
+
+    // Unseal it as Warp 10 does: OrderPreservingBase64, the AES key, then gunzip.
+    let key: Vec<u8> = (0..16).collect();
+    let wrapped = opb64_decode(&sealed).expect("OrderPreservingBase64");
+    let kek = Kek::new(&key).expect("a 128-bit key");
+    let compressed = aes_unwrap(&kek, &wrapped).expect("the key unwraps the set");
+    let thrift = ungzip_bytes(&compressed).expect("the set is gzipped");
+
+    // An hour (3600000000 microseconds) from now.
+    let expiry = expiry_of(&thrift);
+    assert!(
+        (before + 3_600_000..=after + 3_600_000).contains(&expiry),
+        "{expiry}"
+    );
+    let selector = Selector {
+        class: "cpu".to_owned(),
+        labels: IndexMap::new(),
+    };
+    let metadatas = stack
+        .datastore()
+        .expect("a datastore")
+        .find(&[selector])
+        .expect("the series");
+    assert_eq!(metadatas.len(), 2, "both cpu series");
+    let expected = MetaSet {
+        expiry,
+        token: "tok".to_owned(),
+        metadatas,
+        maxduration: Some(9),
+        notbefore: None,
+        notafter: Some(100),
+    };
+    assert_eq!(thrift, serialize_metaset(&expected));
+}
+
+#[test]
+fn metaset_reads_a_base64_key() {
+    let mut stack = metaset_stack(Some("base64:AAECAwQFBgcICQoLDA0ODw=="));
+    stack
+        .exec_checked("[ 'tok' 'cpu' {} NaN NaN NaN 1000 ] METASET")
+        .expect("a base64 key works");
+    match stack.pop().expect("the MetaSet") {
+        Value::String(_) => {}
+        other => panic!("not a string: {other:?}"),
+    }
 }

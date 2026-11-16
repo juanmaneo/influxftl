@@ -1,8 +1,8 @@
 // Copyright 2026 The influxftl Authors. Licensed under the Apache License, Version 2.0.
 // Derived from Warp 10 (Copyright 2018-2026 SenX S.A.S., Apache-2.0), ported to Rust and modified.
 
-//! The Thrift structures `GTSWrapper` and `Metadata` that `WRAP` / `UNWRAP` serialize, with
-//! the compact protocol of libthrift 0.17 (`TCompactProtocol` over a `TMemoryInputTransport`)
+//! The Thrift structures `GTSWrapper` and `Metadata` that `WRAP` / `UNWRAP` serialize, and the
+//! `MetaSet` that `METASET` builds, with the compact protocol of libthrift 0.17 (`TCompactProtocol` over a `TMemoryInputTransport`)
 //! that Warp 10 uses through `TSerializer` / `TDeserializer`.
 //!
 //! Decoding reproduces the reader faithfully, malformed input included: the unchecked "fast"
@@ -559,6 +559,17 @@ impl Writer {
         self.out.extend_from_slice(bytes);
     }
 
+    /// The header of a list: its size and the compact type of its elements. Sizes from 15 on
+    /// do not fit the header and are written as a varint after it.
+    fn list_header(&mut self, len: usize, element: u8) {
+        if len < 15 {
+            self.out.push(((len as u8) << 4) | element);
+        } else {
+            self.out.push(0xf0 | element);
+            self.varint(len as u64);
+        }
+    }
+
     fn map_field(&mut self, id: u8, map: &IndexMap<String, String>) {
         self.field(11, id);
         if map.is_empty() {
@@ -592,6 +603,43 @@ impl Writer {
         self.out.push(STOP);
         self.last_field_id = outer;
     }
+}
+
+/// The `MetaSet` Thrift structure: the series a `METASET` selects and the window in which they
+/// may be read. Only `expiry`, `token` and `metadatas` are always set.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct MetaSet {
+    /// Field 1, the expiry in milliseconds since the epoch. It is also the seed of the encryption.
+    pub expiry: i64,
+    /// Field 2, the token the set was built with.
+    pub token: String,
+    /// Field 3, the series of the set.
+    pub metadatas: Vec<Metadata>,
+    /// Field 4, the longest duration a read may cover.
+    pub maxduration: Option<i64>,
+    /// Field 5, the earliest timestamp a read may reach.
+    pub notbefore: Option<i64>,
+    /// Field 6, the latest timestamp a read may reach.
+    pub notafter: Option<i64>,
+}
+
+/// `TSerializer.serialize` of a `MetaSet`.
+pub fn serialize_metaset(set: &MetaSet) -> Vec<u8> {
+    let mut writer = Writer::default();
+    writer.i64_field(1, set.expiry);
+    writer.binary_field(2, set.token.as_bytes());
+    writer.field(9, 3);
+    writer.list_header(set.metadatas.len(), 12);
+    for metadata in &set.metadatas {
+        writer.metadata(metadata);
+    }
+    for (id, value) in [(4, set.maxduration), (5, set.notbefore), (6, set.notafter)] {
+        if let Some(value) = value {
+            writer.i64_field(id, value);
+        }
+    }
+    writer.out.push(STOP);
+    writer.out
 }
 
 /// `TSerializer.serialize` of a `GTSWrapper`.
