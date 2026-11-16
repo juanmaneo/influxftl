@@ -897,6 +897,8 @@ mod tests {
     use super::*;
     use std::collections::BTreeMap;
 
+    type Bound = Option<(i32, i64)>;
+
     fn keys(map: &JavaHashMap<i32, ()>) -> Vec<i32> {
         map.iter().map(|(_, k, ())| *k).collect()
     }
@@ -1016,7 +1018,8 @@ mod tests {
 
     #[test]
     fn iterates_tree_bins_like_java() {
-        let scenarios: &[(u64, u64, u32, u64, usize, [u64; 4])] = &[
+        type Scenario = (u64, u64, u32, u64, usize, [u64; 4]);
+        let scenarios: &[Scenario] = &[
             (
                 200,
                 64,
@@ -1024,10 +1027,10 @@ mod tests {
                 20,
                 0,
                 [
-                    0x168b60b6bb14bc67,
-                    0xb80c0c14ef434fbd,
-                    0x46ed7633ec9ec93f,
-                    0x8660b71c1075271f,
+                    0x168b_60b6_bb14_bc67,
+                    0xb80c_0c14_ef43_4fbd,
+                    0x46ed_7633_ec9e_c93f,
+                    0x8660_b71c_1075_271f,
                 ],
             ),
             (
@@ -1037,10 +1040,10 @@ mod tests {
                 30,
                 0,
                 [
-                    0x265ad2c20980d46f,
-                    0xc9d2d3a242174237,
-                    0xaf8e5461f29a79c7,
-                    0xd7ceb2d636770a67,
+                    0x265a_d2c2_0980_d46f,
+                    0xc9d2_d3a2_4217_4237,
+                    0xaf8e_5461_f29a_79c7,
+                    0xd7ce_b2d6_3677_0a67,
                 ],
             ),
             (
@@ -1050,10 +1053,10 @@ mod tests {
                 40,
                 0,
                 [
-                    0x3a511954d6bb582f,
-                    0xf6f1aad26117ff7f,
-                    0xcabb1d127ab46a77,
-                    0xabd7242aafe8254f,
+                    0x3a51_1954_d6bb_582f,
+                    0xf6f1_aad2_6117_ff7f,
+                    0xcabb_1d12_7ab4_6a77,
+                    0xabd7_242a_afe8_254f,
                 ],
             ),
             (
@@ -1063,10 +1066,10 @@ mod tests {
                 45,
                 0,
                 [
-                    0xbd578c5b4762065f,
-                    0xcfd59291e9a9362f,
-                    0x147765c1274efcaf,
-                    0xc8872bb8c493af87,
+                    0xbd57_8c5b_4762_065f,
+                    0xcfd5_9291_e9a9_362f,
+                    0x1477_65c1_274e_fcaf,
+                    0xc887_2bb8_c493_af87,
                 ],
             ),
             (
@@ -1076,10 +1079,10 @@ mod tests {
                 10,
                 0,
                 [
-                    0x36ec69867c98787d,
-                    0xaa721ec0d6b90acd,
-                    0xdaa5257cc24b0f47,
-                    0xd5f468eb524b0f47,
+                    0x36ec_6986_7c98_787d,
+                    0xaa72_1ec0_d6b9_0acd,
+                    0xdaa5_257c_c24b_0f47,
+                    0xd5f4_68eb_524b_0f47,
                 ],
             ),
             (
@@ -1089,10 +1092,10 @@ mod tests {
                 35,
                 0,
                 [
-                    0xb29d48adb075271f,
-                    0x38b75b825e786e3d,
-                    0x9b1edbcedd90cc87,
-                    0x8d0eea60f37ee805,
+                    0xb29d_48ad_b075_271f,
+                    0x38b7_5b82_5e78_6e3d,
+                    0x9b1e_dbce_dd90_cc87,
+                    0x8d0e_ea60_f37e_e805,
                 ],
             ),
             (
@@ -1102,10 +1105,10 @@ mod tests {
                 50,
                 0,
                 [
-                    0x7e26d5f34a319647,
-                    0xd4f055d24ca149bd,
-                    0xc48d2d8dd2de683d,
-                    0xf5d838432450ed75,
+                    0x7e26_d5f3_4a31_9647,
+                    0xd4f0_55d2_4ca1_49bd,
+                    0xc48d_2d8d_d2de_683d,
+                    0xf5d8_3843_2450_ed75,
                 ],
             ),
             (
@@ -1115,10 +1118,10 @@ mod tests {
                 49,
                 0,
                 [
-                    0x1c656cd752cdcb8f,
-                    0x9024cc8d354580d5,
-                    0xa6bd15dac5cbc54d,
-                    0xcca8aa67dbc65b7f,
+                    0x1c65_6cd7_52cd_cb8f,
+                    0x9024_cc8d_3545_80d5,
+                    0xa6bd_15da_c5cb_c54d,
+                    0xcca8_aa67_dbc6_5b7f,
                 ],
             ),
             (
@@ -1128,10 +1131,10 @@ mod tests {
                 48,
                 0,
                 [
-                    0xc2dccf00b8d6be4d,
-                    0x5a837772b8b2006d,
-                    0x2df1333360cabfa5,
-                    0xace4f73b8783a55f,
+                    0xc2dc_cf00_b8d6_be4d,
+                    0x5a83_7772_b8b2_006d,
+                    0x2df1_3333_60ca_bfa5,
+                    0xace4_f73b_8783_a55f,
                 ],
             ),
             (
@@ -1141,10 +1144,10 @@ mod tests {
                 47,
                 0,
                 [
-                    0x572881ca374c1e1d,
-                    0x49416716779cfb7f,
-                    0xea26e60d850ac215,
-                    0x9c317285e8fd9d6f,
+                    0x5728_81ca_374c_1e1d,
+                    0x4941_6716_779c_fb7f,
+                    0xea26_e60d_850a_c215,
+                    0x9c31_7285_e8fd_9d6f,
                 ],
             ),
             (
@@ -1154,10 +1157,10 @@ mod tests {
                 5,
                 0,
                 [
-                    0x1c452b3b77b6a32d,
-                    0xfa65619a59d081d5,
-                    0xf1044159fd8af5a5,
-                    0xbc7a5c8951434e75,
+                    0x1c45_2b3b_77b6_a32d,
+                    0xfa65_619a_59d0_81d5,
+                    0xf104_4159_fd8a_f5a5,
+                    0xbc7a_5c89_5143_4e75,
                 ],
             ),
             (
@@ -1167,10 +1170,10 @@ mod tests {
                 25,
                 0,
                 [
-                    0xfa3ce6d481434e75,
-                    0xec2c7009c508907,
-                    0x9e055a71800ae3b5,
-                    0xb69b5bb67fde72c7,
+                    0xfa3c_e6d4_8143_4e75,
+                    0xec2_c700_9c50_8907,
+                    0x9e05_5a71_800a_e3b5,
+                    0xb69b_5bb6_7fde_72c7,
                 ],
             ),
             (
@@ -1180,10 +1183,10 @@ mod tests {
                 20,
                 0,
                 [
-                    0x57b9a5111280ec8f,
-                    0x1e66ff61e6b1c0f7,
-                    0xf7482355f7dce585,
-                    0xa89342c11c508907,
+                    0x57b9_a511_1280_ec8f,
+                    0x1e66_ff61_e6b1_c0f7,
+                    0xf748_2355_f7dc_e585,
+                    0xa893_42c1_1c50_8907,
                 ],
             ),
             (
@@ -1193,10 +1196,10 @@ mod tests {
                 55,
                 0,
                 [
-                    0x167bcb5af80ae3b5,
-                    0x8e35de32b156d7dd,
-                    0xc8aa58d499d26367,
-                    0x8e6d4380116a871d,
+                    0x167b_cb5a_f80a_e3b5,
+                    0x8e35_de32_b156_d7dd,
+                    0xc8aa_58d4_99d2_6367,
+                    0x8e6d_4380_116a_871d,
                 ],
             ),
             (
@@ -1206,10 +1209,10 @@ mod tests {
                 40,
                 0,
                 [
-                    0xd7329fd331896175,
-                    0x19f60c4ca95881cb,
-                    0x7697c64afdb79271,
-                    0xea723d3877ef8966,
+                    0xd732_9fd3_3189_6175,
+                    0x19f6_0c4c_a958_81cb,
+                    0x7697_c64a_fdb7_9271,
+                    0xea72_3d38_77ef_8966,
                 ],
             ),
             (
@@ -1219,10 +1222,10 @@ mod tests {
                 30,
                 1024,
                 [
-                    0xcba6a2590490d36d,
-                    0x477549445bcb875,
-                    0x18d5457886ac6f85,
-                    0xc33ad48814635a87,
+                    0xcba6_a259_0490_d36d,
+                    0x477_5494_45bc_b875,
+                    0x18d5_4578_86ac_6f85,
+                    0xc33a_d488_1463_5a87,
                 ],
             ),
             (
@@ -1232,10 +1235,10 @@ mod tests {
                 50,
                 4,
                 [
-                    0x95c35e812495ef15,
-                    0x5f864724ffd0825,
-                    0x8eec889e5184f40f,
-                    0xd0201176144e16d5,
+                    0x95c3_5e81_2495_ef15,
+                    0x5f8_6472_4ffd_0825,
+                    0x8eec_889e_5184_f40f,
+                    0xd020_1176_144e_16d5,
                 ],
             ),
             (
@@ -1245,10 +1248,10 @@ mod tests {
                 60,
                 0,
                 [
-                    0x10c553567734ac55,
-                    0xcfcff7660bf4d6df,
-                    0x8b9bd6071280ec8f,
-                    0xb4683e61e334ac55,
+                    0x10c5_5356_7734_ac55,
+                    0xcfcf_f766_0bf4_d6df,
+                    0x8b9b_d607_1280_ec8f,
+                    0xb468_3e61_e334_ac55,
                 ],
             ),
             (
@@ -1258,10 +1261,10 @@ mod tests {
                 52,
                 0,
                 [
-                    0x1ecf60bf49dab29d,
-                    0xa49aae14c6bb725,
-                    0x8e296426c1bb5a6d,
-                    0xdae1ffe573653705,
+                    0x1ecf_60bf_49da_b29d,
+                    0xa49_aae1_4c6b_b725,
+                    0x8e29_6426_c1bb_5a6d,
+                    0xdae1_ffe5_7365_3705,
                 ],
             ),
             (
@@ -1271,10 +1274,10 @@ mod tests {
                 51,
                 0,
                 [
-                    0xa932f922b0ee8125,
-                    0x553808c7aaa05285,
-                    0x54379525622aeb27,
-                    0xde507c7a0c4c4adf,
+                    0xa932_f922_b0ee_8125,
+                    0x5538_08c7_aaa0_5285,
+                    0x5437_9525_622a_eb27,
+                    0xde50_7c7a_0c4c_4adf,
                 ],
             ),
             (
@@ -1284,10 +1287,10 @@ mod tests {
                 58,
                 0,
                 [
-                    0xe3cd1f8b4bc540af,
-                    0xf2b53b98b0f65c45,
-                    0x8a0bc1ced0f65c45,
-                    0x9e2db53703cff60d,
+                    0xe3cd_1f8b_4bc5_40af,
+                    0xf2b5_3b98_b0f6_5c45,
+                    0x8a0b_c1ce_d0f6_5c45,
+                    0x9e2d_b537_03cf_f60d,
                 ],
             ),
             (
@@ -1297,10 +1300,10 @@ mod tests {
                 70,
                 0,
                 [
-                    0xee69d4893d574577,
-                    0x38f282221e14bc67,
-                    0x55d36ef29b98787d,
-                    0xb3de3cfb71320587,
+                    0xee69_d489_3d57_4577,
+                    0x38f2_8222_1e14_bc67,
+                    0x55d3_6ef2_9b98_787d,
+                    0xb3de_3cfb_7132_0587,
                 ],
             ),
             (
@@ -1310,10 +1313,10 @@ mod tests {
                 55,
                 0,
                 [
-                    0x7188443b31cb7dcf,
-                    0xd9ec8cb57546623d,
-                    0x5028edc393d442d,
-                    0xc2209b5a25dbd2c5,
+                    0x7188_443b_31cb_7dcf,
+                    0xd9ec_8cb5_7546_623d,
+                    0x502_8edc_393d_442d,
+                    0xc220_9b5a_25db_d2c5,
                 ],
             ),
             (
@@ -1323,10 +1326,10 @@ mod tests {
                 62,
                 0,
                 [
-                    0x71468d7cc607e27,
-                    0xa95092e7784c9cef,
-                    0x62b19de3902eaa1d,
-                    0xf1e46070381f675f,
+                    0x714_68d7_cc60_7e27,
+                    0xa950_92e7_784c_9cef,
+                    0x62b1_9de3_902e_aa1d,
+                    0xf1e4_6070_381f_675f,
                 ],
             ),
             (
@@ -1336,10 +1339,10 @@ mod tests {
                 30,
                 0,
                 [
-                    0x899e5a01d69029bf,
-                    0x1c064353c71a39c5,
-                    0xfa62f21681a39c5,
-                    0xbaa63eab701a39c5,
+                    0x899e_5a01_d690_29bf,
+                    0x1c06_4353_c71a_39c5,
+                    0xfa6_2f21_681a_39c5,
+                    0xbaa6_3eab_701a_39c5,
                 ],
             ),
             (
@@ -1349,10 +1352,10 @@ mod tests {
                 40,
                 0,
                 [
-                    0xed7ac98be81a39c5,
-                    0x94f9bfad23990c97,
-                    0x11f2e88b3990c97,
-                    0xbd42c35bf6876aa7,
+                    0xed7a_c98b_e81a_39c5,
+                    0x94f9_bfad_2399_0c97,
+                    0x11f_2e88_b399_0c97,
+                    0xbd42_c35b_f687_6aa7,
                 ],
             ),
             (
@@ -1362,10 +1365,10 @@ mod tests {
                 65,
                 0,
                 [
-                    0x76b1a10e4b858375,
-                    0xded281bcdbbcc155,
-                    0xcd2c6c8b03b2006d,
-                    0xd27ecb09d96927bf,
+                    0x76b1_a10e_4b85_8375,
+                    0xded2_81bc_dbbc_c155,
+                    0xcd2c_6c8b_03b2_006d,
+                    0xd27e_cb09_d969_27bf,
                 ],
             ),
             (
@@ -1375,10 +1378,10 @@ mod tests {
                 56,
                 0,
                 [
-                    0xfe874d63b46a871d,
-                    0x212c7fa8b56cbb8f,
-                    0xdaa0df2cd2ee3fff,
-                    0x86790c7ad2ee3fff,
+                    0xfe87_4d63_b46a_871d,
+                    0x212c_7fa8_b56c_bb8f,
+                    0xdaa0_df2c_d2ee_3fff,
+                    0x8679_0c7a_d2ee_3fff,
                 ],
             ),
         ];
@@ -1435,7 +1438,7 @@ mod tests {
         tree: &Tree<i64, i64>,
         at: usize,
         parent: usize,
-        (lower, upper): (Option<(i32, i64)>, Option<(i32, i64)>),
+        (lower, upper): (Bound, Bound),
         ordered_keys: bool,
         count: &mut usize,
     ) -> usize {
@@ -1621,7 +1624,8 @@ mod tests {
     /// with the same generator as `digests`).
     #[test]
     fn removes_in_tree_bins_like_java() {
-        let scenarios: &[(u64, u64, u32, u64, usize, u64, [u64; 4])] = &[
+        type Scenario = (u64, u64, u32, u64, usize, u64, [u64; 4]);
+        let scenarios: &[Scenario] = &[
             (
                 1600,
                 40,
@@ -1630,10 +1634,10 @@ mod tests {
                 0,
                 2000,
                 [
-                    0x9e19c7c4d6990c97,
-                    0x4d0cb850751a39c5,
-                    0x82f0c8dc409029bf,
-                    0x6f1fb78dd990c97,
+                    0x9e19_c7c4_d699_0c97,
+                    0x4d0c_b850_751a_39c5,
+                    0x82f0_c8dc_4090_29bf,
+                    0x6f1_fb78_dd99_0c97,
                 ],
             ),
             (
@@ -1644,10 +1648,10 @@ mod tests {
                 0,
                 2001,
                 [
-                    0x8328ae0abeb6fed,
-                    0xf3e8182ad2be94f,
-                    0x554f8cec8dce13f5,
-                    0x8328adb92eb6fed,
+                    0x832_8ae0_abeb_6fed,
+                    0xf3e_8182_ad2b_e94f,
+                    0x554f_8cec_8dce_13f5,
+                    0x832_8adb_92eb_6fed,
                 ],
             ),
             (
@@ -1658,10 +1662,10 @@ mod tests {
                 0,
                 2002,
                 [
-                    0xcbf29ce484222325,
-                    0xa8328836543b6fed,
-                    0x8f63bd4c4fa1b7df,
-                    0xb83288ee602b6fed,
+                    0xcbf2_9ce4_8422_2325,
+                    0xa832_8836_543b_6fed,
+                    0x8f63_bd4c_4fa1_b7df,
+                    0xb832_88ee_602b_6fed,
                 ],
             ),
             (
@@ -1672,10 +1676,10 @@ mod tests {
                 0,
                 2003,
                 [
-                    0xece700e23a876aa7,
-                    0xda44042601a39c5,
-                    0x98c5b03449ce13f5,
-                    0xdb4abbdd1c0f2fb7,
+                    0xece7_00e2_3a87_6aa7,
+                    0xda4_4042_601a_39c5,
+                    0x98c5_b034_49ce_13f5,
+                    0xdb4a_bbdd_1c0f_2fb7,
                 ],
             ),
             (
@@ -1686,10 +1690,10 @@ mod tests {
                 0,
                 2004,
                 [
-                    0xf17abd33b34a45d7,
-                    0xe18e14273011f6fd,
-                    0x261e5f3935a00ff,
-                    0xb937b8c1d580ec8f,
+                    0xf17a_bd33_b34a_45d7,
+                    0xe18e_1427_3011_f6fd,
+                    0x261_e5f3_935a_00ff,
+                    0xb937_b8c1_d580_ec8f,
                 ],
             ),
             (
@@ -1700,10 +1704,10 @@ mod tests {
                 0,
                 2005,
                 [
-                    0x19546ca46b4f2fb7,
-                    0x88328ba3a82b6fed,
-                    0x8d2e0ea8814e13f5,
-                    0x19547042eb0f2fb7,
+                    0x1954_6ca4_6b4f_2fb7,
+                    0x8832_8ba3_a82b_6fed,
+                    0x8d2e_0ea8_814e_13f5,
+                    0x1954_7042_eb0f_2fb7,
                 ],
             ),
         ];

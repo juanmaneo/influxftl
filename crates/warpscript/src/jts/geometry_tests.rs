@@ -41,12 +41,7 @@ fn lines_have_no_point_or_two() {
         Line::new(vec![at(1.0, 2.0)]),
         Err(GeometryError::LineStringTooShort.into())
     );
-    assert!(
-        Line::new(Vec::new())
-            .expect("empty line")
-            .coords()
-            .is_empty()
-    );
+    assert_eq!(Line::new(Vec::new()).expect("empty line").coords(), []);
     let line = Line::new(vec![at(1.0, 2.0), at(3.0, 4.0)]).expect("line");
     assert_eq!(line.coords().len(), 2);
     // The WKB reader repeats a single point instead of refusing it.
@@ -60,7 +55,7 @@ fn lines_have_no_point_or_two() {
             .len(),
         2
     );
-    assert!(Line::extended(Vec::new()).coords().is_empty());
+    assert_eq!(Line::extended(Vec::new()).coords(), []);
 }
 
 #[test]
@@ -77,12 +72,7 @@ fn rings_are_closed_and_have_no_point_or_four() {
         Ring::new(vec![at(0.0, 0.0), at(1.0, 1.0), at(0.0, 0.0)]),
         Err(GeometryError::RingTooShort(3).into())
     );
-    assert!(
-        Ring::new(Vec::new())
-            .expect("empty ring")
-            .coords()
-            .is_empty()
-    );
+    assert_eq!(Ring::new(Vec::new()).expect("empty ring").coords(), []);
     assert_eq!(square().coords().len(), 5);
     // An elevation does not make a ring open.
     let up = Coord::new(0.0, 0.0, Some(1.0)).expect("coordinate");
@@ -114,7 +104,7 @@ fn closed_completes_a_ring_instead_of_refusing_it() {
     let b = at(0.0, 1.0);
     let c = at(1.0, 1.0);
     let d = at(1.0, 0.0);
-    assert!(Ring::closed(Vec::new()).coords().is_empty());
+    assert_eq!(Ring::closed(Vec::new()).coords(), []);
     assert_eq!(Ring::closed(vec![a]).coords(), &[a, a, a, a]);
     assert_eq!(Ring::closed(vec![a, b]).coords(), &[a, b, a, a]);
     assert_eq!(Ring::closed(vec![a, b, c]).coords(), &[a, b, c, a]);
