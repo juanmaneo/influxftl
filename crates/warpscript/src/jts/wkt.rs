@@ -297,7 +297,7 @@ impl<'a> Reader<'a> {
     /// `readPolygonText`.
     fn polygon_text(&mut self) -> Result<Polygon> {
         if self.empty_or_opener()? {
-            return Polygon::new(Ring::new(Vec::new())?, Vec::new());
+            return Polygon::new(Ring::closed(Vec::new()), Vec::new());
         }
         let shell = self.ring_text()?;
         let mut holes = Vec::new();

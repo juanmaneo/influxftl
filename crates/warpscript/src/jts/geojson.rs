@@ -784,3 +784,7 @@ fn write_geometry(geometry: &Geometry, out: &mut String) -> Result<()> {
     }
     Ok(())
 }
+
+#[cfg(test)]
+#[path = "geojson_tests.rs"]
+mod tests;

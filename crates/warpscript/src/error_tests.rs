@@ -211,6 +211,8 @@ fn classes_of_every_kind_of_value() {
         (ValueKind::Counter, "java.util.concurrent.atomic.AtomicLong"),
         (ValueKind::Gts, "io.warp10.continuum.gts.GeoTimeSerie"),
         (ValueKind::Encoder, "io.warp10.continuum.gts.GTSEncoder"),
+        (ValueKind::GeoShape, "com.geoxp.GeoXPLib$GeoXPShape"),
+        (ValueKind::Key, "io.warp10.script.functions.ECPRIVATE$1"),
     ] {
         assert_eq!(compat::class_name(Class::Value(kind)), class);
         assert_eq!(compat::value_class(kind), class);
@@ -1794,5 +1796,141 @@ fn remaining_domain_failures_have_the_wording_of_warp10() {
     assert_eq!(
         exception_class(&BoundsError::NegativeBitIndex(-1).into()),
         "java.lang.IndexOutOfBoundsException"
+    );
+}
+
+#[test]
+fn geometry_and_geojson_failures_have_the_classes_of_warp10() {
+    use super::error::geojson::{Chain, Found, GeoJsonError, Step, StringTarget};
+    use super::error::geometry::GeometryError;
+
+    let geometry = [
+        (
+            GeometryError::UnknownType {
+                name: "POINTS".to_owned(),
+                line: 1,
+            },
+            "com.vividsolutions.jts.io.ParseException",
+            false,
+        ),
+        (
+            GeometryError::Expected {
+                expected: "number",
+                found: "';'".to_owned(),
+                line: 1,
+            },
+            "com.vividsolutions.jts.io.ParseException",
+            false,
+        ),
+        (
+            GeometryError::InvalidNumber {
+                text: "x".to_owned(),
+                line: 1,
+            },
+            "com.vividsolutions.jts.io.ParseException",
+            false,
+        ),
+        (
+            GeometryError::UnknownWkbType(8),
+            "com.vividsolutions.jts.io.ParseException",
+            false,
+        ),
+        (
+            GeometryError::WkbMemberType("MultiPoint"),
+            "com.vividsolutions.jts.io.ParseException",
+            false,
+        ),
+        (
+            GeometryError::LineStringTooShort,
+            "java.lang.IllegalArgumentException",
+            true,
+        ),
+        (
+            GeometryError::RingNotClosed,
+            "java.lang.IllegalArgumentException",
+            true,
+        ),
+        (
+            GeometryError::RingTooShort(2),
+            "java.lang.IllegalArgumentException",
+            true,
+        ),
+        (
+            GeometryError::HolesWithoutShell,
+            "java.lang.IllegalArgumentException",
+            true,
+        ),
+        (
+            GeometryError::NullElement,
+            "java.lang.IllegalArgumentException",
+            true,
+        ),
+        (
+            GeometryError::CollectionArgument,
+            "java.lang.IllegalArgumentException",
+            true,
+        ),
+        (
+            GeometryError::EmptyPointWkb,
+            "java.lang.IllegalArgumentException",
+            true,
+        ),
+        (
+            GeometryError::UnknownGeometryType,
+            "com.vividsolutions.jts.util.AssertionFailedException",
+            true,
+        ),
+        (
+            GeometryError::Unsupported,
+            "java.lang.UnsupportedOperationException",
+            true,
+        ),
+        (
+            GeometryError::UnknownFormat,
+            "io.warp10.script.WarpScriptException",
+            false,
+        ),
+    ];
+    for (err, class, runtime) in geometry {
+        assert_eq!(err.is_runtime(), runtime, "{err}");
+        assert_eq!(Error::from(err.clone()).is_runtime(), runtime, "{err}");
+        assert_eq!(exception_class(&Error::from(err.clone())), class, "{err}");
+    }
+
+    let text = |end_of_input| GeoJsonError::Syntax {
+        message: "Unexpected end-of-input".to_owned(),
+        end_of_input,
+    };
+    assert_eq!(
+        exception_class(&text(true).into()),
+        "com.fasterxml.jackson.core.io.JsonEOFException"
+    );
+    assert_eq!(
+        exception_class(&text(false).into()),
+        "com.fasterxml.jackson.core.JsonParseException"
+    );
+    assert_eq!(
+        Found::Null.to_string(),
+        "Null value (token `JsonToken.VALUE_NULL`)"
+    );
+    assert_eq!(
+        Found::String.to_string(),
+        "String value (token `JsonToken.VALUE_STRING`)"
+    );
+    let chain = Chain(vec![Step::Class("Feature"), Step::Class("Point")]);
+    assert_eq!(
+        chain.through(None),
+        " (through reference chain: org.wololo.geojson.Feature->org.wololo.geojson.Point)"
+    );
+    let geometries = GeoJsonError::NoStringConstructor {
+        target: StringTarget::Geometries,
+        text: "x".to_owned(),
+        chain: Chain::default(),
+    };
+    assert_eq!(
+        geometries.to_string(),
+        "Cannot construct instance of `org.wololo.geojson.Geometry[]`: no String-argument \
+         constructor/factory method to deserialize from String value ('x')  at [Source: \
+         UNKNOWN; byte offset: #UNKNOWN]"
     );
 }

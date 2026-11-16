@@ -311,6 +311,8 @@ mod geocover_errors_tests;
 #[cfg(test)]
 mod geocover_tests;
 #[cfg(test)]
+mod geoimport_errors_tests;
+#[cfg(test)]
 mod geoimport_tables_tests;
 #[cfg(test)]
 mod geoops_errors_tests;

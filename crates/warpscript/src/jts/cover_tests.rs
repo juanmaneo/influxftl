@@ -87,6 +87,20 @@ fn a_tolerated_distance_that_overflows_is_refused() {
 }
 
 #[test]
+fn a_cover_whose_tolerated_distance_overflows_is_refused() {
+    assert_eq!(
+        failure(cover_cells(
+            &rectangle(0.0, 0.0, 1.0, 1.0),
+            Precision::ErrorFraction(f64::MAX),
+            false,
+            false,
+            10
+        )),
+        Err(Error::NotFinite(NotFinite::PositiveInfinity))
+    );
+}
+
+#[test]
 fn degrees_are_the_units_of_the_planisphere() {
     assert_eq!(to_units(-180.0, 180.0, DEGREES_PER_LON_UNIT), 0);
     assert_eq!(to_units(0.0, 180.0, DEGREES_PER_LON_UNIT), 1 << 31);

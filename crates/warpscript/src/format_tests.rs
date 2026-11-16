@@ -308,3 +308,16 @@ fn decimal_values_are_signed_digits_that_wrap() {
     assert_eq!(decimal_value("9223372036854775808"), i64::MIN);
     assert_eq!(decimal_value("-9223372036854775808"), i64::MIN);
 }
+
+/// A power of two has a round-trip interval that is narrower below than above, so the decimal
+/// closest to it can fail to read back while the shortest one does: that one is written
+/// (the `else` of `closest_shortest`). OpenJDK 8 writes `5.9604644775390625E-8` for 2^-24
+/// (JDK-4511638), a divergence documented in `docs/DIVERGENCES.md`.
+#[test]
+fn powers_of_two_whose_closest_decimal_does_not_read_back_take_the_shortest() {
+    assert_eq!(
+        java_double_to_string(2f64.powi(-24)),
+        "5.960464477539063E-8"
+    );
+    assert_eq!(java_float_to_string(2f32.powi(-96)), "1.2621775E-29");
+}

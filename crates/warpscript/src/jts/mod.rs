@@ -22,4 +22,6 @@ mod geometry_tests;
 #[cfg(test)]
 mod outline_tests;
 #[cfg(test)]
+mod wkb_tests;
+#[cfg(test)]
 mod wkt_tests;
