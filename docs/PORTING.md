@@ -219,7 +219,7 @@ The `influxftl` binary runs scripts (`eval`, `run`) and serves `POST /api/v0/exe
 reads, line protocol for writes; DIVERGENCES §34) or on a datastore in memory
 (`INFLUXFTL_DATASTORE=memory`). It was checked on InfluxDB 3 Core 3.12.
 
-2067 / 2193 functions are ported (`docs/FUNCTIONS.md`; the inventory includes the names
+2076 / 2193 functions are ported (`docs/FUNCTIONS.md`; the inventory includes the names
 Warp 10 registers through `Builder`s and constants). The Geo Time Series model, the
 `GTSHelper` transforms (time, datapoints, statistics), `BUCKETIZE` and `MAP` with the
 shared aggregators (`sum`, `mean`, `min`, `max`, `first`, `last`, `count`, `and`, `or`,
@@ -368,5 +368,12 @@ the order that unlocks the most:
    name BouncyCastle has for them) and PSS, on `crypto-bigint` and `crypto-primes`, with the
    key generation of BouncyCastle's `RSAKeyPairGenerator`; checked against Warp 10 both ways
    (DIVERGENCES §36).
-6. **Geo** (`GeoXPLib` shapes, `HAVERSINE`, `LOCATIONOFFSET`, `GEO.*`), PGP,
-   Processing. (The datastore functions on InfluxDB 3 are done: DIVERGENCES §34.)
+   The geometry readers and writers (`GEO.WKT`, `GEO.WKB`, `GEO.JSON` and their `.UNIFORM`
+   forms, `->WKT`, `->WKB`, `->GEOJSON`) are in: `jts/` (the geometry model, WKT, WKB, GeoJSON,
+   the cover and the outline of a geometry) and `functions/geoimport.rs`, checked against the
+   oracle (DIVERGENCES §37).
+6. **What is left** (117 of 2193): `GEO.BUFFER` (the JTS buffer); `GEO.GML`, `GEO.KML`, `->GML`
+   and `->KML` (J2: the `<` texts, which Warp 10 parses with XML handlers); `METASET`; PGP
+   (8 functions, BouncyCastle's OpenPGP); and 101 Processing `P*` functions. Processing is an
+   LGPL library (§8): its functions can only be ported from observation, and its rendering is
+   not reproduced bit for bit. The datastore functions on InfluxDB 3 are done (DIVERGENCES §34).

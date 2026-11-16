@@ -1170,3 +1170,55 @@ blocks of an encryption in both directions, and what it says of every argument. 
   are random (from the operating system), so those are different each time; PKCS#1 signatures
   are deterministic and equal to Warp 10's.
 - **PGP.** The `PGP*` functions are not part of this port (`docs/PORTING.md`).
+
+## 37. Geometry readers and writers (JTS, GeoJSON)
+
+`GEO.WKT`, `GEO.WKB`, `GEO.JSON` (and their `.UNIFORM` forms), `->WKT`, `->WKB` and `->GEOJSON`
+follow Warp 10 3.5.0: the oracle tables in `functions/geoimport_tables_tests.rs` are its answers
+to the scripts, and the `jts` tests cover what the tables cannot reach. JTS 1.13 (LGPL/EPL),
+Jackson and the GeoJSON binding of Warp 10 are not copied (`docs/PORTING.md` §8): their
+behaviour is reproduced from observation, and their messages where the oracle shows them. What
+differs:
+
+- **Syntax error texts.** The GeoJSON reader is serde_json, not Jackson. A text that is not
+  JSON fails with the serde_json wording (`EOF while parsing an object at line 1 column 1`)
+  where Jackson says `Unexpected end-of-input: expected close marker for Object …`. The class
+  matches Jackson for the cases the oracle shows (`{` is a `JsonEOFException`, `[1 2]` and
+  `{"a" 1}` are `JsonParseException`s), except for a text that ends inside an array: `[1,` is
+  a `JsonEOFException` here and a `JsonParseException` in Warp 10.
+- **Numbers out of range.** `1e999` in a GeoJSON text is refused by serde_json (`number out of
+  range`, a `JsonParseException`). Warp 10 reads it as an infinity and `GEO.JSON` answers `null`.
+  `NaN` is refused by both, with other wording (`Non-standard token 'NaN'` in Jackson). A
+  non-finite ordinate written in WKT (`NaN`, `Infinity`) or WKB is refused with `NotFinite`
+  wherever it is read; Java stores it.
+- **WKB limits.** A count that is negative fails with `NegativeSize` (a
+  `NegativeArraySizeException`). A count past 2^24 fails with `OutOfMemoryError` at once, where
+  the JVM's limit depends on its heap. Collections nested past 512 levels fail with
+  `StackOverflowError`, where the JVM's depth depends on its stack. WKT has the same 512-level
+  limit; GeoJSON has serde_json's limit of 128 levels.
+- **GML and KML.** A text beginning with `<` is refused by `->WKB`, `->WKT` and `->GEOJSON`
+  with `UnsupportedOperationException`. Warp 10 parses it with an XML handler: `'<kml/>' ->WKB`
+  is a `NullPointerException` there, and `'<' ->WKB` is the XML parser's error. GML and KML
+  come with the GML and KML functions (`docs/PORTING.md` §9, step 6).
+- **Decimals.** `Double.toString` is the shortest decimal that reads back, the closest one
+  when several have that length (`format.rs`). For a power of two whose closest decimal does
+  not read back, Warp 10's JDK 8 writes more digits: `TOSTRING` of `5.9604644775390625E-8`
+  (2^-24) is `5.9604644775390625E-8` there and `5.960464477539063E-8` here (the shortest form,
+  as JDK 27 writes it; JDK-4511638). The same goes for the other values with that property.
+- **Cover limits.** A cover whose tolerated distance overflows (an error fraction of
+  `f64::MAX`, or a haversine that rounds past 1) fails with `NotFinite` here. Warp 10 goes on
+  at resolution 2 instead. A cover that queues more than 2^26 cells fails
+  with `ResourceError::OutOfMemory`. Warp 10 fails with `Java heap space`, at resolution 26 for
+  a polygon of 0.1 degree, in its JVM; the limit is the port's.
+- **`MAXGEOCELLS`.** The limit of cells a script can set cannot be reached through the oracle
+  (its default is far above the cells a test can build), so it is unit tested.
+- **Inconsistent outlines.** `trace` goes on over an outline graph that is not consistent,
+  where Java throws a `NullPointerException`.
+- **Geometries in arrays.** Jackson writes a type id for each geometry of a collection held in
+  an array (`WRAPPER_ARRAY`), which the oracle shows in some `->WKB` answers. The port does not
+  write it; the table generator skips those cases.
+- **Map order.** Keys of a tree bin that share a hash code are ordered by `compareTo` when
+  they are comparable. Java breaks the other ties by identity hash codes, which the port cannot
+  reproduce, so those keys go left. The removed entries of a tree bin stay in its storage until
+  the bin turns back into a list.
+  See §26 and §27 for the maps that reach scripts.
