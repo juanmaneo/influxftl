@@ -245,10 +245,14 @@ buildah build -t influxftl .
 Stages:
 
 - `builder` — official `rust` image, `cargo build --release --locked`;
-- `runtime` — minimal Debian image with the `influxftl` binary (default target);
-- `dev` — builder plus `cargo-deny`, `cargo-audit`, `cargo-llvm-cov`, `kani`, used to run
-  the complete `cargo xtask dev-check` on any machine:
-  `podman build --target dev -t influxftl-dev . && podman run --rm influxftl-dev`.
+- `dev` — official `rust` image plus `cargo-deny`, `cargo-audit`, `cargo-llvm-cov`, `kani`, used
+  to run the complete `cargo xtask dev-check` on any machine:
+  `podman build --target dev -t influxftl-dev . && podman run --rm influxftl-dev`;
+- `runtime` — minimal Debian image with the `influxftl` binary. It is the last stage, which
+  is the one `podman build` and `buildah build` produce without `--target`.
+
+Verified here with Podman 6.1.3 on x86_64 (Manjaro): the default build produces
+`localhost/influxftl:test`, which runs as a non-root user and evaluates `[ 1 2 3 ] 2 GET 40 2 +`.
 
 Build arguments: `RUST_VERSION` (default from `rust-toolchain.toml`), `DEBIAN_VERSION`.
 

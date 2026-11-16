@@ -3,13 +3,16 @@
 # Plain OCI Dockerfile (no BuildKit-only syntax, fully-qualified image names) so that it
 # builds identically with Docker, Podman and Buildah:
 #
+#   podman build -t influxftl .                  # runtime image: the default target
+#   podman build --target dev -t influxftl-dev . # toolchain to run `cargo xtask dev-check`
 #   docker build -t influxftl .
-#   podman build -t influxftl .
-#   buildah build -t influxftl .
+#   buildah bud -t influxftl .
 #
-# Targets:
-#   runtime (default) — minimal Debian image with the `influxftl` binary.
-#   dev               — toolchain + cargo-deny/audit/llvm-cov/kani to run `cargo xtask dev-check`.
+# Stages, in build order. `podman build` and `buildah bud` build the LAST stage by default, so
+# `runtime` must stay last; `dev` is only built when asked for with `--target dev`.
+#   builder — compiles the release binary (internal, not a published target).
+#   dev     — toolchain plus cargo-deny/audit/llvm-cov/kani (needs network while it builds).
+#   runtime — minimal Debian image with the `influxftl` binary.
 #
 # Build arguments (keep RUST_VERSION in sync with rust-toolchain.toml):
 #   --build-arg RUST_VERSION=1.99.1
@@ -31,21 +34,6 @@ COPY . .
 
 # Build only the binary crate (and its dependency, the warpscript library).
 RUN cargo build --release --locked --package influxftl
-
-# ---------------------------------------------------------------------------
-# Runtime: minimal image with just the binary (default target).
-# ---------------------------------------------------------------------------
-FROM docker.io/library/debian:${DEBIAN_VERSION}-slim AS runtime
-
-# A non-root user to run the service.
-RUN useradd --create-home --uid 10001 influxftl
-
-COPY --from=builder /src/target/release/influxftl /usr/local/bin/influxftl
-
-USER influxftl
-WORKDIR /home/influxftl
-
-ENTRYPOINT ["/usr/local/bin/influxftl"]
 
 # ---------------------------------------------------------------------------
 # Dev: everything needed to run the full `cargo xtask dev-check` on any host.
@@ -73,3 +61,18 @@ COPY . .
 
 # Default command runs the complete pre-push chain.
 CMD ["cargo", "xtask", "dev-check"]
+
+# ---------------------------------------------------------------------------
+# Runtime: minimal image with just the binary. Last stage, so it is the default target.
+# ---------------------------------------------------------------------------
+FROM docker.io/library/debian:${DEBIAN_VERSION}-slim AS runtime
+
+# A non-root user to run the service.
+RUN useradd --create-home --uid 10001 influxftl
+
+COPY --from=builder /src/target/release/influxftl /usr/local/bin/influxftl
+
+USER influxftl
+WORKDIR /home/influxftl
+
+ENTRYPOINT ["/usr/local/bin/influxftl"]

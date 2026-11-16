@@ -4,6 +4,8 @@
 /coverage
 /lcov.info
 /reference
+/port_helpers
+/worktrees
 *.profraw
 *.profdata
 .git
