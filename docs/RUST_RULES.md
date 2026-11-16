@@ -117,6 +117,17 @@ that they are not forgotten (`grep -rnF` the pattern to list them):
 - **`Option` defaults on an index that was just proven valid**: `get(i).unwrap_or_default()`,
   `unwrap_or(Value::Null)` (about 280). They hide no `Err`; replacing them by direct indexing
   needs a panic-free access helper.
+- **Conversions proven by a type check**: `as_f64()`, `as_i64()`, `as_bool()` after `is_number()`,
+  a series type test or a `Packable` conversion (`numeric`, `number_at`, `double_of`, `long_of`,
+  the filter thresholds). The check runs first, so the default is never taken. Moving the check
+  into a typed variant is open work.
+- **Parses of text this code just wrote**: the digits of `BigDecimal::double_value`,
+  `message_decimal` and `vector_string` (a `{:.N}` rendering always parses back),
+  `digits.parse()` of a sign-checked decimal (`arithmetic`). A parse that cannot fail has no
+  error variant to name.
+- **Warp 10 `int` casts**: a `LONG` used as an index, a key or a register is cut to 32 bits by
+  `args::long_as_int`, as Warp 10's `(int)` cast does (oracle: `[ 10 20 30 ] 4294967297 GET`
+  answers `20`).
 - **Probes of a conversion**: `parse::<i64>().ok()`, `u32::try_from(x).ok()`,
   `usize::try_from(x) else { … }` (about 40). The error carries no information; `None` leads to a
   typed error or to the alternative path.
