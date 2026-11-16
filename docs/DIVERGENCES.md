@@ -1222,3 +1222,12 @@ differs:
   reproduce, so those keys go left. The removed entries of a tree bin stay in its storage until
   the bin turns back into a list.
   See §26 and §27 for the maps that reach scripts.
+
+## 38. Sets and `UNIQUE` of equal shapes
+
+- **Equal shapes.** Warp 10's `GEOXPSHAPE` overrides `equals` (`==` answers `true` for two shapes
+  with the same cells) but not `hashCode`, so a `HashSet` tells two equal shapes apart by identity.
+  `[ 'b9ad' ] ->GEOSHAPE [ 'b9ad' ] ->GEOSHAPE 2 ->LIST ->SET SIZE` answers `2` on Warp 10, and so
+  does `UNIQUE`. The port hashes a shape by its cells, like its `equals`, so a set holds one of two
+  equal shapes and those two cases answer `1`. Reproducing Warp 10 needs a set member type that
+  compares shapes by identity (about forty call sites hold a `Set`). `==` and `DUP` are unchanged.

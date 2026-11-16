@@ -489,11 +489,11 @@ fn toshape() {
         ),
         (
             r"[ 'b9ad' ] ->GEOSHAPE [ 'b9ad' ] ->GEOSHAPE 2 ->LIST ->SET SIZE",
-            Ok(r"[2]"),
+            Ok(r"[1]"),
         ),
         (
             r"[ 'b9ad' ] ->GEOSHAPE [ 'b9ad' ] ->GEOSHAPE 2 ->LIST UNIQUE SIZE",
-            Ok(r"[2]"),
+            Ok(r"[1]"),
         ),
     ]);
 }

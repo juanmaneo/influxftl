@@ -464,8 +464,9 @@ impl Hash for Value {
             Value::Counter(c) => (Rc::as_ptr(c) as usize).hash(state),
             Value::Gts(g) => (Rc::as_ptr(g) as usize).hash(state),
             Value::Encoder(e) => (Rc::as_ptr(e) as usize).hash(state),
-            // `GeoXPShape` overrides `equals` but not `hashCode`: sets tell two shapes apart.
-            Value::GeoShape(s) => (Rc::as_ptr(s) as usize).hash(state),
+            // Hashed by content, like `equals`: a set holds one of two equal shapes. Warp 10
+            // hashes them by identity (DIVERGENCES.md, section 38).
+            Value::GeoShape(s) => s.hash(state),
             Value::Key(k) => (Rc::as_ptr(k) as usize).hash(state),
         }
     }
