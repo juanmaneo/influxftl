@@ -7,7 +7,6 @@
 //! revision. The registry is the list of function names known to the Rust runtime.
 
 use std::collections::BTreeSet;
-use std::fmt::Write as _;
 
 /// One inventory line.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -70,10 +69,9 @@ pub fn render(inventory_text: &str, registered: &[&str]) -> String {
     } else {
         (ported as f64) * 100.0 / (total as f64)
     };
-    let _ = writeln!(
-        out,
-        "**{ported} / {total} functions ported ({percent:.1} %).**\n"
-    );
+    out.push_str(&format!(
+        "**{ported} / {total} functions ported ({percent:.1} %).**\n\n"
+    ));
     out.push_str("Reference: Warp 10 `WarpScriptLib.java` at revision `b5764364679f6ccc40a23632e352d134fab1c2eb`.\n\n");
 
     let groups = [
@@ -97,7 +95,7 @@ pub fn render(inventory_text: &str, registered: &[&str]) -> String {
             .iter()
             .filter(|e| registered.contains(e.name.as_str()))
             .count();
-        let _ = writeln!(out, "## {group} ({done} / {})\n", entries.len());
+        out.push_str(&format!("## {group} ({done} / {})\n\n", entries.len()));
         out.push_str("| Function | Warp 10 class | Status |\n|---|---|---|\n");
         for entry in entries {
             let status = if registered.contains(entry.name.as_str()) {
@@ -105,12 +103,11 @@ pub fn render(inventory_text: &str, registered: &[&str]) -> String {
             } else {
                 "❌ todo"
             };
-            let _ = writeln!(
-                out,
-                "| `{}` | `{}` | {status} |",
+            out.push_str(&format!(
+                "| `{}` | `{}` | {status} |\n",
                 escape(&entry.name),
                 entry.class
-            );
+            ));
         }
         out.push('\n');
     }
@@ -118,7 +115,7 @@ pub fn render(inventory_text: &str, registered: &[&str]) -> String {
     if !extras.is_empty() {
         out.push_str("## Registered in Rust but absent from the reference inventory\n\n");
         for name in extras {
-            let _ = writeln!(out, "- `{}`", escape(name));
+            out.push_str(&format!("- `{}`\n", escape(name)));
         }
         out.push('\n');
     }

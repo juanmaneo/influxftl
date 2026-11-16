@@ -373,10 +373,7 @@ fn guard(stack: &mut Stack) -> Result<()> {
     let saved_capabilities = stack.capabilities().clone();
     let outer_exported = stack.set_exported_capabilities(Some(Vec::new()));
 
-    let result = stack.exec_macro(&m);
-    if result.is_err() {
-        stack.clear();
-    }
+    let result = stack.exec_macro(&m).inspect_err(|_| stack.clear());
 
     if let Some(symbols) = symbols {
         let symbols = symbols.borrow();
@@ -406,7 +403,7 @@ fn guard(stack: &mut Stack) -> Result<()> {
         .unwrap_or_default();
     let copy_exported = exported.contains(&None);
     let new_capabilities = std::mem::replace(stack.capabilities_mut(), saved_capabilities);
-    if result.is_ok() {
+    let merged = result.map(|()| {
         for cap in exported.iter().flatten() {
             if copy_exported
                 && let Some(outer) = stack.exported_capabilities_mut()
@@ -419,8 +416,8 @@ fn guard(stack: &mut Stack) -> Result<()> {
                 stack.capabilities_mut().insert(cap.clone(), value.clone());
             }
         }
-    }
-    result.map_err(|_| Error::Abort("Exception in GUARDed macro.".to_owned()))
+    });
+    merged.map_err(|err| Error::Guarded(Box::new(err)))
 }
 
 /// `CALL`: external subprocesses are not part of this runtime.

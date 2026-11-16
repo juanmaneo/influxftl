@@ -616,11 +616,12 @@ impl Unpickler<'_> {
                     "00\n" => Py::Bool(false),
                     "01\n" => Py::Bool(true),
                     _ => {
-                        let mut number = data.clone();
-                        number.pop();
-                        match number.parse::<i32>() {
-                            Ok(i) if parse_long(&number).is_ok() => Py::Int(i),
-                            _ => Py::Long(parse_long(&number)?),
+                        let number = data.strip_suffix('\n').unwrap_or(&data);
+                        let long = parse_long(number)?;
+                        match i32::try_from(long) {
+                            Ok(int) => Py::Int(int),
+                            // Out of the 32-bit range: pickled as a LONG.
+                            Err(_) => Py::Long(long),
                         }
                     }
                 };
@@ -778,11 +779,9 @@ impl Unpickler<'_> {
             }
             b'g' | b'p' => {
                 let line = self.readline(false)?;
-                let index = line
-                    .parse::<i32>()
-                    .ok()
-                    .filter(|_| parse_long(&line).is_ok())
-                    .ok_or_else(|| number_format(&line))?;
+                let index = parse_long(&line)
+                    .map_err(|_| number_format(&line))
+                    .and_then(|v| i32::try_from(v).map_err(|_| number_format(&line)))?;
                 if key == b'g' {
                     self.memo_get(index)?;
                 } else {
@@ -1420,6 +1419,8 @@ fn calendar_millis(fields: [i64; 7], zone: Option<&str>) -> i64 {
 
 /// The instant of the local time `local` (milliseconds) in the zone `zone`.
 fn local_to_utc(local: i64, zone: Option<&str>) -> i64 {
+    // Java's `TimeZone.getTimeZone` answers GMT for an identifier it does not know: so does
+    // this, with an offset of zero.
     let offset = zone
         .and_then(|id| id.parse::<chrono_tz::Tz>().ok())
         .map_or(0, |tz| {

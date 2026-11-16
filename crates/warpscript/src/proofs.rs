@@ -81,6 +81,10 @@ macro_rules! floor_division_identity {
             fn $name() {
                 let x: i64 = kani::any();
                 let (q, m) = (succeeds(floor_div(x, $y)), succeeds(floor_mod(x, $y)));
+                assert!(q.is_some() && m.is_some(), "a non-zero divisor never fails");
+                let (Some(q), Some(m)) = (q, m) else {
+                    return;
+                };
                 assert!(m == 0 || (m < 0) == ($y < 0));
                 assert!(m.unsigned_abs() < i64::unsigned_abs($y));
                 assert!(q.wrapping_mul($y).wrapping_add(m) == x);
@@ -100,19 +104,20 @@ floor_division_identity! {
 fn floor_division_by_minus_one_wraps() {
     let x: i64 = kani::any();
     let (q, m) = (succeeds(floor_div(x, -1)), succeeds(floor_mod(x, -1)));
-    assert!(m == 0);
-    assert!(q == x.wrapping_neg());
+    assert!(q == Some(x.wrapping_neg()));
+    assert!(m == Some(0));
 }
 
-/// The value of a result that cannot be an error. The error is not dropped: CBMC cannot bound
+/// The value of a result, or `None` for an error. The error is not dropped: CBMC cannot bound
 /// the drop glue of `Error` (its cause chain and the I/O failures it can hold), and the
-/// destructor is not what these harnesses are about.
-fn succeeds<T>(result: crate::error::Result<T>) -> T {
+/// destructor is not what these harnesses are about. The harnesses assert that the value is
+/// present, so an error is a failed proof rather than a panic.
+fn succeeds<T>(result: crate::error::Result<T>) -> Option<T> {
     match result {
-        Ok(value) => value,
+        Ok(value) => Some(value),
         Err(error) => {
             core::mem::forget(error);
-            unreachable!()
+            None
         }
     }
 }

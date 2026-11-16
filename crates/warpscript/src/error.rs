@@ -138,10 +138,11 @@ pub enum Error {
     /// `CONTINUE`: skip to the next iteration of the innermost loop.
     #[error("Exception at CONTINUE: {}", LOOP_ONLY)]
     Continue,
-    /// A plain `WarpScriptATCException` (`GUARD` failures): propagates unwrapped like the
-    /// other signals but is a failure at the top level.
-    #[error("{0}")]
-    Abort(String),
+    /// A failure inside a `GUARD`ed macro. Warp 10 reports the same text whatever failed, and
+    /// the failure stays available as the source. It propagates unwrapped like the other
+    /// signals, and is a failure at the top level.
+    #[error("Exception in GUARDed macro.")]
+    Guarded(#[source] Box<Error>),
     /// A failure reported with more context by the code that handled it (the
     /// `Exception at '…' in section …` of the interpreter, `<FUNCTION> failed to …`).
     #[error("{context} ({source})")]
@@ -332,7 +333,7 @@ impl Error {
     pub fn is_signal(&self) -> bool {
         matches!(
             self,
-            Error::Return | Error::Stop(_) | Error::Break | Error::Continue | Error::Abort(_)
+            Error::Return | Error::Stop(_) | Error::Break | Error::Continue | Error::Guarded(_)
         )
     }
 
@@ -362,7 +363,7 @@ impl Error {
             | Error::Stop(_)
             | Error::Break
             | Error::Continue
-            | Error::Abort(_)
+            | Error::Guarded(_)
             | Error::Context { .. }
             | Error::Usage { .. }
             | Error::Stack(_)

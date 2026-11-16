@@ -355,7 +355,7 @@ fn guard_failures_abort_without_details() {
     let err = stack
         .exec("1 2 <% 3 'x' STORE 4 FAIL %> [ 'x' ] GUARD")
         .expect_err("the value should fail");
-    assert!(matches!(err.root_cause(), Error::Abort(_)), "{err:?}");
+    assert!(matches!(err.root_cause(), Error::Guarded(_)), "{err:?}");
     assert_eq!(err.root_cause().message(), "Exception in GUARDed macro.");
     assert_eq!(stack.depth(), 0);
     assert!(!stack.has_symbol("x"));

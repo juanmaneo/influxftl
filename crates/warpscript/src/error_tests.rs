@@ -61,10 +61,15 @@ fn signals() {
     assert!(Error::Break.is_signal());
     assert!(Error::Continue.is_signal());
     assert!(Error::Stop("STOP".to_owned()).is_signal());
-    assert!(Error::Abort("abort".to_owned()).is_signal());
+    assert!(Error::Guarded(Box::new(Error::Break)).is_signal());
     assert_eq!(Error::Return.message(), "RETURN");
     assert_eq!(Error::Stop("x".to_owned()).message(), "x");
-    assert_eq!(Error::Abort("y".to_owned()).message(), "y");
+    assert_eq!(
+        Error::Guarded(Box::new(Error::Break)).message(),
+        "Exception in GUARDed macro."
+    );
+    let guarded = Error::Guarded(Box::new(Error::empty_stack()));
+    assert!(std::error::Error::source(&guarded).is_some());
     assert_eq!(
         Error::Break.message(),
         "Exception at BREAK: must be used in a one of FOR, FOREACH, FORSTEP, WHILE, UNTIL loop."
@@ -154,7 +159,7 @@ fn exception_classes() {
             "io.warp10.script.WarpScriptLoopContinueException",
         ),
         (
-            Error::Abort(String::new()),
+            Error::Guarded(Box::new(Error::empty_stack())),
             "io.warp10.script.WarpScriptATCException",
         ),
         (

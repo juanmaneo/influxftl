@@ -68,7 +68,7 @@ pub fn exception_class(err: &Error) -> &'static str {
         Error::Stop(_) => "io.warp10.script.WarpScriptStopException",
         Error::Break => "io.warp10.script.WarpScriptLoopBreakException",
         Error::Continue => "io.warp10.script.WarpScriptLoopContinueException",
-        Error::Abort(_) => "io.warp10.script.WarpScriptATCException",
+        Error::Guarded(_) => "io.warp10.script.WarpScriptATCException",
         Error::EmptyStack => "io.warp10.script.InformativeEmptyStackException",
         Error::ClassCast { .. } => "java.lang.ClassCastException",
         Error::NullPointer => "java.lang.NullPointerException",

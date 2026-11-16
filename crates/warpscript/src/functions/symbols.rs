@@ -260,20 +260,21 @@ fn definedmacro(stack: &mut Stack) -> Result<()> {
         "DEFINEDMACRO",
         "expects a string on top of the stack.",
     )?;
-    let found = stack.find_macro(&name).is_ok();
+    let found = stack.is_macro(&name);
     stack.push(found);
     Ok(())
 }
 
 fn checkmacro(stack: &mut Stack) -> Result<()> {
     let name = pop_string(stack, "CHECKMACRO", "expects a string on top of the stack.")?;
-    if stack.find_macro(&name).is_err() {
-        return Err(Error::usage(
+    match stack.find_macro(&name) {
+        Ok(_) => Ok(()),
+        // The reason is not part of the answer: CHECKMACRO says only that the macro is unusable.
+        Err(_) => Err(Error::usage(
             "CHECKMACRO",
             format!("macro '{name}' could not be loaded."),
-        ));
+        )),
     }
-    Ok(())
 }
 
 fn cleardefs(stack: &mut Stack) -> Result<()> {

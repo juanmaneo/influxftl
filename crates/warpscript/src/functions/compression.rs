@@ -108,11 +108,11 @@ pub(crate) fn ungzip_bytes(data: &[u8]) -> std::io::Result<Vec<u8>> {
     let mut first = true;
     loop {
         let mut decoder = GzDecoder::new(rest);
-        if let Err(err) = decoder.read_to_end(&mut decompressed) {
-            if first || decoder.header().is_some() {
-                return Err(err);
-            }
-            break;
+        match decoder.read_to_end(&mut decompressed) {
+            Ok(_) => {}
+            Err(err) if first || decoder.header().is_some() => return Err(err),
+            // The trailing bytes are not a member: Java stops there, and so do we.
+            Err(_) => break,
         }
         rest = decoder.into_inner();
         first = false;

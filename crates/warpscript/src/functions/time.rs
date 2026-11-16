@@ -918,8 +918,8 @@ fn add_period_utc(
     let scaled = |value: i64| -> core::result::Result<i32, TimeError> {
         value
             .checked_mul(n)
-            .and_then(|v| i32::try_from(v).ok())
             .ok_or_else(overflow)
+            .and_then(|v| i32::try_from(v).map_err(|_| overflow()))
     };
     let mut utc = utc_from_millis(ts / TIME_UNITS_PER_MS)?;
     let date_steps: [(i64, DateStep); 4] = [

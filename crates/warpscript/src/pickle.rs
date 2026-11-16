@@ -664,7 +664,7 @@ impl Pickler {
         } else if (0..=0xffff).contains(&v) {
             self.out.push(op::BININT2);
             self.out.extend((v as u16).to_le_bytes());
-        } else if i32::try_from(v).is_ok() {
+        } else if (i64::from(i32::MIN)..=i64::from(i32::MAX)).contains(&v) {
             self.out.push(op::BININT);
             self.out.extend((v as i32).to_le_bytes());
         } else {

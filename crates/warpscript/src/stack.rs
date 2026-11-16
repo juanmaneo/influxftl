@@ -467,9 +467,9 @@ impl Stack {
 
     /// Value of register `index`.
     pub fn load_register(&self, index: i64) -> Result<&Value> {
-        usize::try_from(index)
-            .ok()
-            .and_then(|i| self.registers.get(i))
+        let slot = usize::try_from(index).map_err(|_| self.invalid_register())?;
+        self.registers
+            .get(slot)
             .ok_or_else(|| self.invalid_register())
     }
 
@@ -482,19 +482,20 @@ impl Stack {
     /// Register `index`, for the callers that read and write it.
     pub fn register_slot(&mut self, index: i64) -> Result<&mut Value> {
         let max = DEFAULT_REGISTERS - 1;
-        usize::try_from(index)
-            .ok()
-            .and_then(|i| self.registers.get_mut(i))
+        let slot = usize::try_from(index).map_err(|_| StackError::InvalidRegister { max })?;
+        self.registers
+            .get_mut(slot)
             .ok_or(StackError::InvalidRegister { max }.into())
     }
 
-    /// Set register `index` to `null`; an index that is not a register is ignored, as
-    /// `store(int, null)` failures are where Warp 10 forgets symbols.
+    /// Set register `index` to `null`. An index that is not a register is ignored: the symbol
+    /// list that asks for the clearing may name a register that does not exist, and clearing it
+    /// is then a no-op rather than a failure.
     pub fn clear_register(&mut self, index: i64) {
-        if let Some(slot) = usize::try_from(index)
-            .ok()
-            .and_then(|i| self.registers.get_mut(i))
-        {
+        let Ok(slot) = usize::try_from(index) else {
+            return;
+        };
+        if let Some(slot) = self.registers.get_mut(slot) {
             *slot = Value::Null;
         }
     }
@@ -1226,6 +1227,12 @@ impl Stack {
         }
     }
 
+    /// `true` when `symbol` is bound to a macro (`DEFINEDMACRO`).
+    pub fn is_macro(&self, symbol: &str) -> bool {
+        let symbol = self.rewrite_macro_symbol(symbol);
+        matches!(self.symbols.get(&*symbol), Some(Value::Macro(_)))
+    }
+
     /// Run the macro bound to `symbol` (`@symbol`, `RUN`).
     pub fn run(&mut self, symbol: &str) -> Result<()> {
         let m = self.find_macro(symbol)?;
@@ -1267,15 +1274,15 @@ impl Stack {
                 Statement::Call(callable) => callable.apply(self),
                 Statement::Push(value) => self.push_checked(value.clone()),
             };
-            if let Err(err) = outcome.and_then(|()| self.check_depth()) {
-                result = Err(err);
-                break;
+            match outcome.and_then(|()| self.check_depth()) {
+                Ok(()) => idx += 1,
+                Err(err) => {
+                    result = Err(err);
+                    break;
+                }
             }
-            idx += 1;
         }
-        if result.is_ok() {
-            result = self.check_ops();
-        }
+        let result = result.and_then(|()| self.check_ops());
         self.recurse_out();
         match result {
             Ok(()) => Ok(()),

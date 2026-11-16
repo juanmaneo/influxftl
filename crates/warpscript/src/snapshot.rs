@@ -26,13 +26,15 @@ pub(crate) const MAX_RECURSION_LEVEL: usize = 16;
 /// are replaced by the comment `Macro.snapshot` emits in that case.
 pub fn value_snapshot(value: &Value) -> String {
     let mut out = String::new();
-    if append(&mut out, value, 1, false).is_err() {
-        out = format!(
+    match append(&mut out, value, 1, false) {
+        Ok(()) => out,
+        // Warp 10 writes this comment in place of a value it cannot snapshot, and the script
+        // reads it, so the failure is reported as text here by design.
+        Err(_) => format!(
             "/* Error while snapshoting element of type '{}' */ ",
             value.type_name()
-        );
+        ),
     }
-    out
 }
 
 /// `SNAPSHOT.addElement`: append the source of `value` (and a space) to `out`, in the
@@ -61,13 +63,13 @@ fn macro_snapshot_at(m: &Macro, hide_secure: bool, depth: usize) -> String {
                 }
                 Statement::Push(value) => {
                     let mut element = String::new();
-                    if append(&mut element, value, depth, false).is_ok() {
-                        out.push_str(&element);
-                    } else {
-                        out.push_str(&format!(
+                    match append(&mut element, value, depth, false) {
+                        Ok(()) => out.push_str(&element),
+                        // The placeholder of `value_snapshot`, see there.
+                        Err(_) => out.push_str(&format!(
                             "/* Error while snapshoting element of type '{}' */ ",
                             value.type_name()
-                        ));
+                        )),
                     }
                 }
                 Statement::Call(callable) => {
