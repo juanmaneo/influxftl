@@ -310,7 +310,8 @@ fn discords_gts(gts: &Gts, params: Discords) -> Result<GeoTimeSerie> {
             let mut nndist = f64::INFINITY;
             // The nearest neighbour among the windows of the same word, then of the previous
             // words in lexicographic order until one is found.
-            let idx = raw_symbols.binary_search(symbol).unwrap_or_default();
+            // The words sorted before `symbol` (the keys of a `BTreeMap`: sorted and unique).
+            let idx = raw_symbols.partition_point(|word| word < symbol);
             for (pass, other) in std::iter::once(symbol)
                 .chain(raw_symbols[..idx].iter().rev())
                 .enumerate()

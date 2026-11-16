@@ -549,7 +549,8 @@ pub(crate) fn aes_wrap(kek: &Kek, data: &[u8]) -> Vec<u8> {
 /// removal (`PKCS7Padding.padCount`); `None` for undecipherable data.
 pub(crate) fn aes_unwrap(kek: &Kek, data: &[u8]) -> Option<Vec<u8>> {
     let decrypted = rfc3394_unwrap(kek, data)?;
-    let count = usize::from(decrypted.last().copied().unwrap_or_default());
+    // No byte at all is refused like a padding count of zero.
+    let count = decrypted.last().map_or(0, |&last| usize::from(last));
     if count == 0 || count > decrypted.len() {
         return None;
     }

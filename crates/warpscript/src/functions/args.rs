@@ -89,6 +89,12 @@ pub fn int_value(value: &Value) -> Option<i32> {
     }
 }
 
+/// A `LONG` as Warp 10 reads it where it wants an `int` (an index, a key, a register): the high
+/// 32 bits are dropped, so `[ 10 20 30 ] 4294967297 GET` answers `20`.
+pub fn long_as_int(key: i64) -> i32 {
+    key as i32
+}
+
 /// `GET.computeAndCheckIndex`: resolve a possibly negative index (counted from the end) into
 /// `0..size`, with the Java error messages when it is out of bounds.
 pub fn compute_and_check_index(index: i32, size: i32) -> Result<i32> {

@@ -145,8 +145,28 @@ fn parse_pack_format(name: &str, format: &str) -> Result<(Vec<PackField>, i32)> 
     Ok((fields, total))
 }
 
+/// A `PACK` argument as the two numbers its formats read. A boolean counts as 0 or 1.
+struct Packable {
+    double: f64,
+    long: i64,
+}
+
+/// The numbers of a `PACK` argument, `None` for anything else.
+fn packable_of(value: &Value) -> Option<Packable> {
+    match value {
+        Value::Boolean(b) => Some(Packable {
+            double: f64::from(u8::from(*b)),
+            long: i64::from(*b),
+        }),
+        other => other
+            .as_f64()
+            .zip(other.as_i64())
+            .map(|(double, long)| Packable { double, long }),
+    }
+}
+
 /// The bits of the `vidx`-th value of `PACK` for `field`, before endianness handling.
-fn pack_value(values: &[Value], vidx: usize, kind: PackKind) -> Result<u64> {
+fn pack_value(values: &[Packable], vidx: usize, kind: PackKind) -> Result<u64> {
     let Some(value) = values.get(vidx) else {
         return Err(BoundsError::ArrayIndex {
             index: vidx as i64,
@@ -154,14 +174,10 @@ fn pack_value(values: &[Value], vidx: usize, kind: PackKind) -> Result<u64> {
         }
         .into());
     };
-    let number = match value {
-        Value::Boolean(b) => Value::Long(i64::from(*b)),
-        other => other.clone(),
-    };
     Ok(match kind {
-        PackKind::Double => number.as_f64().unwrap_or_default().to_bits(),
-        PackKind::Bit => u64::from(number.as_i64().unwrap_or_default() != 0),
-        _ => number.as_i64().unwrap_or_default() as u64,
+        PackKind::Double => value.double.to_bits(),
+        PackKind::Bit => u64::from(value.long != 0),
+        _ => value.long as u64,
     })
 }
 
@@ -172,13 +188,14 @@ fn pack(stack: &mut Stack) -> Result<()> {
     const VALUES: &str = "operates on a list of numeric or boolean values.";
     let format = pop_string(stack, NAME, "expects a format string on top of the stack.")?;
     let values = pop_list(stack, NAME, VALUES)?;
-    let values = values.borrow().clone();
-    if values
+    let values = values
+        .borrow()
         .iter()
-        .any(|v| !(v.is_number() || matches!(v, Value::Boolean(_))))
-    {
+        .map(packable_of)
+        .collect::<Option<Vec<_>>>();
+    let Some(values) = values else {
         return Err(fail(NAME, VALUES));
-    }
+    };
     let (fields, total) = parse_pack_format(NAME, &format)?;
     let capacity = total.wrapping_add(7) / 8;
     if capacity < 0 {
@@ -233,7 +250,10 @@ fn bit_at(data: &[u8], index: i32) -> Result<u64> {
     if index < 0 {
         return Err(BoundsError::NegativeBitIndex(i64::from(index)).into());
     }
-    let byte = data.get((index / 8) as usize).copied().unwrap_or_default();
+    let byte = match data.get((index / 8) as usize) {
+        Some(byte) => *byte,
+        None => 0,
+    };
     Ok(u64::from((byte >> (7 - index % 8)) & 1))
 }
 

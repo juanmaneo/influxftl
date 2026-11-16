@@ -32,7 +32,9 @@ use std::rc::Rc;
 use indexmap::{IndexMap, IndexSet};
 
 use super::Entry;
-use super::args::{compute_and_check_index, fail, fail_with_cause, pop_list, pop_long, pop_map};
+use super::args::{
+    compute_and_check_index, fail, fail_with_cause, long_as_int, pop_list, pop_long, pop_map,
+};
 use super::gts_reduce::{hash_order, table_size_for, utf16_hash};
 use crate::error::collections::CollectionError;
 use crate::error::fault::BoundsError;
@@ -387,7 +389,7 @@ fn get_element(key: &Value, collection: &Value) -> Result<Value> {
                 return Err(CollectionError::ListKeyNotLong.into());
             };
             let items = list.borrow();
-            let idx = compute_and_check_index(*k as i32, items.len() as i32)?;
+            let idx = compute_and_check_index(long_as_int(*k), items.len() as i32)?;
             Ok(items.get(idx as usize).cloned().unwrap_or(Value::Null))
         }
         Value::Map(map) => Ok(map.borrow().get(key).cloned().unwrap_or(Value::Null)),
@@ -396,7 +398,7 @@ fn get_element(key: &Value, collection: &Value) -> Result<Value> {
                 return Err(CollectionError::StringKeyNotLong.into());
             };
             let units: Vec<u16> = s.encode_utf16().collect();
-            let idx = compute_and_check_index(*k as i32, units.len() as i32)?;
+            let idx = compute_and_check_index(long_as_int(*k), units.len() as i32)?;
             let unit = units.get(idx as usize).copied().unwrap_or_default();
             Ok(Value::from(utf16_unit_string(unit)))
         }
@@ -404,7 +406,7 @@ fn get_element(key: &Value, collection: &Value) -> Result<Value> {
             let Value::Long(k) = key else {
                 return Err(CollectionError::BytesKeyNotLong.into());
             };
-            let idx = compute_and_check_index(*k as i32, bytes.len() as i32)?;
+            let idx = compute_and_check_index(long_as_int(*k), bytes.len() as i32)?;
             let byte = bytes.get(idx as usize).copied().unwrap_or_default();
             Ok(Value::Long(i64::from(byte)))
         }
@@ -446,7 +448,7 @@ pub(super) fn nested_get(root: &List, indices: &[i64]) -> Result<Value> {
                 return Err(CollectionError::NestedPathMissing.into());
             };
             let items = list.borrow();
-            let idx = compute_and_check_index(index as i32, items.len() as i32)?;
+            let idx = compute_and_check_index(long_as_int(index), items.len() as i32)?;
             items.get(idx as usize).cloned().unwrap_or(Value::Null)
         };
         current = next;
@@ -480,7 +482,7 @@ fn set_nested(container: &Value, path: &List, value: Value) -> Result<()> {
     let Value::List(target) = target else {
         return Err(fail(NAME, NESTED_PATH));
     };
-    let last = i64::from(last as i32);
+    let last = i64::from(long_as_int(last));
     ensure_mutable(&target)?;
     let len = target.borrow().len();
     if last < 0 || last >= len as i64 {
@@ -500,7 +502,7 @@ fn set_into(container: &Value, key: &Value, value: Value) -> Result<Option<Value
             Ok(None)
         }
         (Value::List(list), Value::Long(k)) => {
-            let idx = compute_and_check_index(*k as i32, list.borrow().len() as i32)?;
+            let idx = compute_and_check_index(long_as_int(*k), list.borrow().len() as i32)?;
             ensure_mutable(list)?;
             set_at(&mut list.borrow_mut(), idx as usize, value);
             Ok(None)
@@ -515,7 +517,7 @@ fn set_into(container: &Value, key: &Value, value: Value) -> Result<Option<Value
                     ));
                 }
             };
-            let idx = compute_and_check_index(*k as i32, bytes.len() as i32)?;
+            let idx = compute_and_check_index(long_as_int(*k), bytes.len() as i32)?;
             let mut data = bytes.to_vec();
             set_at(&mut data, idx as usize, byte);
             Ok(Some(Value::bytes(data)))
@@ -566,7 +568,7 @@ fn put(stack: &mut Stack) -> Result<()> {
             };
             ensure_mutable(list)?;
             let mut items = list.borrow_mut();
-            let idx = i64::from(k as i32);
+            let idx = i64::from(long_as_int(k));
             if idx < 0 || idx >= items.len() as i64 {
                 return Err(index_out_of_bounds(idx, items.len()));
             }
@@ -688,8 +690,8 @@ fn sublist_indices(items: &[Value], indices: &[Value]) -> Result<Vec<Value>> {
     let size = items.len() as i64;
     let mut sublist = Vec::new();
     if let [Value::Long(b0), Value::Long(b1)] = indices {
-        let mut bmin = i64::from(*b0 as i32);
-        let mut bmax = i64::from(*b1 as i32);
+        let mut bmin = i64::from(long_as_int(*b0));
+        let mut bmax = i64::from(long_as_int(*b1));
         if bmin < 0 {
             bmin += size;
         }
@@ -716,7 +718,7 @@ fn sublist_indices(items: &[Value], indices: &[Value]) -> Result<Vec<Value>> {
         let Value::Long(index) = index else {
             return Err(fail(NAME, NUMERIC));
         };
-        let idx = i64::from(*index as i32);
+        let idx = i64::from(long_as_int(*index));
         if idx >= size || idx < -size {
             return Err(fail(NAME, "reported an out of bound index."));
         }
@@ -826,7 +828,7 @@ fn remove_index(key: &Value, size: usize) -> Result<Option<usize>> {
     let Value::Long(k) = key else {
         return Err(fail("REMOVE", "expects an integer as key."));
     };
-    let mut idx = i64::from(*k as i32);
+    let mut idx = i64::from(long_as_int(*k));
     if idx < 0 {
         idx += size as i64;
     }
@@ -1561,7 +1563,7 @@ fn pivotstrict(stack: &mut Stack) -> Result<()> {
 fn store_symbol(stack: &mut Stack, symbol: &Value, value: Value, conditional: bool) -> Result<()> {
     match symbol {
         Value::Long(l) => {
-            let register = i64::from(*l as i32);
+            let register = i64::from(long_as_int(*l));
             if !conditional || stack.load_register(register)?.is_null() {
                 stack.store_register(register, value)?;
             }

@@ -9,7 +9,7 @@ use std::collections::BTreeSet;
 use std::rc::Rc;
 
 use super::Entry;
-use super::args::{compute_and_check_index, fail, fail_with_cause};
+use super::args::{compute_and_check_index, fail, fail_with_cause, long_as_int};
 use super::misc::TIME_UNITS_PER_MS;
 use crate::encoder::{
     DEFAULT_COMP_RATIO_THRESHOLD, EncodedValue, GtsEncoder, encoder_to_wrapper, gts_to_wrapper,
@@ -793,7 +793,7 @@ fn atindex(stack: &mut Stack) -> Result<()> {
     let Some(idx) = long_value(&stack.pop()?) else {
         return Err(fail(NAME, "expects an index on top of the stack."));
     };
-    let idx = idx as i32;
+    let idx = long_as_int(idx);
     element_or_list(stack, |element| match element {
         Value::Gts(gts) => {
             let gts = gts.borrow();

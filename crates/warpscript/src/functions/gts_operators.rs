@@ -79,6 +79,32 @@ fn common_ticks(a: &Gts, b: &Gts) -> Vec<(usize, usize)> {
     pairs
 }
 
+/// A result of type `ty` for an operation between `a` and `b`: bucketized like them when they
+/// are bucketized on the same grid, and typed.
+fn binary_result(a: &Gts, b: &Gts, ty: Type) -> GeoTimeSerie {
+    let mut result = GeoTimeSerie::new();
+    handle_bucketization(&mut result, &a.borrow(), &b.borrow());
+    set_type(&mut result, ty);
+    result
+}
+
+/// Stores the value of an operation at the tick of datapoint `i` of `a`, located like `a` when
+/// `copy_location`.
+fn store_binary(
+    result: &mut GeoTimeSerie,
+    a: &GeoTimeSerie,
+    i: usize,
+    copy_location: bool,
+    value: &Value,
+) {
+    let (location, elevation) = if copy_location {
+        (a.location_at(i), a.elevation_at(i))
+    } else {
+        (NO_LOCATION, NO_ELEVATION)
+    };
+    result.set_value(a.ticks[i], location, elevation, value, false);
+}
+
 /// `GTSOpsHelper.applyBinaryOp`: a new series of type `ty` with `op(a[t], b[t])` at every tick
 /// `t` common to `a` and `b` (`null` results are skipped), located like `a` when
 /// `copy_location`.
@@ -91,19 +117,12 @@ fn try_binary_op(
     copy_location: bool,
     op: &mut dyn FnMut(&Value, &Value) -> Result<Value>,
 ) -> Result<GeoTimeSerie> {
-    let mut result = GeoTimeSerie::new();
-    handle_bucketization(&mut result, &a.borrow(), &b.borrow());
-    set_type(&mut result, ty);
+    let mut result = binary_result(a, b, ty);
     let pairs = common_ticks(a, b);
     let (ga, gb) = (a.borrow(), b.borrow());
     for (i, j) in pairs {
         let value = op(&ga.value_at(i), &gb.value_at(j))?;
-        let (location, elevation) = if copy_location {
-            (ga.location_at(i), ga.elevation_at(i))
-        } else {
-            (NO_LOCATION, NO_ELEVATION)
-        };
-        result.set_value(ga.ticks[i], location, elevation, &value, false);
+        store_binary(&mut result, &ga, i, copy_location, &value);
     }
     Ok(result)
 }
@@ -116,7 +135,14 @@ fn binary_op(
     copy_location: bool,
     mut op: impl FnMut(&Value, &Value) -> Value,
 ) -> GeoTimeSerie {
-    try_binary_op(a, b, ty, copy_location, &mut |x, y| Ok(op(x, y))).unwrap_or_default()
+    let mut result = binary_result(a, b, ty);
+    let pairs = common_ticks(a, b);
+    let (ga, gb) = (a.borrow(), b.borrow());
+    for (i, j) in pairs {
+        let value = op(&ga.value_at(i), &gb.value_at(j));
+        store_binary(&mut result, &ga, i, copy_location, &value);
+    }
+    result
 }
 
 /// A result series, reset to an untyped empty series (`cloneEmpty`) when it has no datapoint.
@@ -136,6 +162,18 @@ fn empty_result(a: &GeoTimeSerie, b: &GeoTimeSerie) -> Value {
     Value::Gts(result.shared())
 }
 
+/// Stores the value of an operation on the datapoint `i` of `gts`, with its tick, location and
+/// elevation.
+fn store_unary(result: &mut GeoTimeSerie, gts: &GeoTimeSerie, i: usize, value: &Value) {
+    result.set_value(
+        gts.tick_at(i),
+        gts.location_at(i),
+        gts.elevation_at(i),
+        value,
+        false,
+    );
+}
+
 /// `GTSOpsHelper.applyUnaryOp`: the datapoints of `gts` (with their location and elevation)
 /// with the values mapped by `op` (`null` results are skipped), into `result`.
 pub(crate) fn try_unary_op(
@@ -145,13 +183,7 @@ pub(crate) fn try_unary_op(
 ) -> Result<()> {
     for i in 0..gts.size() {
         let value = op(&gts.value_at(i))?;
-        result.set_value(
-            gts.tick_at(i),
-            gts.location_at(i),
-            gts.elevation_at(i),
-            &value,
-            false,
-        );
+        store_unary(result, gts, i, &value);
     }
     Ok(())
 }
@@ -162,7 +194,10 @@ pub(crate) fn unary_op(
     gts: &GeoTimeSerie,
     mut op: impl FnMut(&Value) -> Value,
 ) {
-    try_unary_op(result, gts, &mut |value| Ok(op(value))).unwrap_or_default();
+    for i in 0..gts.size() {
+        let value = op(&gts.value_at(i));
+        store_unary(result, gts, i, &value);
+    }
 }
 
 fn long_of(value: &Value) -> i64 {
