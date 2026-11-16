@@ -985,6 +985,7 @@ impl<K: PartialEq, V> JavaHashMap<K, V> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::collections::BTreeMap;
 
     fn keys(map: &JavaHashMap<i32, ()>) -> Vec<i32> {
         map.iter().map(|(_, k, ())| *k).collect()
@@ -1478,6 +1479,142 @@ mod tests {
                 digests(*ops, *range, *shift, *remove, *capacity, number as u64),
                 expected,
                 "scenario {number}"
+            );
+        }
+    }
+
+    /// The rules of the trees of the bins (the colours, the parents, the keys in order when
+    /// `ordered_keys`, the list of the iteration order) and the entries of the map against a
+    /// model: what the digests cannot show of the shape of the trees.
+    fn check_map(map: &JavaHashMap<i64, i64>, model: &BTreeMap<i64, i64>, ordered_keys: bool) {
+        assert_eq!(map.len(), model.len());
+        let mut entries = BTreeMap::new();
+        for (hash, key, value) in map.iter() {
+            assert_eq!(*hash, long_hash(*key));
+            assert!(entries.insert(*key, *value).is_none(), "{key} is listed twice");
+        }
+        assert_eq!(&entries, model);
+        for bin in &map.table {
+            if let Bin::Tree(tree) = bin {
+                check_tree(tree, ordered_keys);
+            }
+        }
+    }
+
+    fn check_tree(tree: &Tree<i64, i64>, ordered_keys: bool) {
+        assert!(!tree.nodes[tree.root].red, "the root is black");
+        assert_eq!(tree.nodes[tree.root].parent, None);
+        let mut count = 0;
+        check_subtree(tree, Some(tree.root), None, (None, None), ordered_keys, &mut count);
+        let listed = tree.order();
+        assert_eq!(count, listed.len(), "every node of the tree is listed");
+        assert_eq!(tree.nodes[tree.first].prev, None);
+        for node in listed {
+            if let Some(next) = tree.nodes[node].next {
+                assert_eq!(tree.nodes[next].prev, Some(node));
+            }
+        }
+    }
+
+    /// The black height below `at` (a missing node is black), checking the rules on the way.
+    fn check_subtree(
+        tree: &Tree<i64, i64>,
+        at: Option<usize>,
+        parent: Option<usize>,
+        (lower, upper): (Option<(i32, i64)>, Option<(i32, i64)>),
+        ordered_keys: bool,
+        count: &mut usize,
+    ) -> usize {
+        let Some(at) = at else {
+            return 1;
+        };
+        let node = &tree.nodes[at];
+        *count += 1;
+        assert_eq!(node.parent, parent);
+        let key = (spread(node.entry.0), node.entry.1);
+        if ordered_keys {
+            assert!(lower.is_none_or(|bound| key > bound), "{key:?} below {lower:?}");
+            assert!(upper.is_none_or(|bound| key < bound), "{key:?} above {upper:?}");
+        }
+        let children = [node.left, node.right];
+        for child in children.into_iter().flatten() {
+            assert!(!(node.red && tree.nodes[child].red), "two red nodes in a row");
+        }
+        let left = check_subtree(tree, node.left, Some(at), (lower, Some(key)), ordered_keys, count);
+        let right = check_subtree(tree, node.right, Some(at), (Some(key), upper), ordered_keys, count);
+        assert_eq!(left, right, "the black heights of {key:?} differ");
+        left + usize::from(!node.red)
+    }
+
+    /// Random puts (new keys and replacements), removes and lookups, checked against a model:
+    /// keys sharing their low bits make tree bins, keys with a common bit make the table
+    /// doubling split them all to one side.
+    #[test]
+    fn random_operations_keep_the_trees_valid() {
+        let scenarios: &[(u64, u64, u32, u64, usize, u64, bool)] = &[
+            (3000, 120, 24, 45, 0, 0, true),
+            (3000, 120, 24, 45, 0, 0, false),
+            (4000, 60, 26, 60, 0, 0, true),
+            (4000, 2000, 0, 35, 0, 0, true),
+            (2000, 500, 3, 50, 16, 0, true),
+            (2500, 90, 24, 70, 1024, 0, false),
+            (3000, 300, 24, 40, 0, 0x40, true),
+            (3000, 300, 24, 40, 0, 0x40, false),
+            (5000, 700, 6, 55, 0, 0x2a, true),
+            (1500, 64, 20, 85, 0, 0x40, true),
+        ];
+        for (number, &(ops, range, shift, remove, capacity, salt, ordered_keys)) in
+            scenarios.iter().enumerate()
+        {
+            let mut seed = 77 + number as u64;
+            let mut next = move || {
+                seed = seed
+                    .wrapping_mul(6_364_136_223_846_793_005)
+                    .wrapping_add(1_442_695_040_888_963_407);
+                seed >> 17
+            };
+            let order: Order<i64> = if ordered_keys { ordered } else { unordered };
+            let mut map = if capacity == 0 {
+                JavaHashMap::new()
+            } else {
+                JavaHashMap::with_capacity(capacity)
+            }
+            .with_order(order);
+            let mut model = BTreeMap::new();
+            for i in 0..ops {
+                let key = (((next() % range) << shift) | salt) as i64;
+                if next() % 100 < remove {
+                    assert_eq!(map.remove(long_hash(key), &key), model.remove(&key).is_some());
+                } else {
+                    map.put(long_hash(key), key, i as i64);
+                    model.insert(key, i as i64);
+                }
+                assert_eq!(map.get(long_hash(key), &key).copied(), model.get(&key).copied());
+                if i % 61 == 0 {
+                    check_map(&map, &model, ordered_keys);
+                }
+            }
+            check_map(&map, &model, ordered_keys);
+        }
+    }
+
+    /// Scenarios of the JDK 27 `HashMap` with heavy removals (its digests come from a program
+    /// with the same generator as `digests`).
+    #[test]
+    fn removes_in_tree_bins_like_java() {
+        let scenarios: &[(u64, u64, u32, u64, usize, u64, [u64; 4])] = &[
+            (1600, 40, 24, 75, 0, 2000, [0x9e19c7c4d6990c97, 0x4d0cb850751a39c5, 0x82f0c8dc409029bf, 0x6f1fb78dd990c97]),
+            (2400, 12, 24, 70, 0, 2001, [0x8328ae0abeb6fed, 0xf3e8182ad2be94f, 0x554f8cec8dce13f5, 0x8328adb92eb6fed]),
+            (2000, 6, 20, 80, 0, 2002, [0xcbf29ce484222325, 0xa8328836543b6fed, 0x8f63bd4c4fa1b7df, 0xb83288ee602b6fed]),
+            (1200, 30, 26, 85, 0, 2003, [0xece700e23a876aa7, 0xda44042601a39c5, 0x98c5b03449ce13f5, 0xdb4abbdd1c0f2fb7]),
+            (3000, 100, 24, 45, 0, 2004, [0xf17abd33b34a45d7, 0xe18e14273011f6fd, 0x261e5f3935a00ff, 0xb937b8c1d580ec8f]),
+            (6000, 8, 22, 50, 0, 2005, [0x19546ca46b4f2fb7, 0x88328ba3a82b6fed, 0x8d2e0ea8814e13f5, 0x19547042eb0f2fb7]),
+        ];
+        for &(ops, range, shift, remove, capacity, scenario, expected) in scenarios {
+            assert_eq!(
+                digests(ops, range, shift, remove, capacity, scenario),
+                expected,
+                "scenario {scenario}"
             );
         }
     }
