@@ -9,7 +9,7 @@ use super::single::{empty, single_value};
 use super::{Aggregated, Aggregator, AggregatorArgs, Named, Num, Roles};
 use crate::error::aggregator::AggregatorError;
 use crate::error::{Error, Result};
-use crate::format::java_double_to_string;
+use crate::format::double_to_text;
 use crate::functions::Entry;
 use crate::functions::stringformat::Locale;
 use crate::gts::{NO_ELEVATION, NO_LOCATION};
@@ -167,7 +167,7 @@ impl Aggregator for Arithmetic {
     fn parameters(&self) -> Option<String> {
         Some(match self.operand {
             Num::Long(l) => l.to_string(),
-            Num::Double(d) => java_double_to_string(d),
+            Num::Double(d) => double_to_text(d),
         })
     }
 }
@@ -276,8 +276,8 @@ impl Aggregator for Npdf {
     fn parameters(&self) -> Option<String> {
         Some(format!(
             "{} {}",
-            java_double_to_string(self.mu),
-            java_double_to_string(self.sigma)
+            double_to_text(self.mu),
+            double_to_text(self.sigma)
         ))
     }
 }

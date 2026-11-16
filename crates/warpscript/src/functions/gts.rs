@@ -821,7 +821,7 @@ fn attick(stack: &mut Stack) -> Result<()> {
             None
         } else {
             gts.sort(false);
-            crate::gts::java_binary_search(&gts.ticks, tick)
+            crate::gts::binary_search(&gts.ticks, tick)
         };
         tuple_at_index(&gts, index)
     })

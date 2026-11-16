@@ -15,18 +15,18 @@ use crate::aggregators::{Aggregated, Aggregator, AggregatorArgs, Roles};
 use indexmap::IndexMap;
 
 use super::math::{ATTRIBUTE_SEEDED_PRNG, entropy_error};
-use super::stringformat::java_hash;
+use super::stringformat::hash_code;
 use crate::error::fault::{BoundsError, NumberFormatError};
 use crate::error::series::SeriesError;
 use crate::error::{Class, Error, Result};
 use crate::format::parse_long;
 use crate::gts::{Gts, NO_ELEVATION, NO_LOCATION, Type};
+use crate::hash_order_map::HashOrderMap;
 use crate::interpolation::{
     BicubicInterpolatingFunction, PolynomialSplineFunction, TricubicInterpolatingFunction, akima,
     bicubic, linear, spline, tricubic,
 };
-use crate::javamap::JavaHashMap;
-use crate::jrandom::JavaRandom;
+use crate::lcg48::Lcg48;
 use crate::macros::{Callable, StackFunction, StackObject};
 use crate::microsphere::{Microsphere, MicrosphereParams, check_exponent};
 use crate::snapshot::add_element;
@@ -681,9 +681,9 @@ fn microsphere_parameters(given: &[(Value, Value)]) -> IndexMap<Value, Value> {
 fn parameters_snapshot(given: &[(Value, Value)]) -> Result<String> {
     // `new HashMap(map)` sizes the table for the number of entries.
     let table = ((given.len() as f32) / 0.75 + 1.0) as usize;
-    let mut ordered = JavaHashMap::with_capacity(table);
+    let mut ordered = HashOrderMap::with_capacity(table);
     for (key, value) in given {
-        ordered.put(java_hash(key), key.clone(), value.clone());
+        ordered.put(hash_code(key), key.clone(), value.clone());
     }
     let map = Value::map(
         ordered
@@ -788,8 +788,8 @@ fn microsphere_series(stack: &mut Stack, name: &str, y: &Gts) -> Error {
 }
 
 /// The generator of the unseeded interpolation, from 64 bits of entropy.
-fn entropy_random(entropy: core::result::Result<u64, getrandom::Error>) -> Result<JavaRandom> {
-    Ok(JavaRandom::new(entropy.map_err(entropy_error)? as i64))
+fn entropy_random(entropy: core::result::Result<u64, getrandom::Error>) -> Result<Lcg48> {
+    Ok(Lcg48::new(entropy.map_err(entropy_error)? as i64))
 }
 
 /// `INTERPOLATOR.ND.MICROSPHERE` and `INTERPOLATOR.ND.SMICROSPHERE`: the interpolation of any
@@ -837,10 +837,10 @@ pub(super) fn interpolate_nd(
         let Some(Value::Long(state)) = stack.attribute(ATTRIBUTE_SEEDED_PRNG) else {
             return Err(fail(name, "seeded PRNG was not initialized."));
         };
-        let mut prng = JavaRandom::from_state(*state);
+        let mut prng = Lcg48::from_state(*state);
         let seed = prng.next_int();
         stack.set_attribute(ATTRIBUTE_SEEDED_PRNG, Some(Value::Long(prng.state())));
-        JavaRandom::new(i64::from(seed))
+        Lcg48::new(i64::from(seed))
     } else {
         entropy_random(entropy())?
     };

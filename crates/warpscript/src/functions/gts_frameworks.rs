@@ -184,7 +184,7 @@ fn bucketize_gts(
         n as i64 - 1
     } else {
         // The series starts before `lastbucket`, so the search cannot land before it.
-        let found = crate::gts::java_binary_search_range(&source.ticks, 0, n as i64, lastbucket);
+        let found = crate::gts::binary_search_range(&source.ticks, 0, n as i64, lastbucket);
         if found < 0 {
             -found - 2
         } else {

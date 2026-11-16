@@ -5,13 +5,13 @@
 //!
 //! Some Warp 10 results are Java hash maps whose iteration order leaks into WarpScript (the
 //! maps a pickle decodes to, the maps a pickle is written from, the order of the rings of
-//! the outline of a `GEOSHAPE`). [`JavaHashMap`] reproduces that order: buckets indexed by the
+//! the outline of a `GEOSHAPE`). [`HashOrderMap`] reproduces that order: buckets indexed by the
 //! spread hash code, insertion order within a bucket, the table doubling when the size exceeds
 //! three quarters of the capacity, and the bins that grow past 8 entries: they make the table
 //! grow until it has 64 buckets, then become red-black trees, which iterate from their root and
 //! insert a new entry after its parent in the tree.
 //!
-//! The trees order the keys by their hash code, then by [`JavaHashMap::with_order`] (what
+//! The trees order the keys by their hash code, then by [`HashOrderMap::with_order`] (what
 //! `Comparable.compareTo` says in Java). Java breaks the ties of keys that are not comparable
 //! with the identity hash code of the objects, which no model can follow: such keys go left.
 
@@ -640,7 +640,7 @@ impl<'a, K, V> Iterator for BinIter<'a, K, V> {
 
 /// The entries of a Java `HashMap` in iteration order, given the Java `hashCode` of each key.
 #[derive(Clone, Debug)]
-pub struct JavaHashMap<K, V> {
+pub struct HashOrderMap<K, V> {
     /// The buckets; empty until the first insertion (Java allocates lazily).
     table: Vec<Bin<K, V>>,
     /// `threshold`: the size past which the table doubles (the initial capacity while the
@@ -652,16 +652,16 @@ pub struct JavaHashMap<K, V> {
     order: Order<K>,
 }
 
-impl<K: PartialEq, V> Default for JavaHashMap<K, V> {
+impl<K: PartialEq, V> Default for HashOrderMap<K, V> {
     fn default() -> Self {
-        JavaHashMap::new()
+        HashOrderMap::new()
     }
 }
 
-impl<K: PartialEq, V> JavaHashMap<K, V> {
+impl<K: PartialEq, V> HashOrderMap<K, V> {
     /// `new HashMap()`.
     pub fn new() -> Self {
-        JavaHashMap {
+        HashOrderMap {
             table: Vec::new(),
             threshold: 0,
             size: 0,
@@ -671,15 +671,15 @@ impl<K: PartialEq, V> JavaHashMap<K, V> {
 
     /// `new HashMap(initialCapacity)`.
     pub fn with_capacity(capacity: usize) -> Self {
-        JavaHashMap {
+        HashOrderMap {
             threshold: table_size_for(capacity),
-            ..JavaHashMap::new()
+            ..HashOrderMap::new()
         }
     }
 
     /// `new HashSet(collection)`'s map: `new HashMap(max(size / .75f + 1, 16))`.
     pub fn for_set_copy(size: usize) -> Self {
-        JavaHashMap::with_capacity((((size as f32) / 0.75f32) as usize + 1).max(16))
+        HashOrderMap::with_capacity((((size as f32) / 0.75f32) as usize + 1).max(16))
     }
 
     /// The `compareTo` of the keys, which orders the entries of the bins that became trees.
@@ -899,13 +899,13 @@ mod tests {
 
     type Bound = Option<(i32, i64)>;
 
-    fn keys(map: &JavaHashMap<i32, ()>) -> Vec<i32> {
+    fn keys(map: &HashOrderMap<i32, ()>) -> Vec<i32> {
         map.iter().map(|(_, k, ())| *k).collect()
     }
 
     #[test]
     fn orders_like_java() {
-        let mut map = JavaHashMap::new();
+        let mut map = HashOrderMap::new();
         assert!(map.is_empty());
         for k in [17, 1, 33, 2] {
             map.put(k, k, ());
@@ -918,26 +918,26 @@ mod tests {
         }
         // 15 entries: the table doubled to 32 buckets.
         assert_eq!(keys(&map)[..4], [1, 33, 2, 3]);
-        let mut small = JavaHashMap::with_capacity(0);
+        let mut small = HashOrderMap::with_capacity(0);
         for k in [3, 1, 2] {
             small.put(k, k, ());
         }
         assert_eq!(keys(&small), vec![1, 2, 3]);
-        let mut all: JavaHashMap<i32, ()> = JavaHashMap::with_capacity(0);
+        let mut all: HashOrderMap<i32, ()> = HashOrderMap::with_capacity(0);
         all.put_all((0..20).rev().map(|k| (k, k, ())).collect());
         assert_eq!(keys(&all), (0..20).collect::<Vec<_>>());
         all.put_all((20..100).map(|k| (k, k, ())).collect());
         all.put_all(Vec::new());
         assert_eq!(all.len(), 100);
-        let set: JavaHashMap<i32, ()> = JavaHashMap::for_set_copy(30);
+        let set: HashOrderMap<i32, ()> = HashOrderMap::for_set_copy(30);
         assert_eq!(set.threshold, 64);
-        assert_eq!(JavaHashMap::<i32, ()>::default().into_entries().len(), 0);
+        assert_eq!(HashOrderMap::<i32, ()>::default().into_entries().len(), 0);
         assert_eq!(table_size_for(usize::MAX), MAXIMUM_CAPACITY);
     }
 
     #[test]
     fn looks_up_changes_and_removes_like_java() {
-        let mut map: JavaHashMap<i64, Vec<i64>> = JavaHashMap::new();
+        let mut map: HashOrderMap<i64, Vec<i64>> = HashOrderMap::new();
         // Nothing to find in a table that is not allocated.
         assert!(map.get(1, &1).is_none());
         assert!(map.get_mut(1, &1).is_none());
@@ -991,9 +991,9 @@ mod tests {
             seed >> 17
         };
         let mut map = if capacity == 0 {
-            JavaHashMap::new()
+            HashOrderMap::new()
         } else {
-            JavaHashMap::with_capacity(capacity)
+            HashOrderMap::with_capacity(capacity)
         }
         .with_order(ordered);
         let mut digests = Vec::new();
@@ -1399,7 +1399,7 @@ mod tests {
     /// The rules of the trees of the bins (the colours, the parents, the keys in order when
     /// `ordered_keys`, the list of the iteration order) and the entries of the map against a
     /// model: what the digests cannot show of the shape of the trees.
-    fn check_map(map: &JavaHashMap<i64, i64>, model: &BTreeMap<i64, i64>, ordered_keys: bool) {
+    fn check_map(map: &HashOrderMap<i64, i64>, model: &BTreeMap<i64, i64>, ordered_keys: bool) {
         assert_eq!(map.len(), model.len());
         let mut entries = BTreeMap::new();
         for (hash, key, value) in map.iter() {
@@ -1507,9 +1507,9 @@ mod tests {
             };
             let order: Order<i64> = if ordered_keys { ordered } else { unordered };
             let mut map = if capacity == 0 {
-                JavaHashMap::new()
+                HashOrderMap::new()
             } else {
-                JavaHashMap::with_capacity(capacity)
+                HashOrderMap::with_capacity(capacity)
             }
             .with_order(order);
             let mut model = BTreeMap::new();
@@ -1543,7 +1543,7 @@ mod tests {
         let key_of = |n: i64| (n << 32) | (n ^ 0x55);
         for ordered_keys in [true, false] {
             let order: Order<i64> = if ordered_keys { ordered } else { unordered };
-            let mut map = JavaHashMap::new().with_order(order);
+            let mut map = HashOrderMap::new().with_order(order);
             let mut model = BTreeMap::new();
             for n in (0..40).map(|n| (n * 17) % 40) {
                 map.put(long_hash(key_of(n)), key_of(n), n);
@@ -1588,7 +1588,7 @@ mod tests {
             }
             // Keys with the same low bits: they share the bin 0 of a 64-bucket table.
             let key_of = |n: i64| n << 24;
-            let mut map = JavaHashMap::with_capacity(64).with_order(ordered);
+            let mut map = HashOrderMap::with_capacity(64).with_order(ordered);
             let mut model = BTreeMap::new();
             for n in 0..9 {
                 map.put(long_hash(key_of(n)), key_of(n), n);

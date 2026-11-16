@@ -7,7 +7,7 @@
 //!
 //! The outline of the cells of a cluster is traced from the segments that no two cells share.
 //! Warp 10 does that with hash maps whose iteration order decides where each ring starts and
-//! which way it runs, so [`JavaHashMap`] stands for them here, and the coordinates are
+//! which way it runs, so [`HashOrderMap`] stands for them here, and the coordinates are
 //! `float`s, printed as `Float.toString` does.
 
 use std::cmp::Reverse;
@@ -15,9 +15,9 @@ use std::collections::BinaryHeap;
 
 use crate::coverage::{Coverage, MIN_RESOLUTION};
 use crate::error::Result;
-use crate::format::{java_double_to_string, java_float_to_string};
+use crate::format::{double_to_text, float_to_text};
 use crate::geoxp::{DEGREES_PER_LAT_UNIT, DEGREES_PER_LON_UNIT, hhcode_bbox, stable_split_hhcode};
-use crate::javamap::{JavaHashMap, long_hash, ordered};
+use crate::hash_order_map::{HashOrderMap, long_hash, ordered};
 
 /// `TOGEOJSON` of a shape: one polygon per cell when `all_cells`, else the outline of each
 /// cluster of cells.
@@ -51,7 +51,7 @@ fn cells_to_geojson(cells: &[i64]) -> String {
         .map(|cell| {
             let resolution = ((*cell as u64 >> 60) as i32) << 1;
             let [south, west, north, east] = hhcode_bbox(cell << 4, resolution);
-            let [south, west, north, east] = [south, west, north, east].map(java_double_to_string);
+            let [south, west, north, east] = [south, west, north, east].map(double_to_text);
             format!(
                 "[[[{west},{south}],[{east},{south}],[{east},{north}],[{west},{north}],[{west},{south}]]]"
             )
@@ -114,8 +114,8 @@ fn key_segment(key: i64) -> Segment {
 
 /// `CoverageHelper.getSegments`: for each line of the grid (a longitude, or a latitude when
 /// `swap`), the segments along it that border exactly one cell.
-fn segments(cells: &[i64], swap: bool) -> JavaHashMap<u32, JavaHashMap<i64, ()>> {
-    let mut lines: JavaHashMap<u32, Queue> = JavaHashMap::new().with_order(ordered);
+fn segments(cells: &[i64], swap: bool) -> HashOrderMap<u32, HashOrderMap<i64, ()>> {
+    let mut lines: HashOrderMap<u32, Queue> = HashOrderMap::new().with_order(ordered);
     for cell in cells {
         let level = ((*cell as u64) >> 60) as u32;
         let (lat, lon) = stable_split_hhcode(cell << 4, level * 2);
@@ -130,7 +130,7 @@ fn segments(cells: &[i64], swap: bool) -> JavaHashMap<u32, JavaHashMap<i64, ()>>
             });
         }
     }
-    let mut borders = JavaHashMap::new().with_order(ordered);
+    let mut borders = HashOrderMap::new().with_order(ordered);
     for (_, line, queue) in lines.into_entries() {
         let set = border_set(queue);
         if !set.is_empty() {
@@ -142,7 +142,7 @@ fn segments(cells: &[i64], swap: bool) -> JavaHashMap<u32, JavaHashMap<i64, ()>>
 
 /// The segments of a line left once the parts that two cells share are cancelled, those that
 /// follow each other joined.
-fn border_set(mut queue: Queue) -> JavaHashMap<i64, ()> {
+fn border_set(mut queue: Queue) -> HashOrderMap<i64, ()> {
     let mut kept = Queue::default();
     let mut open: Option<Segment> = None;
     while let Some((start, end)) = queue.poll() {
@@ -172,7 +172,7 @@ fn border_set(mut queue: Queue) -> JavaHashMap<i64, ()> {
     if let Some((start, end)) = open {
         kept.add(start, end);
     }
-    let mut set = JavaHashMap::new().with_order(ordered);
+    let mut set = HashOrderMap::new().with_order(ordered);
     let mut joined: Option<Segment> = None;
     while let Some((start, end)) = kept.poll() {
         joined = match joined {
@@ -193,7 +193,7 @@ fn border_set(mut queue: Queue) -> JavaHashMap<i64, ()> {
 /// `CoverageHelper.toEnvelope`: the rings that outline the cells (geocells of the resolutions 2
 /// to 30), each as its vertices, the last one back at the first.
 fn rings(cells: &[i64]) -> Vec<Vec<Vertex>> {
-    let mut graph: JavaHashMap<i64, Vec<i64>> = JavaHashMap::new().with_order(ordered);
+    let mut graph: HashOrderMap<i64, Vec<i64>> = HashOrderMap::new().with_order(ordered);
     let mut connect = |from: i64, to: i64| {
         for (a, b) in [(from, to), (to, from)] {
             graph.change_or_put(long_hash(a), a, Vec::new, |neighbors| neighbors.push(b));
@@ -234,7 +234,7 @@ fn rings(cells: &[i64]) -> Vec<Vec<Vertex>> {
 /// `NullPointerException` on a neighbor that is no vertex, an `ArrayIndexOutOfBoundsException`
 /// on a vertex without a neighbor left); here the walk ends there, the vertex is dropped, and
 /// the next ring starts.
-pub(crate) fn trace(mut graph: JavaHashMap<i64, Vec<i64>>) -> Vec<Vec<i64>> {
+pub(crate) fn trace(mut graph: HashOrderMap<i64, Vec<i64>>) -> Vec<Vec<i64>> {
     let mut rings = Vec::new();
     while let Some(first) = graph.first().map(|(_, key, _)| *key) {
         let mut ring = vec![first];
@@ -294,9 +294,5 @@ fn polygon_json(rings: &[Vec<Vertex>]) -> String {
 
 /// `[lon,lat]`.
 fn point_json((lat, lon): Vertex) -> String {
-    format!(
-        "[{},{}]",
-        java_float_to_string(lon),
-        java_float_to_string(lat)
-    )
+    format!("[{},{}]", float_to_text(lon), float_to_text(lat))
 }

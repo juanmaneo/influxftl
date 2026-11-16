@@ -19,8 +19,8 @@ use num_traits::ToPrimitive;
 use crate::bigdecimal::{BigDecimal, parse_bigint};
 use crate::error::fault::{BoundsError, IllegalArgumentError, NumberFormatError};
 use crate::error::{Class, Error, Result};
-use crate::functions::operators::parse_java_double;
-use crate::javamap::JavaHashMap;
+use crate::functions::operators::parse_double_text;
+use crate::hash_order_map::HashOrderMap;
 use crate::pickle::{
     PickleError, bigdecimal_hash, bigint_hash, double_hash, long_hash, string_hash,
 };
@@ -34,7 +34,7 @@ const HIGHEST_PROTOCOL: i16 = 5;
 const MAX_DEPTH: usize = 2000;
 
 /// A Java `HashMap` of decoded objects.
-type Dict = Rc<RefCell<JavaHashMap<Py, Py>>>;
+type Dict = Rc<RefCell<HashOrderMap<Py, Py>>>;
 
 /// The object constructors a `GLOBAL` resolves to (`IObjectConstructor`).
 #[derive(Debug, PartialEq)]
@@ -198,7 +198,7 @@ enum Py {
     List(Rc<RefCell<Vec<Py>>>),
     /// A `HashMap`, or a `ClassDict` (a `HashMap` with a class name).
     Dict(Dict, Option<Rc<str>>),
-    Set(Rc<RefCell<JavaHashMap<Py, ()>>>),
+    Set(Rc<RefCell<HashOrderMap<Py, ()>>>),
     Decimal(Rc<BigDecimal>),
     Complex(f64, f64),
     /// A `GregorianCalendar`, as its instant in milliseconds.
@@ -261,7 +261,7 @@ fn canonical_bits(d: f64) -> u64 {
 }
 
 /// `AbstractMap.equals`.
-fn same_entries(a: &JavaHashMap<Py, Py>, b: &JavaHashMap<Py, Py>) -> bool {
+fn same_entries(a: &HashOrderMap<Py, Py>, b: &HashOrderMap<Py, Py>) -> bool {
     a.len() == b.len()
         && a.iter()
             .all(|(_, k, v)| b.iter().any(|(_, j, w)| k == j && v == w))
@@ -600,7 +600,7 @@ impl Unpickler<'_> {
             }
             b'F' => {
                 let line = self.readline(true)?;
-                let d = parse_java_double(&line).map_err(|_| {
+                let d = parse_double_text(&line).map_err(|_| {
                     let trimmed = line.trim_matches(|c: char| c <= ' ');
                     if trimmed.is_empty() {
                         NumberFormatError::Empty.into()
@@ -759,7 +759,7 @@ impl Unpickler<'_> {
             }
             b'd' => {
                 let items = self.pop_all_since_marker()?;
-                let mut map = JavaHashMap::with_capacity(items.len());
+                let mut map = HashOrderMap::with_capacity(items.len());
                 for pair in items.chunks(2) {
                     let [k, v] = pair else {
                         return Err(BoundsError::ListIndex {
@@ -773,7 +773,7 @@ impl Unpickler<'_> {
                 self.stack.push(Py::Dict(Rc::new(RefCell::new(map)), None));
             }
             b'}' => {
-                let map = JavaHashMap::with_capacity(0);
+                let map = HashOrderMap::with_capacity(0);
                 self.stack.push(Py::Dict(Rc::new(RefCell::new(map)), None));
             }
             b'g' | b'p' => {
@@ -853,7 +853,7 @@ impl Unpickler<'_> {
                 self.dict_target()?.borrow_mut().put(hash, k, value);
             }
             b'u' => {
-                let mut newitems = JavaHashMap::new();
+                let mut newitems = HashOrderMap::new();
                 loop {
                     let value = self.pop()?;
                     if value == Py::Mark {
@@ -897,7 +897,7 @@ impl Unpickler<'_> {
             0x88 => self.stack.push(Py::Bool(true)),
             0x89 => self.stack.push(Py::Bool(false)),
             0x8f => {
-                let set = JavaHashMap::new();
+                let set = HashOrderMap::new();
                 self.stack.push(Py::Set(Rc::new(RefCell::new(set))));
             }
             0x90 => {
@@ -916,7 +916,7 @@ impl Unpickler<'_> {
             }
             0x91 => {
                 let items = self.pop_all_since_marker()?;
-                let mut set = JavaHashMap::new();
+                let mut set = HashOrderMap::new();
                 for item in items {
                     set.put(item.hash(0)?, item, ());
                 }
@@ -1002,7 +1002,7 @@ impl Unpickler<'_> {
         match (target, &args) {
             (Py::Dict(dict, Some(class)), Py::Dict(values, None)) => {
                 let entries: Vec<(i32, Py, Py)> = values.borrow().iter().cloned().collect();
-                let mut state = JavaHashMap::with_capacity(0);
+                let mut state = HashOrderMap::with_capacity(0);
                 state.put(
                     string_hash("__class__"),
                     Py::Str(Rc::from("__class__")),
@@ -1069,7 +1069,7 @@ fn construct(ctor: &Ctor, args: &[Py]) -> Result<Py> {
             if !args.is_empty() {
                 return Err(PickleError::ClassDictArguments(name.clone()).into());
             }
-            let mut map = JavaHashMap::new();
+            let mut map = HashOrderMap::new();
             map.put(
                 string_hash("__class__"),
                 Py::Str(Rc::from("__class__")),
@@ -1103,7 +1103,7 @@ fn construct(ctor: &Ctor, args: &[Py]) -> Result<Py> {
         Ctor::Set => match args.first() {
             Some(Py::List(list)) => {
                 let items = list.borrow();
-                let mut set = JavaHashMap::for_set_copy(items.len());
+                let mut set = HashOrderMap::for_set_copy(items.len());
                 for item in items.iter() {
                     set.put(item.hash(0)?, item.clone(), ());
                 }

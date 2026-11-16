@@ -62,7 +62,7 @@ use std::rc::Rc;
 use indexmap::IndexMap;
 
 use crate::error::{Class, Error, Result};
-use crate::functions::functional::java_double_compare;
+use crate::functions::functional::double_compare;
 use crate::functions::operators::compare_long_double;
 use crate::gts::{NO_ELEVATION, NO_LOCATION};
 use crate::value::{FunctionObject, Value};
@@ -329,7 +329,7 @@ impl Num {
     pub(crate) fn compare(self, other: Num) -> Ordering {
         match (self, other) {
             (Num::Long(x), Num::Long(y)) => x.cmp(&y),
-            (Num::Double(x), Num::Double(y)) => java_double_compare(x, y),
+            (Num::Double(x), Num::Double(y)) => double_compare(x, y),
             (Num::Long(l), Num::Double(d)) => compare_long_nan_double(l, d),
             (Num::Double(d), Num::Long(l)) => compare_long_nan_double(l, d).reverse(),
         }

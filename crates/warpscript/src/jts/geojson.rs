@@ -20,7 +20,7 @@ use crate::error::fault::BoundsError;
 use crate::error::geojson::{Chain, Found, GeoJsonError, Step, StringTarget, Target};
 use crate::error::geometry::GeometryError;
 use crate::error::{Error, Result};
-use crate::format::java_double_to_string;
+use crate::format::double_to_text;
 
 /// The properties of the classes of the binding that have coordinates.
 const COORDINATES_PROPERTIES: &[&str] = &["bbox", "type", "coordinates"];
@@ -133,7 +133,7 @@ impl Json {
             Json::Null => "null".to_owned(),
             Json::Bool(value) => value.to_string(),
             Json::Integer(value) => value.to_string(),
-            Json::Float(value) => java_double_to_string(*value),
+            Json::Float(value) => double_to_text(*value),
             Json::String(text) => text.clone(),
             Json::Array(_) | Json::Object(_) => String::new(),
         }
@@ -705,12 +705,12 @@ pub fn write(geometry: &Geometry) -> Result<String> {
 /// `[x,y]`, with the elevation when there is one.
 fn write_position(coord: &Coord, out: &mut String) {
     out.push('[');
-    out.push_str(&java_double_to_string(coord.x));
+    out.push_str(&double_to_text(coord.x));
     out.push(',');
-    out.push_str(&java_double_to_string(coord.y));
+    out.push_str(&double_to_text(coord.y));
     if let Some(z) = coord.z {
         out.push(',');
-        out.push_str(&java_double_to_string(z));
+        out.push_str(&double_to_text(z));
     }
     out.push(']');
 }

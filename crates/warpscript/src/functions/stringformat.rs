@@ -18,7 +18,7 @@ use super::args::{fail, fail_with_cause};
 use crate::error::format::FormatError;
 use crate::error::{Error, Result};
 use crate::format::decimal_value;
-use crate::format::java_double_to_string;
+use crate::format::double_to_text;
 use crate::stack::Stack;
 use crate::value::Value;
 
@@ -106,7 +106,7 @@ impl Flags {
     }
 
     /// The characters of the set flags, as Java prints them in error messages.
-    fn to_java_string(self) -> String {
+    fn flags_text(self) -> String {
         self.entries()
             .into_iter()
             .filter(|entry| entry.0)
@@ -220,7 +220,7 @@ fn mismatch(flag: char, conversion: char) -> Error {
 
 /// `IllegalFormatFlagsException`: `Flags = '+ '`.
 fn illegal_flags(flags: Flags) -> Error {
-    FormatError::IllegalFlags(flags.to_java_string()).into()
+    FormatError::IllegalFlags(flags.flags_text()).into()
 }
 
 impl Spec {
@@ -400,7 +400,7 @@ fn missing_argument(spec: &Spec) -> Error {
 
 /// `String.format(locale, format, args)`; the error is the message of the
 /// `IllegalFormatException` Java would throw.
-pub fn java_format(locale: Locale, format: &str, args: &[Value]) -> Result<String> {
+pub fn printf_format(locale: Locale, format: &str, args: &[Value]) -> Result<String> {
     let mut out = String::new();
     let mut pos = 0;
     // The index of the last argument taken in sequence, and of the last argument used.
@@ -472,7 +472,7 @@ fn cut(text: &str, precision: Option<usize>) -> String {
 }
 
 /// Java `hashCode()` of a value, for `%h`.
-pub(super) fn java_hash(value: &Value) -> i32 {
+pub(super) fn hash_code(value: &Value) -> i32 {
     match value {
         Value::Boolean(true) => 1231,
         Value::Boolean(false) => 1237,
@@ -492,14 +492,14 @@ pub(super) fn java_hash(value: &Value) -> i32 {
         Value::List(list) => list
             .borrow()
             .iter()
-            .fold(1i32, |h, v| h.wrapping_mul(31).wrapping_add(java_hash(v))),
+            .fold(1i32, |h, v| h.wrapping_mul(31).wrapping_add(hash_code(v))),
         Value::Map(map) => map.borrow().iter().fold(0i32, |h, (k, v)| {
-            h.wrapping_add(java_hash(k) ^ java_hash(v))
+            h.wrapping_add(hash_code(k) ^ hash_code(v))
         }),
         Value::Set(set) => set
             .borrow()
             .iter()
-            .fold(0i32, |h, v| h.wrapping_add(java_hash(v))),
+            .fold(0i32, |h, v| h.wrapping_add(hash_code(v))),
         // `null` hashes to 0; identity hash codes are not reproducible (they depend on the
         // JVM) and are reported as 0 too.
         _ => 0,
@@ -531,7 +531,7 @@ fn format_arg(locale: Locale, spec: &Spec, arg: &Value) -> Result<String> {
         ('b', Value::Null | Value::Boolean(false)) => cut("false", spec.precision),
         ('b', _) => cut("true", spec.precision),
         (_, Value::Null) => cut("null", spec.precision),
-        ('h', _) => cut(&format!("{:x}", java_hash(arg) as u32), spec.precision),
+        ('h', _) => cut(&format!("{:x}", hash_code(arg) as u32), spec.precision),
         ('s', _) => cut(&arg.to_string(), spec.precision),
         (_, value) => return Err(conversion_error(spec, value)),
     };
@@ -655,7 +655,7 @@ impl Decimal {
     /// (with Java's two-digit minimum for the tiniest subnormals), which is what Java rounds
     /// when a precision is given.
     fn shortest(value: f64) -> Decimal {
-        let text = java_double_to_string(value);
+        let text = double_to_text(value);
         let (mantissa, exponent) = text.split_once('E').unwrap_or((&text, "0"));
         let exponent = decimal_value(exponent) as i32;
         let (integer, fraction) = mantissa.split_once('.').unwrap_or((mantissa, ""));
@@ -951,7 +951,7 @@ fn stringformat(stack: &mut Stack) -> Result<()> {
     let Value::String(format) = stack.pop()? else {
         return Err(fail(NAME, "expects format under the list of Objects."));
     };
-    let formatted = java_format(locale, &format, &args.borrow())
+    let formatted = printf_format(locale, &format, &args.borrow())
         .map_err(|err| fail_with_cause(NAME, "expects a valid format.", err))?;
     stack.push(Value::from(formatted));
     Ok(())

@@ -15,7 +15,7 @@
 
 use indexmap::IndexMap;
 
-use crate::functions::strings::decode_utf8_java;
+use crate::functions::strings::decode_utf8_replacing;
 use crate::gts::Metadata;
 
 /// A failure of the compact protocol reader.
@@ -341,7 +341,7 @@ impl<'a> Reader<'a> {
     fn read_string(&mut self) -> Result<String> {
         let len = self.read_varint32()?;
         Self::check_length(len)?;
-        Ok(decode_utf8_java(&self.read_bytes(len)?))
+        Ok(decode_utf8_replacing(&self.read_bytes(len)?))
     }
 
     /// `readMapBegin`: key type, value type and size.

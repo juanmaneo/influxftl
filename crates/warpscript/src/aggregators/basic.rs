@@ -12,7 +12,7 @@ use super::{
 use crate::error::aggregator::AggregatorError;
 use crate::error::{Error, Result};
 use crate::functions::Entry;
-use crate::functions::functional::java_double_compare;
+use crate::functions::functional::double_compare;
 use crate::geoxp;
 use crate::gts::{NO_ELEVATION, NO_LOCATION};
 use crate::value::Value;
@@ -453,7 +453,7 @@ impl Extreme {
                     let Some(candidate) = value.as_f64() else {
                         return Err(mismatch());
                     };
-                    let comp = java_double_compare(*current, candidate);
+                    let comp = double_compare(*current, candidate);
                     (comp == better || (comp == Ordering::Equal && args.ticks[i] < tick))
                         .then_some(Extremum::Double(candidate))
                 }

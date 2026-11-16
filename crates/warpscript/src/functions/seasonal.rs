@@ -12,14 +12,14 @@ use indexmap::IndexMap;
 
 use super::Entry;
 use super::args::fail;
-use super::functional::java_double_compare;
+use super::functional::double_compare;
 use super::gts::gts_or_list_try;
 use super::gts_stats::musigma;
 use super::outliers::{double_values, esd};
 use crate::error::fault::BoundsError;
 use crate::error::series::SeriesError;
 use crate::error::{Class, Error, Result};
-use crate::gts::{GeoTimeSerie, NO_ELEVATION, NO_LOCATION, Values, java_binary_search_range};
+use crate::gts::{GeoTimeSerie, NO_ELEVATION, NO_LOCATION, Values, binary_search_range};
 use crate::stack::Stack;
 use crate::stl::{Stl, int_div, sub_cycle_serie};
 use crate::value::{Map, Value, ValueKind};
@@ -124,7 +124,7 @@ fn median(piece: &GeoTimeSerie) -> Result<f64> {
         // Java reads the middle of an empty array.
         return Err(Error::index_out_of_bounds(0, 0));
     }
-    sorted.sort_by(|a, b| java_double_compare(*a, *b));
+    sorted.sort_by(|a, b| double_compare(*a, *b));
     let n = sorted.len();
     Ok(if n.is_multiple_of(2) {
         #[allow(clippy::manual_midpoint)] // Java's `(a + b) / 2`
@@ -205,7 +205,7 @@ fn deseasonalize(
     let mut residuals = Vec::with_capacity(piece.size());
     let mut idx = 0;
     for (&tick, &value) in piece.ticks.iter().zip(piece.values.doubles()) {
-        idx = java_binary_search_range(&seasonal.ticks, idx, seasonal.size() as i64, tick);
+        idx = binary_search_range(&seasonal.ticks, idx, seasonal.size() as i64, tick);
         let Ok(found) = usize::try_from(idx) else {
             return Err(SeriesError::TickNotSeasonal {
                 method: method.to_owned(),
@@ -727,7 +727,7 @@ pub(super) fn stl_residuals(
     let mut residuals = Vec::with_capacity(gts.size());
     let mut idx = 0;
     for &tick in &gts.ticks {
-        idx = java_binary_search_range(&seasonal.ticks, idx, seasonal.size() as i64, tick);
+        idx = binary_search_range(&seasonal.ticks, idx, seasonal.size() as i64, tick);
         let Ok(found) = usize::try_from(idx) else {
             return Err(SeriesError::TickNotSeasonal {
                 method: "STLESDTest".to_owned(),

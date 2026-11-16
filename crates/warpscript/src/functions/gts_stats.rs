@@ -9,16 +9,16 @@ use indexmap::IndexMap;
 
 use super::Entry;
 use super::args::fail;
-use super::functional::java_double_compare;
+use super::functional::double_compare;
 use super::gts::{element_or_list, gts_or_list, gts_or_list_try};
-use super::gts_reduce::java_hash_order;
-use super::stringformat::java_hash;
+use super::gts_reduce::hash_order;
+use super::stringformat::hash_code;
 use crate::encoder::{Decimal, EncodedValue, GtsEncoder};
 use crate::error::fault::BoundsError;
 use crate::error::series::SeriesError;
 use crate::error::{Class, Error, Result};
 use crate::gts::{GeoTimeSerie, NO_LOCATION, Type, Values};
-use crate::interpolation::java_binary_search_doubles;
+use crate::interpolation::binary_search_doubles;
 use crate::jmath;
 use crate::stack::Stack;
 use crate::value::Value;
@@ -192,7 +192,7 @@ fn isonormalize(stack: &mut Stack) -> Result<()> {
 /// none.
 fn median(values: &[f64]) -> Option<f64> {
     let mut copy = values.to_vec();
-    copy.sort_by(|a, b| java_double_compare(*a, *b));
+    copy.sort_by(|a, b| double_compare(*a, *b));
     let n = copy.len();
     if n == 0 {
         return None;
@@ -491,7 +491,7 @@ fn encoder_histogram(encoder: &GtsEncoder) -> Result<Value> {
             ))),
             None => value.to_value(),
         };
-        let hash = decimal.map_or_else(|| java_hash(&value), decimal_hash);
+        let hash = decimal.map_or_else(|| hash_code(&value), decimal_hash);
         occurrences
             .entry((value, decimal.map(|d| (d.unscaled, d.scale))))
             .or_insert((hash, 0))
@@ -503,7 +503,7 @@ fn encoder_histogram(encoder: &GtsEncoder) -> Result<Value> {
         .map(|((value, _), (_, count))| Some((value, count)))
         .collect();
     Ok(Value::map(
-        java_hash_order(&hashes, 16)
+        hash_order(&hashes, 16)
             .into_iter()
             .filter_map(|i| entries[i].take())
             .map(|(value, count)| (value, Value::Long(count)))
@@ -561,7 +561,7 @@ fn quantize_gts(
     };
     let mut quantified = gts.clone_empty();
     for (i, v) in values_as_doubles.into_iter().enumerate() {
-        let insertion = java_binary_search_doubles(bounds, v);
+        let insertion = binary_search_doubles(bounds, v);
         let rank = if insertion >= 0 {
             insertion
         } else {

@@ -36,15 +36,15 @@ pub const FUNCTIONS: &[(&str, Entry)] = &[
 pub(super) type Labels = IndexMap<String, String>;
 
 /// `String.hashCode()`.
-pub(super) fn java_string_hash(s: &str) -> i32 {
+pub(super) fn utf16_hash(s: &str) -> i32 {
     s.encode_utf16()
         .fold(0i32, |h, c| h.wrapping_mul(31).wrapping_add(i32::from(c)))
 }
 
 /// `Map.hashCode()` of a label map: the sum of `key.hashCode() ^ value.hashCode()`.
-fn java_labels_hash(labels: &Labels) -> i32 {
+fn labels_hash(labels: &Labels) -> i32 {
     labels.iter().fold(0i32, |h, (k, v)| {
-        h.wrapping_add(java_string_hash(k) ^ java_string_hash(v))
+        h.wrapping_add(utf16_hash(k) ^ utf16_hash(v))
     })
 }
 
@@ -53,7 +53,7 @@ fn java_labels_hash(labels: &Labels) -> i32 {
 /// spread hash modulo the final table size, which doubles whenever the size exceeds three
 /// quarters of it), then by insertion. Buckets of eight colliding keys or more, which Java
 /// turns into trees, are not modelled.
-pub(super) fn java_hash_order(hashes: &[i32], mut capacity: usize) -> Vec<usize> {
+pub(super) fn hash_order(hashes: &[i32], mut capacity: usize) -> Vec<usize> {
     while hashes.len() > capacity * 3 / 4 {
         capacity *= 2;
     }
@@ -110,10 +110,10 @@ pub(super) fn partition(series: &[Gts], bylabels: Option<&[String]>) -> Vec<(Lab
     }
     // `classes` iterates in hash order of the class keys (a default `HashMap`), the result
     // (`new HashMap(classes.size())`) in hash order of the common labels.
-    let key_hashes: Vec<i32> = classes.iter().map(|c| java_labels_hash(&c.0)).collect();
+    let key_hashes: Vec<i32> = classes.iter().map(|c| labels_hash(&c.0)).collect();
     let mut by_key: Vec<Option<(Labels, Labels, Vec<Gts>)>> =
         classes.into_iter().map(Some).collect();
-    let ordered: Vec<(Labels, Vec<Gts>)> = java_hash_order(&key_hashes, 16)
+    let ordered: Vec<(Labels, Vec<Gts>)> = hash_order(&key_hashes, 16)
         .into_iter()
         .filter_map(|i| by_key[i].take())
         .map(|(_, common, members)| (common, members))
@@ -137,10 +137,10 @@ fn label_names(labels: &[Value], has_series: bool) -> Result<Vec<String>> {
 /// The entries put, in this order, into a `new HashMap(entries.size())`, in its iteration
 /// order.
 fn rehash<T>(entries: Vec<(Labels, T)>) -> Vec<(Labels, T)> {
-    let hashes: Vec<i32> = entries.iter().map(|(k, _)| java_labels_hash(k)).collect();
+    let hashes: Vec<i32> = entries.iter().map(|(k, _)| labels_hash(k)).collect();
     let capacity = table_size_for(entries.len());
     let mut slots: Vec<Option<(Labels, T)>> = entries.into_iter().map(Some).collect();
-    java_hash_order(&hashes, capacity)
+    hash_order(&hashes, capacity)
         .into_iter()
         .filter_map(|i| slots[i].take())
         .collect()
@@ -232,12 +232,9 @@ fn partition_fn(stack: &mut Stack, name: &str, strict: bool) -> Result<()> {
                 (key, members)
             })
             .collect();
-        let hashes: Vec<i32> = restricted
-            .iter()
-            .map(|(k, _)| java_labels_hash(k))
-            .collect();
+        let hashes: Vec<i32> = restricted.iter().map(|(k, _)| labels_hash(k)).collect();
         let mut slots: Vec<Option<(Labels, Vec<Gts>)>> = restricted.into_iter().map(Some).collect();
-        classes = java_hash_order(&hashes, 16)
+        classes = hash_order(&hashes, 16)
             .into_iter()
             .filter_map(|i| slots[i].take())
             .collect();

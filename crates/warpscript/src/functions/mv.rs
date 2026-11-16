@@ -15,14 +15,14 @@ use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use super::Entry;
 use super::args::fail;
 use super::gts::element_or_list;
-use super::gts_reduce::java_hash_order;
+use super::gts_reduce::hash_order;
 use crate::encoder::{
     DEFAULT_COMP_RATIO_THRESHOLD, EncodedValue, GtsEncoder, encoder_to_wrapper, gts_to_wrapper,
     latin1_bytes, wrapper_to_decoder, wrapper_to_encoder,
 };
 use crate::encoding::opb64_decode;
 use crate::error::Result;
-use crate::format::{java_double_to_string, url_encode};
+use crate::format::{double_to_text, url_encode};
 use crate::geoxp::from_geoxp_point;
 use crate::gts::{GeoTimeSerie, Metadata, NO_ELEVATION, NO_LOCATION};
 use crate::stack::Stack;
@@ -118,11 +118,7 @@ fn wrapper_to_string(out: &mut String, wrapper: &GtsWrapper) -> Result<()> {
             out.push_str(&format!("{ts}/"));
         }
         if let Some((lat, lon)) = latlon {
-            out.push_str(&format!(
-                "{}:{}/",
-                java_double_to_string(lat),
-                java_double_to_string(lon)
-            ));
+            out.push_str(&format!("{}:{}/", double_to_text(lat), double_to_text(lon)));
         } else if elevation != NO_ELEVATION {
             out.push('/');
         }
@@ -487,7 +483,7 @@ fn mvsplit(stack: &mut Stack, name: &str, bytick: bool) -> Result<()> {
             .map(|index| (index ^ (index >> 32)) as i32)
             .collect();
         let mut slots: Vec<Option<GtsEncoder>> = encoders.into_values().map(Some).collect();
-        let ordered: Vec<Value> = java_hash_order(&hashes, capacity)
+        let ordered: Vec<Value> = hash_order(&hashes, capacity)
             .into_iter()
             .filter_map(|i| slots[i].take())
             .map(|encoder| Value::Encoder(Rc::new(RefCell::new(encoder))))

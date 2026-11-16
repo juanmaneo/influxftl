@@ -3,7 +3,7 @@
 
 //! Java-compatible textual conversions used all over the runtime.
 //!
-//! * [`java_double_to_string`] — `Double.toString` formatting (`1.0`, `1.0E7`, `NaN`…);
+//! * [`double_to_text`] — `Double.toString` formatting (`1.0`, `1.0E7`, `NaN`…);
 //! * [`is_long`] / [`is_double`] — Warp 10's `UnsafeString` number detection;
 //! * [`parse_long`], [`parse_radix_wrapping`] — `Long.valueOf` / `BigInteger.longValue()`;
 //! * [`url_encode`] / [`url_decode`] — `WarpURLEncoder` / `WarpURLDecoder`.
@@ -13,7 +13,7 @@ use crate::error::fault::NumberFormatError;
 
 /// `Double.toString(d)`: shortest digits that round-trip, plain notation in `[1e-3, 1e7)`,
 /// computerized scientific notation (`d.dddE±n`) otherwise, always at least one fractional digit.
-pub fn java_double_to_string(d: f64) -> String {
+pub fn double_to_text(d: f64) -> String {
     if let Some(special) = special_to_string(d.is_nan(), d.is_infinite(), d == 0.0, d) {
         return special;
     }
@@ -37,9 +37,9 @@ pub fn java_double_to_string(d: f64) -> String {
     layout(d < 0.0, &digits, exponent)
 }
 
-/// `Float.toString(f)`: the same notation as [`java_double_to_string`], for the shortest digits
+/// `Float.toString(f)`: the same notation as [`double_to_text`], for the shortest digits
 /// that round-trip as a `float`.
-pub fn java_float_to_string(f: f32) -> String {
+pub fn float_to_text(f: f32) -> String {
     if let Some(special) = special_to_string(f.is_nan(), f.is_infinite(), f == 0.0, f64::from(f)) {
         return special;
     }
@@ -351,7 +351,7 @@ pub fn url_decode(input: &str) -> Result<String> {
     if !input.contains('%') {
         return Ok(input.to_owned());
     }
-    crate::functions::strings::java_url_decode(&input.replace('+', "%2B"))
+    crate::functions::strings::url_decode_form(&input.replace('+', "%2B"))
 }
 
 /// The value of a text of ASCII decimal digits, optionally signed, such as the exponents the

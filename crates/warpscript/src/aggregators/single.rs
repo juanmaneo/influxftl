@@ -13,7 +13,7 @@ use crate::error::{Error, Result};
 use crate::format::url_encode;
 use crate::functions::Entry;
 use crate::functions::misc::TIME_UNITS_PER_MS;
-use crate::functions::operators::parse_java_double;
+use crate::functions::operators::parse_double_text;
 use crate::functions::time::{TIME_UNITS_PER_S, Zone};
 use crate::geoxp;
 use crate::gts::{NO_ELEVATION, NO_LOCATION};
@@ -234,7 +234,7 @@ fn to_double(value: &Value) -> Value {
         Value::Long(l) => Value::Double(*l as f64),
         Value::Double(d) => Value::Double(*d),
         Value::Boolean(b) => Value::Double(if *b { 1.0 } else { 0.0 }),
-        Value::String(s) => parse_java_double(s).map_or(Value::Null, Value::Double),
+        Value::String(s) => parse_double_text(s).map_or(Value::Null, Value::Double),
         _ => Value::Null,
     }
 }

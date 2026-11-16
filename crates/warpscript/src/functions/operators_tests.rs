@@ -3,7 +3,7 @@
 use indexmap::IndexSet;
 
 use crate::functions::call;
-use crate::functions::operators::parse_java_double;
+use crate::functions::operators::parse_double_text;
 use crate::stack::Stack;
 use crate::tests::{assert_fails, assert_top, exec, top};
 use crate::value::Value;
@@ -322,14 +322,14 @@ fn java_double_parsing() {
         ("0x123456789abcdef01p0", 2.098_829_547_942_064_5E19),
     ] {
         assert_eq!(
-            parse_java_double(text).expect("parse_java_double should succeed"),
+            parse_double_text(text).expect("parse_double_text should succeed"),
             expected,
             "{text}"
         );
     }
     assert!(
-        parse_java_double("0x1p-1075")
-            .expect("parse_java_double should succeed")
+        parse_double_text("0x1p-1075")
+            .expect("parse_double_text should succeed")
             .is_sign_positive()
     );
     for text in [
@@ -352,8 +352,8 @@ fn java_double_parsing() {
         "0x1p-",
     ] {
         assert_eq!(
-            parse_java_double(text)
-                .expect_err("parse_java_double should fail")
+            parse_double_text(text)
+                .expect_err("parse_double_text should fail")
                 .to_string(),
             format!("For input string: \"{text}\""),
         );

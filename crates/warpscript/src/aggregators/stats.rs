@@ -6,7 +6,7 @@
 
 use super::{Aggregated, Aggregator, AggregatorArgs, Named, Roles, double_value, latest};
 use crate::error::{Error, Result};
-use crate::format::java_double_to_string;
+use crate::format::double_to_text;
 use crate::functions::Entry;
 use crate::geoxp;
 use crate::gts::{NO_ELEVATION, NO_LOCATION};
@@ -434,7 +434,7 @@ impl Aggregator for CircularMean {
     }
 
     fn parameters(&self) -> Option<String> {
-        Some(java_double_to_string(self.period))
+        Some(double_to_text(self.period))
     }
 }
 

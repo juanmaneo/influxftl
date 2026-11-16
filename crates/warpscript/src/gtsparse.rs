@@ -127,9 +127,9 @@ pub fn parse_line(
         location = match latlon.split_once(':') {
             Some((lat, lon)) => {
                 let lat =
-                    crate::functions::operators::parse_java_double(lat).map_err(|_| invalid())?;
+                    crate::functions::operators::parse_double_text(lat).map_err(|_| invalid())?;
                 let lon =
-                    crate::functions::operators::parse_java_double(lon).map_err(|_| invalid())?;
+                    crate::functions::operators::parse_double_text(lon).map_err(|_| invalid())?;
                 crate::geoxp::to_geoxp_point(lat, lon)
             }
             None => latlon.parse::<i64>().map_err(|_| invalid())?,

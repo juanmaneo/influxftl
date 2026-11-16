@@ -9,7 +9,7 @@
 use crate::encoding::{OPB64_ALPHABET, opb64_value};
 use crate::format::{is_double, is_long};
 use crate::jmath::{abs_long, floor_div, floor_mod, max, min, signum};
-use crate::jrandom::JavaRandom;
+use crate::lcg48::Lcg48;
 use crate::value::double_to_long;
 
 /// Any 3 ASCII characters: a string accepted by `is_long` is never accepted by `is_double`
@@ -177,7 +177,7 @@ fn java_random_stays_in_range() {
     let seed: i64 = kani::any();
     let bits: u32 = kani::any();
     kani::assume((1..=32).contains(&bits));
-    let mut r = JavaRandom::new(seed);
+    let mut r = Lcg48::new(seed);
     let v = r.next(bits);
     assert!(r.state() >= 0 && r.state() < (1 << 48));
     assert!(bits == 32 || (v >= 0 && (v as u32) < (1u32 << bits)));

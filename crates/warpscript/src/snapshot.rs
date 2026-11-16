@@ -13,7 +13,7 @@ use crate::encoder::{DEFAULT_COMP_RATIO_THRESHOLD, encoder_to_wrapper, gts_to_wr
 use crate::encoding::opb64_encode;
 use crate::error::Result;
 use crate::error::platform::PlatformError;
-use crate::format::{java_double_to_string, snapshot_encode_readable, url_encode};
+use crate::format::{double_to_text, snapshot_encode_readable, url_encode};
 use crate::macros::{Macro, Statement};
 use crate::rsa::RsaKey;
 use crate::thrift::serialize_wrapper;
@@ -94,7 +94,7 @@ fn append(out: &mut String, value: &Value, depth: usize, readable: bool) -> Resu
             out.push(' ');
         }
         Value::Double(d) => {
-            out.push_str(&java_double_to_string(*d));
+            out.push_str(&double_to_text(*d));
             out.push(' ');
         }
         // `[] [] 1.0 +! 2.0 +! +! … ->MAT` / `[] 1.0 +! 2.0 +! ->VEC`.
@@ -103,7 +103,7 @@ fn append(out: &mut String, value: &Value, depth: usize, readable: bool) -> Resu
             for r in 0..m.rows {
                 out.push_str("[] ");
                 for c in 0..m.cols {
-                    out.push_str(&java_double_to_string(m.get(r, c)));
+                    out.push_str(&double_to_text(m.get(r, c)));
                     out.push_str(" +! ");
                 }
                 out.push_str("+! ");
@@ -113,7 +113,7 @@ fn append(out: &mut String, value: &Value, depth: usize, readable: bool) -> Resu
         Value::Vector(v) => {
             out.push_str("[] ");
             for x in v.iter() {
-                out.push_str(&java_double_to_string(*x));
+                out.push_str(&double_to_text(*x));
                 out.push_str(" +! ");
             }
             out.push_str("->VEC ");

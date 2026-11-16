@@ -89,8 +89,7 @@ impl BigDecimal {
 
     /// [`BigDecimal::from_f64`] of a finite double (whose `Double.toString` always parses).
     pub fn from_finite_f64(value: f64) -> BigDecimal {
-        BigDecimal::parse(&crate::format::java_double_to_string(value))
-            .unwrap_or(BigDecimal::from_i64(0))
+        BigDecimal::parse(&crate::format::double_to_text(value)).unwrap_or(BigDecimal::from_i64(0))
     }
 
     /// `new BigDecimal(double)`: the exact binary value of a finite double.
@@ -523,7 +522,7 @@ impl BigDecimal {
 
     /// `toString`: plain notation for a non negative scale and an adjusted exponent of at
     /// least -6, scientific notation otherwise.
-    fn java_string(&self) -> String {
+    fn scientific_text(&self) -> String {
         let digits = self.unscaled.abs().to_string();
         let sign = if self.unscaled.is_negative() { "-" } else { "" };
         let len = digits.len() as i64;
@@ -578,7 +577,7 @@ impl BigDecimal {
 
 impl fmt::Display for BigDecimal {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(&self.java_string())
+        f.write_str(&self.scientific_text())
     }
 }
 

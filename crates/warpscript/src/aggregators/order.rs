@@ -9,11 +9,11 @@ use std::cmp::Ordering;
 use super::{Aggregated, Aggregator, AggregatorArgs, Named, Num, Roles, double_value};
 use crate::error::aggregator::AggregatorError;
 use crate::error::{Class, Error, Result};
-use crate::format::java_double_to_string;
+use crate::format::double_to_text;
 use crate::functions::Entry;
-use crate::functions::functional::java_double_compare;
+use crate::functions::functional::double_compare;
 use crate::geoxp;
-use crate::gts::{NO_ELEVATION, NO_LOCATION, java_binary_search};
+use crate::gts::{NO_ELEVATION, NO_LOCATION, binary_search};
 use crate::jmath;
 use crate::stack::Stack;
 use crate::value::{Value, ValueKind};
@@ -234,7 +234,7 @@ fn natural_sort(values: &[Value]) -> Result<Sorted<'_>> {
         }
         Value::Double(_) => {
             let mut doubles: Vec<f64> = values.iter().filter_map(Value::as_f64).collect();
-            doubles.sort_by(|a, b| java_double_compare(*a, *b));
+            doubles.sort_by(|a, b| double_compare(*a, *b));
             Sorted::Doubles(doubles)
         }
         Value::String(_) => {
@@ -272,7 +272,7 @@ fn median_of_longs(sorted: &[i64]) -> i64 {
 #[allow(clippy::manual_midpoint)]
 fn median_of_doubles(sorted: &[f64]) -> f64 {
     let n = sorted.len();
-    if java_double_compare(sorted[0], sorted[n - 1]) == Ordering::Equal {
+    if double_compare(sorted[0], sorted[n - 1]) == Ordering::Equal {
         sorted[0]
     } else if n.is_multiple_of(2) {
         (sorted[n / 2 - 1] + sorted[n / 2]) / 2.0
@@ -308,7 +308,7 @@ fn marker_median(sorted: &mut [i64], absent: i64, middle: impl Fn(i64, i64) -> i
         return sorted[0];
     }
     let mut len = n;
-    if let Some(idx) = java_binary_search(sorted, absent) {
+    if let Some(idx) = binary_search(sorted, absent) {
         let mut i = idx + 1;
         while i < n && sorted[i] == absent {
             i += 1;
@@ -372,7 +372,7 @@ impl Aggregator for Mad {
             Sorted::Doubles(doubles) => {
                 let median = median_of_doubles(&doubles);
                 let mut residuals: Vec<f64> = doubles.iter().map(|v| (median - v).abs()).collect();
-                residuals.sort_by(|a, b| java_double_compare(*a, *b));
+                residuals.sort_by(|a, b| double_compare(*a, *b));
                 Value::Double(median_of_doubles(&residuals))
             }
             Sorted::Strings(strings) => {
@@ -562,11 +562,7 @@ impl Aggregator for Percentile {
     }
 
     fn parameters(&self) -> Option<String> {
-        Some(format!(
-            "{} 'type{}'",
-            java_double_to_string(self.rank),
-            self.kind
-        ))
+        Some(format!("{} 'type{}'", double_to_text(self.rank), self.kind))
     }
 }
 

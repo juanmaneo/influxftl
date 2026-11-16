@@ -14,10 +14,10 @@ const TEXT: &str =
     "The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog.";
 
 /// `GZIPOutputStream` output of the JDK for [`TEXT`].
-const JAVA_GZIP: &str = "1f8b08000000000000ff0bc94855282ccd4cce56482aca2fcf5348cbaf50c82acd2d2856c82f4b2d5228014ae72456552aa4e4a7eb298490a01800a70ae99a59000000";
+const GZIP_SAMPLE: &str = "1f8b08000000000000ff0bc94855282ccd4cce56482aca2fcf5348cbaf50c82acd2d2856c82f4b2d5228014ae72456552aa4e4a7eb298490a01800a70ae99a59000000";
 
 /// `DeflaterOutputStream` output of the JDK for [`TEXT`].
-const JAVA_DEFLATE: &str = "789c0bc94855282ccd4cce56482aca2fcf5348cbaf50c82acd2d2856c82f4b2d5228014ae72456552aa4e4a7eb298490a01800aed1202f";
+const DEFLATE_SAMPLE: &str = "789c0bc94855282ccd4cce56482aca2fcf5348cbaf50c82acd2d2856c82f4b2d5228014ae72456552aa4e4a7eb298490a01800aed1202f";
 
 #[test]
 fn gzip_round_trips() {
@@ -45,9 +45,12 @@ fn deflate_round_trips() {
 
 #[test]
 fn java_streams_decompress() {
-    assert_top(&format!("'{JAVA_GZIP}' HEX-> UNGZIP 'UTF-8' BYTES->"), TEXT);
     assert_top(
-        &format!("'{JAVA_DEFLATE}' HEX-> INFLATE 'UTF-8' BYTES->"),
+        &format!("'{GZIP_SAMPLE}' HEX-> UNGZIP 'UTF-8' BYTES->"),
+        TEXT,
+    );
+    assert_top(
+        &format!("'{DEFLATE_SAMPLE}' HEX-> INFLATE 'UTF-8' BYTES->"),
         TEXT,
     );
     // An empty gzip member written by the JDK.

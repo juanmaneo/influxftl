@@ -11,7 +11,7 @@ use std::rc::Rc;
 use super::{Aggregated, Aggregator, AggregatorArgs, Named, Num, Roles};
 use crate::error::{Error, Result};
 use crate::functions::Entry;
-use crate::functions::functional::java_double_compare;
+use crate::functions::functional::double_compare;
 use crate::geoxp;
 use crate::gts::{NO_ELEVATION, NO_LOCATION};
 use crate::snapshot::value_snapshot;
@@ -163,10 +163,10 @@ impl CompareTo {
             Test::HhCode(reference) => args.locations[i].cmp(reference),
             Test::Elevation(reference) => args.elevations[i].cmp(reference),
             Test::Latitude(reference) => {
-                java_double_compare(geoxp::from_geoxp_point(args.locations[i]).0, *reference)
+                double_compare(geoxp::from_geoxp_point(args.locations[i]).0, *reference)
             }
             Test::Longitude(reference) => {
-                java_double_compare(geoxp::from_geoxp_point(args.locations[i]).1, *reference)
+                double_compare(geoxp::from_geoxp_point(args.locations[i]).1, *reference)
             }
             Test::Long(reference) => match Num::of(value) {
                 Some(Num::Long(l)) => l.cmp(reference),
@@ -174,7 +174,7 @@ impl CompareTo {
                 None => return Ok(None),
             },
             Test::Double(reference) => match Num::of(value) {
-                Some(number) => java_double_compare(number.as_f64(), *reference),
+                Some(number) => double_compare(number.as_f64(), *reference),
                 None => return Ok(None),
             },
             // `value.toString()` on a `null` (a `REDUCE` window).

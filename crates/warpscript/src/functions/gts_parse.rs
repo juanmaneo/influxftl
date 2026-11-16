@@ -16,7 +16,7 @@ use crate::value::Value;
 pub const FUNCTIONS: &[(&str, Entry)] = &[("PARSE", Entry::Stack(parse))];
 
 /// `BufferedReader.readLine`: lines ended by `\n`, `\r` or `\r\n`.
-fn java_lines(text: &str) -> Vec<&str> {
+fn split_lines(text: &str) -> Vec<&str> {
     let mut lines = Vec::new();
     let mut rest = text;
     while !rest.is_empty() {
@@ -53,7 +53,7 @@ fn parse(stack: &mut Stack) -> Result<()> {
     let now = current_time();
     let mut series = Vec::new();
     let mut current: Option<GtsEncoder> = None;
-    for line in java_lines(&text) {
+    for line in split_lines(&text) {
         let line = line.trim_matches(|c: char| c <= ' ');
         if line.is_empty() || line.starts_with('#') {
             continue;

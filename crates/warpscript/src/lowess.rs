@@ -11,7 +11,7 @@
 use crate::curvefit::{WeightedPoint, polynomial_fit};
 use crate::error::series::SeriesError;
 use crate::error::{Error, Result};
-use crate::gts::java_binary_search_range;
+use crate::gts::binary_search_range;
 
 /// The datapoints of a series: its ticks, in ascending order, and its values.
 #[derive(Clone, Copy, Debug)]
@@ -351,7 +351,7 @@ pub fn smooth(
                     smoothed[ridx_s] =
                         alpha * smoothed[ridx - 1] + (1.0 - alpha) * smoothed[ridx_last];
                     if robust {
-                        let sidx = java_binary_search_range(samples.ticks, idx_last, idx, skipped);
+                        let sidx = binary_search_range(samples.ticks, idx_last, idx, skipped);
                         if sidx > 0 {
                             residual[sidx as usize] =
                                 (samples.values[sidx as usize] - smoothed[ridx_s]).abs();

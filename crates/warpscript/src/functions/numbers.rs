@@ -11,7 +11,7 @@ use super::args::fail;
 use crate::bigdecimal::{BigDecimal, RoundingMode};
 use crate::error::Result;
 use crate::error::fault::BoundsError;
-use crate::format::java_double_to_string;
+use crate::format::double_to_text;
 use crate::gts::{GeoTimeSerie, Values};
 use crate::macros::{Callable, StackFunction, StackObject};
 use crate::stack::Stack;
@@ -297,8 +297,8 @@ impl StackObject for Npdf {
     fn to_snapshot(&self) -> String {
         format!(
             "{} {} NPDF",
-            java_double_to_string(self.mu),
-            java_double_to_string(self.sigma)
+            double_to_text(self.mu),
+            double_to_text(self.sigma)
         )
     }
 

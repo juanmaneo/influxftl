@@ -3,8 +3,8 @@
 use std::rc::Rc;
 
 use super::strings::{
-    Charset, CompiledPattern, base64_decode, base64_decode_error, decode_utf8_java,
-    java_url_decode, push_uuid, regex_replace, uuid_string,
+    Charset, CompiledPattern, base64_decode, base64_decode_error, decode_utf8_replacing, push_uuid,
+    regex_replace, url_decode_form, uuid_string,
 };
 use crate::bitset::BitSet;
 use crate::encoding::{hex_decode, opb64_encode};
@@ -260,8 +260,8 @@ fn urldecode() {
         "URLDecoder: Illegal hex characters in escape (%) pattern - not a hexadecimal digit: \"\u{e9}\" = 233",
     );
     assert_eq!(
-        java_url_decode("%4\u{1f600}")
-            .expect_err("java_url_decode should fail")
+        url_decode_form("%4\u{1f600}")
+            .expect_err("url_decode_form should fail")
             .to_string(),
         "URLDecoder: Illegal hex characters in escape (%) pattern - not a hexadecimal digit: \"\u{1f600}\" = 55357"
     );
@@ -536,7 +536,7 @@ fn charset_decoding() {
         ("", ""),
     ] {
         assert_eq!(
-            decode_utf8_java(&hex_decode(hex).expect("hex_decode should succeed")),
+            decode_utf8_replacing(&hex_decode(hex).expect("hex_decode should succeed")),
             expected,
             "{hex}"
         );

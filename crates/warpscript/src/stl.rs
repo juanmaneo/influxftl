@@ -15,7 +15,7 @@ use std::num::NonZeroI32;
 use crate::error::fault::{BoundsError, ResourceError};
 use crate::error::series::SeriesError;
 use crate::error::{Error, Result};
-use crate::gts::{GeoTimeSerie, Type, Values, java_binary_search_range};
+use crate::gts::{GeoTimeSerie, Type, Values, binary_search_range};
 use crate::lowess::{Grid, Lowess, Samples, pointwise_lowess, smooth};
 
 /// Java's `int` division: truncated, and a failure on a zero divisor.
@@ -82,7 +82,7 @@ impl CycleGrid {
             let tick = self
                 .lastbucket
                 .wrapping_sub(bucket.wrapping_mul(self.bucketspan));
-            let found = java_binary_search_range(ticks, 0, limit, tick);
+            let found = binary_search_range(ticks, 0, limit, tick);
             if let Ok(idx) = usize::try_from(found) {
                 hits.push(idx);
                 limit = found;
@@ -207,7 +207,7 @@ impl Track {
             return None;
         }
         self.sort();
-        let found = java_binary_search_range(&self.ticks, 0, self.size as i64, tick);
+        let found = binary_search_range(&self.ticks, 0, self.size as i64, tick);
         usize::try_from(found).ok().map(|idx| self.values[idx])
     }
 
@@ -543,7 +543,7 @@ impl Stl {
                 // Step 1: detrending.
                 let mut idx_t = 0;
                 for (idx, (&value, &tick)) in values.iter().zip(&gts.ticks).enumerate() {
-                    idx_t = java_binary_search_range(&trend.ticks, idx_t, trend.size as i64, tick);
+                    idx_t = binary_search_range(&trend.ticks, idx_t, trend.size as i64, tick);
                     seasonal.values[idx] = value - trend.values[found(idx_t, trend.values.len())?];
                 }
 
@@ -687,12 +687,7 @@ impl Stl {
                 // Step 5: deseasonalizing.
                 let mut idx_s = 0;
                 for (idx, (&value, &tick)) in values.iter().zip(&gts.ticks).enumerate() {
-                    idx_s = java_binary_search_range(
-                        &seasonal.ticks,
-                        idx_s,
-                        seasonal.size as i64,
-                        tick,
-                    );
+                    idx_s = binary_search_range(&seasonal.ticks, idx_s, seasonal.size as i64, tick);
                     trend.values[idx] =
                         value - seasonal.values[found(idx_s, seasonal.values.len())?];
                 }
@@ -720,12 +715,8 @@ impl Stl {
                     .iter()
                     .zip(&gts.ticks)
                     .filter_map(|(&value, &tick)| {
-                        idx_s = java_binary_search_range(
-                            &seasonal.ticks,
-                            idx_s,
-                            seasonal.size as i64,
-                            tick,
-                        );
+                        idx_s =
+                            binary_search_range(&seasonal.ticks, idx_s, seasonal.size as i64, tick);
                         // The trend is assumed to hold its datapoints at the same indexes.
                         usize::try_from(idx_s).ok().map(|found| {
                             (value - seasonal.values[found] - trend.values[found]).abs()

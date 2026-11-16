@@ -31,7 +31,7 @@ use crate::encoder::GtsEncoder;
 use crate::error::fault::ResourceError;
 use crate::error::text::TextError;
 use crate::error::{Error, Result};
-use crate::format::java_double_to_string;
+use crate::format::double_to_text;
 use crate::geoxp;
 use crate::gts::{self, GeoTimeSerie, Metadata};
 use crate::stack::Stack;
@@ -299,7 +299,7 @@ impl Serializer {
 
     /// `Double.toString`, with non-finite values quoted in strict mode.
     fn write_double(&mut self, d: f64) {
-        let text = java_double_to_string(d);
+        let text = double_to_text(d);
         if d.is_finite() || !self.strict {
             self.out.push_str(&text);
         } else {

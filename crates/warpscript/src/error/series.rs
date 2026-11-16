@@ -4,7 +4,7 @@
 //! The failures of the Geo Time Series functions: filling, bucketizing, smoothing, statistics,
 //! patterns, filters and interpolators, worded like Warp 10's because a script reads them.
 
-use crate::format::java_double_to_string;
+use crate::format::double_to_text;
 
 /// A failure of a Geo Time Series function.
 #[derive(Debug, Clone, PartialEq, thiserror::Error)]
@@ -183,7 +183,7 @@ pub enum SeriesError {
     /// A rotation by something that is not a unit quaternion.
     #[error(
         "Input does not appear to be a unit quaternion, norm was {}.",
-        java_double_to_string(*.0)
+        double_to_text(*.0)
     )]
     NotUnitQuaternion(f64),
     /// A pattern function applied to a series that is not numeric, bucketized and filled.

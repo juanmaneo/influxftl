@@ -15,7 +15,7 @@ use indexmap::IndexMap;
 
 use crate::error::{Class, Error, Result};
 use crate::functions::Entry;
-use crate::functions::functional::java_double_compare;
+use crate::functions::functional::double_compare;
 
 use crate::error::series::SeriesError;
 use crate::gts::{GeoTimeSerie, Gts, Metadata, NO_ELEVATION, NO_LOCATION};
@@ -413,7 +413,7 @@ fn compare_threshold(threshold: &Value, value: &Value) -> Result<Option<Ordering
         }
         Value::Double(t) => {
             let v = number()?;
-            java_double_compare(*t, v.as_f64().unwrap_or_default())
+            double_compare(*t, v.as_f64().unwrap_or_default())
         }
         Value::String(t) => t.encode_utf16().cmp(value.to_string().encode_utf16()),
         _ => return Ok(None),

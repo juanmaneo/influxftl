@@ -3,7 +3,7 @@
 use std::cmp::Ordering;
 
 use super::functional::{natural_compare, natural_sort, shuffle_impl, shuffle_with, sort_with};
-use crate::jrandom::JavaRandom;
+use crate::lcg48::Lcg48;
 use crate::stack::Stack;
 use crate::tests::{assert_fails, assert_stack, assert_top, exec, fail_msg, run, top};
 use crate::value::Value;
@@ -555,7 +555,7 @@ fn sortwith_errors() {
 
 fn shuffled(seed: i64, n: i64) -> Vec<i64> {
     let mut items: Vec<Value> = (0..n).map(Value::Long).collect();
-    let mut rnd = JavaRandom::new(seed);
+    let mut rnd = Lcg48::new(seed);
     shuffle_with(&mut items, &mut rnd);
     items
         .iter()

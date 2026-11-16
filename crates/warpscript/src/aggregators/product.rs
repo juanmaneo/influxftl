@@ -9,7 +9,7 @@
 use super::{Aggregated, Aggregator, AggregatorArgs, Named, Roles, double_value};
 use crate::error::fault::NumberFormatError;
 use crate::error::{Error, Result};
-use crate::format::java_double_to_string;
+use crate::format::double_to_text;
 use crate::functions::Entry;
 use crate::gts::{NO_ELEVATION, NO_LOCATION};
 use crate::jmath;
@@ -270,7 +270,7 @@ impl Aggregator for DotProduct {
     fn parameters(&self) -> Option<String> {
         let mut out = String::from("[ ");
         for omega in &self.omega {
-            out.push_str(&java_double_to_string(*omega));
+            out.push_str(&double_to_text(*omega));
             out.push(' ');
         }
         out.push(']');

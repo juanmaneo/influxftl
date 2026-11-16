@@ -163,7 +163,7 @@ fn bounds(levels: u32) -> &'static [f64] {
 /// `Arrays.binarySearch(double[], key)` on the breakpoints. Java tells equal values apart
 /// by their bits: `NaN` sorts last, and `-0.0` before `0.0`, which cannot occur here (the
 /// breakpoints are never `-0.0`, nor are the aggregates looked up).
-fn java_binary_search(a: &[f64], key: f64) -> Result<usize, usize> {
+fn binary_search_f64(a: &[f64], key: f64) -> Result<usize, usize> {
     let mut low = 0i64;
     let mut high = a.len() as i64 - 1;
     while low <= high {
@@ -183,7 +183,7 @@ fn java_binary_search(a: &[f64], key: f64) -> Result<usize, usize> {
 /// `SAXUtils.SAX`: the index of the interval of the standard normal distribution split in
 /// `2^levels` (`1 <= levels <= 16`) equiprobable intervals that `value` falls in.
 pub fn sax(levels: u32, value: f64) -> usize {
-    match java_binary_search(bounds(levels), value) {
+    match binary_search_f64(bounds(levels), value) {
         Ok(idx) | Err(idx) => idx,
     }
 }

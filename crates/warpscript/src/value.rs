@@ -21,7 +21,7 @@ use indexmap::{IndexMap, IndexSet};
 
 use crate::bitset::BitSet;
 use crate::encoder::GtsEncoder;
-use crate::format::java_double_to_string;
+use crate::format::double_to_text;
 use crate::geoshape::GeoShape;
 use crate::gts::Gts;
 use crate::macros::Macro;
@@ -478,9 +478,9 @@ impl fmt::Display for Value {
             Value::Null => f.write_str("null"),
             Value::Boolean(b) => write!(f, "{b}"),
             Value::Long(l) => write!(f, "{l}"),
-            Value::Double(d) => f.write_str(&java_double_to_string(*d)),
+            Value::Double(d) => f.write_str(&double_to_text(*d)),
             Value::BigDecimal(bd) => write!(f, "{bd}"),
-            Value::Matrix(m) => f.write_str(&m.java_string()),
+            Value::Matrix(m) => f.write_str(&m.matrix_text()),
             Value::Vector(v) => f.write_str(&crate::functions::matrix::vector_string(v)),
             Value::String(s) => f.write_str(s),
             Value::Bytes(b) => write!(f, "[B@{:x}", b.len()),
@@ -545,7 +545,7 @@ impl fmt::Debug for Value {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Value::String(s) => write!(f, "STRING({s:?})"),
-            Value::Double(d) => write!(f, "DOUBLE({})", java_double_to_string(*d)),
+            Value::Double(d) => write!(f, "DOUBLE({})", double_to_text(*d)),
             other => write!(f, "{}({other})", other.type_name()),
         }
     }

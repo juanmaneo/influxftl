@@ -6,7 +6,7 @@
 
 use crate::encoding::hex_decode;
 use crate::error::crypto::{RecoverError, SplitError};
-use crate::jrandom::JavaRandom;
+use crate::lcg48::Lcg48;
 use crate::ssss::{Field, MAX_SHARES, recover, split};
 
 /// The product of two elements of GF(256) by shifts and reductions, without tables.
@@ -39,7 +39,7 @@ fn scripted(bytes: &[u8]) -> impl FnMut() -> Result<u8, getrandom::Error> + '_ {
 
 /// An endless reproducible source.
 fn seeded(seed: i64) -> impl FnMut() -> Result<u8, getrandom::Error> {
-    let mut generator = JavaRandom::new(seed);
+    let mut generator = Lcg48::new(seed);
     move || Ok(generator.next_int() as u8)
 }
 

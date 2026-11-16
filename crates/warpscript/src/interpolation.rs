@@ -360,7 +360,7 @@ fn tricube(x: f64) -> f64 {
 
 /// `Arrays.binarySearch(double[], double)`: `Double.compare` order, `-(insertion) - 1` when
 /// absent.
-pub(crate) fn java_binary_search_doubles(bounds: &[f64], key: f64) -> i64 {
+pub(crate) fn binary_search_doubles(bounds: &[f64], key: f64) -> i64 {
     let mut low = 0i64;
     let mut high = bounds.len() as i64 - 1;
     while low <= high {
@@ -476,7 +476,7 @@ impl BicubicInterpolatingFunction {
     /// `searchIndex`: the cell of `c`, by binary search.
     fn search_index(c: f64, val: &[f64]) -> Result<i64> {
         let n = val.len() as i64;
-        let r = java_binary_search_doubles(val, c);
+        let r = binary_search_doubles(val, c);
         if r == -1 || r == -n - 1 {
             return Err(MathError::OutOfRange {
                 value: c,

@@ -10,7 +10,7 @@ use std::collections::HashMap;
 
 use super::Entry;
 use super::args::fail;
-use super::functional::java_double_compare;
+use super::functional::double_compare;
 use super::gts::{gts_or_list, long_value, tuple_at_index};
 use super::gts_frameworks::{MapParams, map_gts};
 use super::misc::TIME_UNITS_PER_MS;
@@ -451,7 +451,7 @@ fn rvaluesort(stack: &mut Stack) -> Result<()> {
 }
 
 /// Java `String.compareTo`: by UTF-16 code units.
-fn java_string_compare(a: &str, b: &str) -> Ordering {
+fn utf16_compare(a: &str, b: &str) -> Ordering {
     a.encode_utf16().cmp(b.encode_utf16())
 }
 
@@ -463,14 +463,14 @@ fn compare_string_maps(
 ) -> Ordering {
     let mut keys_a: Vec<&String> = a.keys().collect();
     let mut keys_b: Vec<&String> = b.keys().collect();
-    keys_a.sort_by(|x, y| java_string_compare(x, y));
-    keys_b.sort_by(|x, y| java_string_compare(x, y));
+    keys_a.sort_by(|x, y| utf16_compare(x, y));
+    keys_b.sort_by(|x, y| utf16_compare(x, y));
     for (key_a, key_b) in keys_a.iter().zip(&keys_b) {
-        let comp = java_string_compare(key_a, key_b);
+        let comp = utf16_compare(key_a, key_b);
         if comp != Ordering::Equal {
             return comp;
         }
-        let comp = java_string_compare(&a[*key_a], &b[*key_b]);
+        let comp = utf16_compare(&a[*key_a], &b[*key_b]);
         if comp != Ordering::Equal {
             return comp;
         }
@@ -484,7 +484,7 @@ fn compare_metadata(a: &Metadata, b: &Metadata) -> Ordering {
         (None, Some(_)) => return Ordering::Less,
         (Some(_), None) => return Ordering::Greater,
         (Some(name_a), Some(name_b)) => {
-            let comp = java_string_compare(name_a, name_b);
+            let comp = utf16_compare(name_a, name_b);
             if comp != Ordering::Equal {
                 return comp;
             }
@@ -534,7 +534,7 @@ fn compare_metadata_fields(
             (None, Some(_)) => return Ordering::Less,
             (Some(_), None) => return Ordering::Greater,
             (Some(value_a), Some(value_b)) => {
-                let comp = java_string_compare(&value_a, &value_b);
+                let comp = utf16_compare(&value_a, &value_b);
                 if comp != Ordering::Equal {
                     return comp;
                 }
@@ -588,12 +588,12 @@ fn compare_last(a: &Gts, b: &Gts) -> Ordering {
     let (a, b) = (a.borrow(), b.borrow());
     let comp = match (a.value_at(0), b.value_at(0)) {
         (Value::Long(x), Value::Long(y)) => x.cmp(&y),
-        (Value::Double(x), Value::Double(y)) => java_double_compare(x, y),
-        (Value::String(x), Value::String(y)) => java_string_compare(&x, &y),
+        (Value::Double(x), Value::Double(y)) => double_compare(x, y),
+        (Value::String(x), Value::String(y)) => utf16_compare(&x, &y),
         (Value::Boolean(x), Value::Boolean(y)) => x.cmp(&y),
-        (Value::Long(x), Value::Double(y)) => java_double_compare(x as f64, y),
-        (Value::Double(x), Value::Long(y)) => java_double_compare(x, y as f64),
-        (x, y) => java_string_compare(&x.to_string(), &y.to_string()),
+        (Value::Long(x), Value::Double(y)) => double_compare(x as f64, y),
+        (Value::Double(x), Value::Long(y)) => double_compare(x, y as f64),
+        (x, y) => utf16_compare(&x.to_string(), &y.to_string()),
     };
     if comp != Ordering::Equal {
         return comp;
@@ -840,7 +840,7 @@ fn monotonic(stack: &mut Stack) -> Result<()> {
                     let better = match &svalue {
                         None => true,
                         Some(current) => {
-                            let comp = java_string_compare(&sv, current);
+                            let comp = utf16_compare(&sv, current);
                             if decreasing {
                                 comp == Ordering::Less
                             } else {
@@ -909,7 +909,7 @@ fn atbucket(stack: &mut Stack) -> Result<()> {
     let tick = gts.lastbucket.wrapping_sub(
         i64::from(bucketcount.wrapping_sub(1).wrapping_sub(idx)).wrapping_mul(gts.bucketspan),
     );
-    let index = crate::gts::java_binary_search(&gts.ticks, tick);
+    let index = crate::gts::binary_search(&gts.ticks, tick);
     let tuple = tuple_at_index(&gts, index);
     stack.push(tuple);
     Ok(())

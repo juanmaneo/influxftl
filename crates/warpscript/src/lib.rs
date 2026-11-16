@@ -58,13 +58,13 @@ pub mod geoshape;
 pub mod geoxp;
 pub mod gts;
 pub mod gtsparse;
+pub mod hash_order_map;
 pub mod interpolation;
 #[cfg(test)]
 mod interpolation_tests;
-pub mod javamap;
 pub mod jmath;
-pub mod jrandom;
 pub mod jts;
+pub mod lcg48;
 pub mod lowess;
 pub mod macros;
 pub mod microsphere;
@@ -124,7 +124,7 @@ mod gts_tests;
 #[cfg(test)]
 mod jmath_tests;
 #[cfg(test)]
-mod jrandom_tests;
+mod lcg48_tests;
 #[cfg(test)]
 mod macros_tests;
 #[cfg(test)]

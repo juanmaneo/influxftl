@@ -6,11 +6,11 @@
 use super::outline::{shape_to_geojson, trace};
 use crate::error::Error;
 use crate::error::fault::BoundsError;
-use crate::javamap::{JavaHashMap, long_hash, ordered};
+use crate::hash_order_map::{HashOrderMap, long_hash, ordered};
 
 /// A graph whose vertices are in the table in the order of their (small) numbers.
-fn graph(vertices: &[(i64, &[i64])]) -> JavaHashMap<i64, Vec<i64>> {
-    let mut graph = JavaHashMap::new().with_order(ordered);
+fn graph(vertices: &[(i64, &[i64])]) -> HashOrderMap<i64, Vec<i64>> {
+    let mut graph = HashOrderMap::new().with_order(ordered);
     for (vertex, neighbors) in vertices {
         graph.put(long_hash(*vertex), *vertex, neighbors.to_vec());
     }

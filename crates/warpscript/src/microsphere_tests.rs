@@ -4,7 +4,7 @@
 //! of doubles, and the dimension of a point that is not the one of the samples.
 
 use crate::error::math::MathError;
-use crate::jrandom::JavaRandom;
+use crate::lcg48::Lcg48;
 use crate::microsphere::{Microsphere, MicrosphereParams, cos_angle, safe_norm};
 
 /// The relative distance between two numbers.
@@ -67,7 +67,7 @@ fn sphere(dimension: usize) -> Microsphere {
             dark_threshold: 0.01,
             background: f64::NAN,
         },
-        &mut JavaRandom::new(7),
+        &mut Lcg48::new(7),
     )
     .expect("a microsphere")
 }

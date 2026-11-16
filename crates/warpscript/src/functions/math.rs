@@ -12,7 +12,7 @@ use crate::cmath;
 use crate::error::platform::PlatformError;
 use crate::error::{Error, Result};
 use crate::jmath;
-use crate::jrandom::JavaRandom;
+use crate::lcg48::Lcg48;
 use crate::stack::Stack;
 use crate::value::Value;
 
@@ -155,7 +155,7 @@ fn random(stack: &mut Stack) -> Result<()> {
 fn prng(stack: &mut Stack) -> Result<()> {
     match stack.pop()? {
         Value::Long(seed) => {
-            let generator = JavaRandom::new(seed);
+            let generator = Lcg48::new(seed);
             stack.set_attribute(ATTRIBUTE_SEEDED_PRNG, Some(Value::Long(generator.state())));
             Ok(())
         }
@@ -167,7 +167,7 @@ fn srand(stack: &mut Stack) -> Result<()> {
     let Some(Value::Long(state)) = stack.attribute(ATTRIBUTE_SEEDED_PRNG) else {
         return Err(fail("SRAND", "seeded PRNG was not initialized."));
     };
-    let mut generator = JavaRandom::from_state(*state);
+    let mut generator = Lcg48::from_state(*state);
     let value = generator.next_double();
     stack.set_attribute(ATTRIBUTE_SEEDED_PRNG, Some(Value::Long(generator.state())));
     stack.push(value);

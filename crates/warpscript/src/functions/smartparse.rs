@@ -12,14 +12,14 @@ use super::Entry;
 use super::args::fail;
 use super::gts::gts_or_list_try;
 use super::misc::TIME_UNITS_PER_MS;
-use super::operators::parse_java_double;
+use super::operators::parse_double_text;
 use super::strings::{compile_regex, regex_error};
 use super::time::TIME_UNITS_PER_S;
 use crate::error::Result;
 use crate::error::fault::BoundsError;
 use crate::geoxp::to_geoxp_point;
 use crate::gts::{GeoTimeSerie, NO_ELEVATION, NO_LOCATION};
-use crate::javamap::JavaHashMap;
+use crate::hash_order_map::HashOrderMap;
 use crate::jmath;
 use crate::pickle::string_hash;
 use crate::stack::Stack;
@@ -125,7 +125,7 @@ fn group<'t>(caps: &Captures<'t, str>, name: &str) -> Option<&'t str> {
 
 /// `Double.parseDouble`, failing with a `NumberFormatException`.
 fn parse_double(text: &str) -> Result<f64> {
-    Ok(parse_java_double(text)?)
+    Ok(parse_double_text(text)?)
 }
 
 impl Parser {
@@ -134,7 +134,7 @@ impl Parser {
     fn parse(&self, text: &str, mut timestamp: i64, results: &mut Vec<Series>) -> Result<()> {
         for caps in self.regex.captures_iter(text) {
             let caps = caps.map_err(|err| regex_error(&err))?;
-            let mut labels = JavaHashMap::new();
+            let mut labels = HashOrderMap::new();
             for name in &self.labels {
                 if let Some(value) = group(&caps, name) {
                     let key = name[1..].to_owned();
@@ -189,7 +189,7 @@ impl Parser {
                 };
                 let class = name[2..].to_owned();
                 // `new HashMap<>(labels)`.
-                let mut copy = JavaHashMap::new();
+                let mut copy = HashOrderMap::new();
                 copy.put_all(labels.iter().cloned().collect());
                 let label_map: IndexMap<String, String> = copy
                     .into_entries()
@@ -244,7 +244,7 @@ fn metadata_hash(name: &str, labels: &IndexMap<String, String>) -> i32 {
 
 /// `new ArrayList<>(results.values())`: the series in Java `HashMap` order.
 fn series_list(results: Vec<Series>) -> Value {
-    let mut map = JavaHashMap::new();
+    let mut map = HashOrderMap::new();
     for (index, series) in results.into_iter().enumerate() {
         map.put(series.hash, index, series.gts);
     }

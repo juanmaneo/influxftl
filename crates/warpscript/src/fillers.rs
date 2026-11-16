@@ -19,7 +19,7 @@ use crate::aggregators::double_value;
 use crate::error::fault::IllegalArgumentError;
 use crate::error::series::SeriesError;
 use crate::error::{Error, Result};
-use crate::format::{java_double_to_string, url_encode};
+use crate::format::{double_to_text, url_encode};
 use crate::functions::Entry;
 use crate::functions::gts::datapoint_from_list;
 use crate::geoxp::{from_geoxp_point, to_geoxp_point};
@@ -288,7 +288,7 @@ fn lowess_builder(stack: &mut Stack, name: &'static str, robust: bool) -> Result
             name,
             format!(
                 "expects a positive accuracy, instead got {}",
-                java_double_to_string(accuracy)
+                double_to_text(accuracy)
             ),
         ));
     }

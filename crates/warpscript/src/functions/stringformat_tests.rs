@@ -2,16 +2,16 @@
 
 //! Tests of `STRINGFORMAT` against `String.format` (OpenJDK 27, `Locale.ROOT`).
 
-use super::stringformat::{Locale, java_format};
+use super::stringformat::{Locale, printf_format};
 use crate::tests::{assert_fails, assert_top};
 use crate::value::Value;
 
 fn fmt(format: &str, args: &[Value]) -> String {
-    java_format(Locale::ROOT, format, args).expect("java_format should succeed")
+    printf_format(Locale::ROOT, format, args).expect("printf_format should succeed")
 }
 
 fn err(format: &str, args: &[Value]) -> String {
-    java_format(Locale::ROOT, format, args)
+    printf_format(Locale::ROOT, format, args)
         .expect_err("the value should fail")
         .message()
 }
@@ -326,7 +326,7 @@ fn literals_indexes_and_locales() {
     assert_eq!(fmt("plain text", &[]), "plain text");
     assert_eq!(fmt("", &longs(&[1])), "");
     assert_eq!(
-        java_format(
+        printf_format(
             Locale::for_tag("fr").expect("for_tag should succeed"),
             "%,d %,.2f %e",
             &[
@@ -339,7 +339,7 @@ fn literals_indexes_and_locales() {
         "1\u{202F}234\u{202F}567 1\u{202F}234,50 1,500000e+00"
     );
     assert_eq!(
-        java_format(
+        printf_format(
             Locale::for_tag("de_DE").expect("for_tag should succeed"),
             "%,d %,.2f",
             &[Value::Long(1_234_567), Value::Double(1234.5)]
@@ -348,12 +348,12 @@ fn literals_indexes_and_locales() {
         "1.234.567 1.234,50"
     );
     assert_eq!(
-        java_format(
+        printf_format(
             Locale::for_tag("ru").expect("for_tag should succeed"),
             "%,d",
             &longs(&[1234])
         )
-        .expect("java_format should succeed"),
+        .expect("printf_format should succeed"),
         "1\u{00A0}234"
     );
     assert_eq!(Locale::for_tag("en-US"), Some(Locale::ROOT));

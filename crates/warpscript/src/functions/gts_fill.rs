@@ -17,8 +17,7 @@ use crate::error::{Error, Result};
 use crate::fillers::{FillerRef, Roles, Single, Slot, Window, both};
 use crate::geoxp::{from_geoxp_point, to_geoxp_point};
 use crate::gts::{
-    GeoTimeSerie, Gts, Metadata, NO_ELEVATION, NO_LOCATION, java_binary_search,
-    java_binary_search_range,
+    GeoTimeSerie, Gts, Metadata, NO_ELEVATION, NO_LOCATION, binary_search, binary_search_range,
 };
 use crate::stack::Stack;
 use crate::value::{List, Map, Value, ValueKind};
@@ -438,7 +437,7 @@ fn fill_windowed(
             let mut g = gts.borrow_mut();
             if verify {
                 g.sort(false);
-                if java_binary_search(&g.ticks, tick).is_some() {
+                if binary_search(&g.ticks, tick).is_some() {
                     continue;
                 }
             }
@@ -492,7 +491,7 @@ fn fill_single(
             let last_tick = gts.borrow().last_tick();
             let mut idx = {
                 let g = gts.borrow();
-                let idx = java_binary_search_range(&g.ticks, 0, g.size() as i64, ticks[0]);
+                let idx = binary_search_range(&g.ticks, 0, g.size() as i64, ticks[0]);
                 (if idx < 0 { -idx - 1 } else { idx }) as usize
             };
             for &tick in ticks {

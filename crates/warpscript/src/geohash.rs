@@ -9,7 +9,7 @@ use crate::coverage::Coverage;
 use crate::error::Result;
 use crate::error::geo::GeoError;
 use crate::geoxp::{build_hhcode, split_hhcode};
-use crate::javamap::JavaHashMap;
+use crate::hash_order_map::HashOrderMap;
 use crate::pickle::string_hash;
 
 /// The GeoHash base 32 alphabet.
@@ -127,7 +127,7 @@ pub fn from_geocells_optimized(geocells: &[i64]) -> Vec<String> {
 
 /// `GeoHashHelper.fromGeoCells(geocells, false)`: a `HashSet` presized to the number of cells.
 fn from_geocells(geocells: &[i64]) -> Vec<String> {
-    let mut geohashes: JavaHashMap<String, ()> = JavaHashMap::with_capacity(geocells.len());
+    let mut geohashes: HashOrderMap<String, ()> = HashOrderMap::with_capacity(geocells.len());
     for geocell in geocells {
         let resolution = (((*geocell as u64) >> 60) << 1) as i32;
         let nbits = resolution * 2;
@@ -163,7 +163,7 @@ fn from_geocells(geocells: &[i64]) -> Vec<String> {
 fn optimize(geohashes: Vec<String>) -> Vec<String> {
     let mut sorted = geohashes;
     sorted.sort();
-    let mut optimized: JavaHashMap<String, ()> = JavaHashMap::new();
+    let mut optimized: HashOrderMap<String, ()> = HashOrderMap::new();
     let mut add = |geohash: String| optimized.put(string_hash(&geohash), geohash, ());
     let flush = |add: &mut dyn FnMut(String), prefix: &str, subcells: u32, mask: u32| {
         if subcells == 32 {

@@ -13,7 +13,7 @@ use base64::Engine as _;
 use indexmap::IndexMap;
 
 use crate::encoder::Decimal;
-use crate::format::{java_double_to_string, url_encode};
+use crate::format::{double_to_text, url_encode};
 use crate::geoxp;
 use crate::value::Value;
 
@@ -242,7 +242,7 @@ impl Scalar {
         match self {
             Scalar::Boolean(b) => Rc::from(if *b { "T" } else { "F" }),
             Scalar::Long(l) => Rc::from(l.to_string()),
-            Scalar::Double(d) => Rc::from(java_double_to_string(*d)),
+            Scalar::Double(d) => Rc::from(double_to_text(*d)),
             Scalar::String(s) => Rc::clone(s),
             Scalar::Decimal(d) => Rc::from(d.to_string()),
             Scalar::Big(bd) => Rc::from(bd.to_string()),
@@ -265,7 +265,7 @@ fn string_to_long(s: &str) -> i64 {
     match s.parse::<i64>() {
         Ok(long) => long,
         // Warp 10 stores what a `LONG` series cannot read as a number as 0.
-        Err(_not_a_long) => match crate::functions::operators::parse_java_double(s) {
+        Err(_not_a_long) => match crate::functions::operators::parse_double_text(s) {
             Ok(double) => crate::value::double_to_long(double),
             Err(_not_a_number) => 0,
         },
@@ -275,7 +275,7 @@ fn string_to_long(s: &str) -> i64 {
 /// A string stored into a `DOUBLE` series: `Double.parseDouble`, else `Long.parseLong`
 /// (which `parseDouble` already accepts), else `0.0`.
 fn string_to_double(s: &str) -> f64 {
-    crate::functions::operators::parse_java_double(s).unwrap_or(0.0)
+    crate::functions::operators::parse_double_text(s).unwrap_or(0.0)
 }
 
 /// The metadata of a series (`io.warp10.continuum.store.thrift.data.Metadata`).
@@ -493,7 +493,7 @@ impl GeoTimeSerie {
             return (0, 0);
         }
         let n = self.ticks.len() as i64;
-        let mut lastidx = java_binary_search_range(&self.ticks, 0, n, stop);
+        let mut lastidx = binary_search_range(&self.ticks, 0, n, stop);
         if lastidx == -1 {
             return (0, 0);
         } else if lastidx < 0 {
@@ -505,7 +505,7 @@ impl GeoTimeSerie {
             }
             lastidx = lastlastidx - 1;
         }
-        let mut firstidx = java_binary_search_range(&self.ticks, 0, lastidx + 1, start);
+        let mut firstidx = binary_search_range(&self.ticks, 0, lastidx + 1, start);
         if firstidx == -n - 1 {
             return (0, 0);
         } else if firstidx < 0 {
@@ -1065,9 +1065,9 @@ impl GeoTimeSerie {
             let location = self.location_at(i);
             if location != NO_LOCATION {
                 let (lat, lon) = geoxp::from_geoxp_point(location);
-                out.push_str(&java_double_to_string(lat));
+                out.push_str(&double_to_text(lat));
                 out.push(':');
-                out.push_str(&java_double_to_string(lon));
+                out.push_str(&double_to_text(lon));
             }
             out.push('/');
             let elevation = self.elevation_at(i);
@@ -1084,13 +1084,13 @@ impl GeoTimeSerie {
 
 /// `Arrays.binarySearch`: the index of `key` in the sorted `ticks` (whichever of equal ticks
 /// Java's loop lands on), `None` when absent.
-pub fn java_binary_search(ticks: &[i64], key: i64) -> Option<usize> {
-    usize::try_from(java_binary_search_range(ticks, 0, ticks.len() as i64, key)).ok()
+pub fn binary_search(ticks: &[i64], key: i64) -> Option<usize> {
+    usize::try_from(binary_search_range(ticks, 0, ticks.len() as i64, key)).ok()
 }
 
 /// `Arrays.binarySearch(ticks, from, to, key)`: the index of `key` in `ticks[from..to]`, or
 /// `-(insertion point) - 1` when absent.
-pub fn java_binary_search_range(ticks: &[i64], from: i64, to: i64, key: i64) -> i64 {
+pub fn binary_search_range(ticks: &[i64], from: i64, to: i64, key: i64) -> i64 {
     let mut low = from;
     let mut high = to - 1;
     while low <= high {
@@ -1165,7 +1165,7 @@ fn value_sort_permutation(
 pub fn encode_value(out: &mut String, value: &Value) {
     match value {
         Value::Long(l) => out.push_str(&l.to_string()),
-        Value::Double(d) => out.push_str(&java_double_to_string(*d)),
+        Value::Double(d) => out.push_str(&double_to_text(*d)),
         Value::Boolean(b) => out.push(if *b { 'T' } else { 'F' }),
         Value::String(s) => {
             out.push('\'');
@@ -1204,9 +1204,9 @@ impl fmt::Display for GeoTimeSerie {
             let location = self.location_at(i);
             if location != NO_LOCATION {
                 let (lat, lon) = geoxp::from_geoxp_point(location);
-                out.push_str(&java_double_to_string(lat));
+                out.push_str(&double_to_text(lat));
                 out.push(':');
-                out.push_str(&java_double_to_string(lon));
+                out.push_str(&double_to_text(lon));
             }
             out.push('/');
             let elevation = self.elevation_at(i);

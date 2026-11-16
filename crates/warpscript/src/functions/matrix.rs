@@ -43,11 +43,11 @@ impl Matrix {
     }
 
     /// `Array2DRowRealMatrix.toString`: `Array2DRowRealMatrix{{1.0,2.0},{3.0,4.0}}`.
-    pub fn java_string(&self) -> String {
+    pub fn matrix_text(&self) -> String {
         let rows: Vec<String> = (0..self.rows)
             .map(|r| {
                 let entries: Vec<String> = (0..self.cols)
-                    .map(|c| crate::format::java_double_to_string(self.get(r, c)))
+                    .map(|c| crate::format::double_to_text(self.get(r, c)))
                     .collect();
                 format!("{{{}}}", entries.join(","))
             })

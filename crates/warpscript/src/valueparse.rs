@@ -16,7 +16,7 @@ use crate::encoding::hex_decode;
 use crate::error::Error;
 use crate::error::fault::{BoundsError, NumberFormatError};
 use crate::format::{is_long, parse_long, url_decode};
-use crate::functions::operators::parse_java_double;
+use crate::functions::operators::parse_double_text;
 use crate::functions::quaternions::to_quaternion;
 use crate::geoxp::to_geoxp_point;
 use crate::gts::{NO_ELEVATION, NO_LOCATION};
@@ -142,7 +142,7 @@ fn index_of(s: &[u16], c: u16, from: usize) -> Option<usize> {
 }
 
 /// `Long.parseLong` of a token (which holds no space): an optional sign and digits.
-fn java_parse_long(s: &str) -> Result<i64, Error> {
+fn parse_long_text(s: &str) -> Result<i64, Error> {
     if is_long(s) {
         parse_long(s)
     } else {
@@ -181,9 +181,9 @@ fn parse(s: &[u16]) -> Result<EncodedValue, Failure> {
     if starts_with(s, "HH:") {
         let colon = index_of(s, COLON, 3)
             .ok_or_else(|| ParseError::new("Invalid value for lat,lon conversion to HHCode.", 0))?;
-        let lat = parse_java_double(&text(sub(s, 3, colon)))
+        let lat = parse_double_text(&text(sub(s, 3, colon)))
             .map_err(|cause| ParseError::caused("Cannot parse latitude.", 3, cause))?;
-        let lon = parse_java_double(&text(sub(s, colon + 1, s.len())))
+        let lon = parse_double_text(&text(sub(s, colon + 1, s.len())))
             .map_err(|cause| ParseError::caused("Cannot parse longitude.", colon + 1, cause))?;
         return Ok(EncodedValue::Long(to_geoxp_point(lat, lon)));
     }
@@ -218,13 +218,13 @@ fn parse(s: &[u16]) -> Result<EncodedValue, Failure> {
     {
         return Ok(EncodedValue::Decimal(parse_decimal(&string)?));
     }
-    Ok(EncodedValue::Double(parse_java_double(&string)?))
+    Ok(EncodedValue::Double(parse_double_text(&string)?))
 }
 
 /// `Q:w:x:y:z`: the packed quaternion of four finite components.
 fn parse_quaternion(s: &[u16]) -> Result<i64, ParseError> {
     let component = |from: usize, to: usize| {
-        parse_java_double(&text(sub(s, from, to)))
+        parse_double_text(&text(sub(s, from, to)))
             .map_err(|cause| ParseError::caused("Cannot parse quaternion component.", from, cause))
     };
     let mut idx = 2;
@@ -388,7 +388,7 @@ fn parse_encoder(s: &[u16]) -> Result<Vec<u8>, Failure> {
             start = end;
             continue;
         }
-        let ts = java_parse_long(&text(sub(s, start, slash)))?;
+        let ts = parse_long_text(&text(sub(s, start, slash)))?;
         start = slash + 1;
         slash = find(start, end, SLASH);
         if slash == end {
@@ -400,11 +400,11 @@ fn parse_encoder(s: &[u16]) -> Result<Vec<u8>, Failure> {
         let colon = find(start, slash, COLON);
         if colon == slash {
             if colon > start {
-                location = java_parse_long(&text(sub(s, start, colon)))?;
+                location = parse_long_text(&text(sub(s, start, colon)))?;
             }
         } else {
-            let lat = parse_java_double(&text(sub(s, start, colon)))?;
-            let lon = parse_java_double(&text(sub(s, colon + 1, slash)))?;
+            let lat = parse_double_text(&text(sub(s, start, colon)))?;
+            let lon = parse_double_text(&text(sub(s, colon + 1, slash)))?;
             location = to_geoxp_point(lat, lon);
         }
         start = slash + 1;
@@ -416,7 +416,7 @@ fn parse_encoder(s: &[u16]) -> Result<Vec<u8>, Failure> {
             continue;
         }
         if slash > start {
-            elevation = java_parse_long(&text(sub(s, start, slash)))?;
+            elevation = parse_long_text(&text(sub(s, start, slash)))?;
         }
         end = value_end(s, slash + 1, end, end_value);
         encoder.add_value(ts, location, elevation, &nested(s, slash + 1, end)?);

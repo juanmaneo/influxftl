@@ -27,7 +27,7 @@ use super::args::{fail, pop_list, pop_macro};
 use super::math::entropy_error;
 use crate::error::fault::{ArithmeticError, BoundsError};
 use crate::error::{Error, Result};
-use crate::jrandom::JavaRandom;
+use crate::lcg48::Lcg48;
 use crate::macros::Macro;
 use crate::stack::Stack;
 use crate::value::{List, Value, ensure_mutable, is_frozen};
@@ -285,7 +285,7 @@ fn filterby(stack: &mut Stack) -> Result<()> {
 // -----------------------------------------------------------------------------------------
 
 /// `Double.compare`: `-0.0 < 0.0`, `NaN` is the greatest value and equals itself.
-pub(crate) fn java_double_compare(x: f64, y: f64) -> Ordering {
+pub(crate) fn double_compare(x: f64, y: f64) -> Ordering {
     if x < y {
         Ordering::Less
     } else if x > y {
@@ -307,7 +307,7 @@ pub(crate) fn java_double_compare(x: f64, y: f64) -> Ordering {
 pub(crate) fn natural_compare(a: &Value, b: &Value) -> Option<Ordering> {
     match (a, b) {
         (Value::Long(x), Value::Long(y)) => Some(x.cmp(y)),
-        (Value::Double(x), Value::Double(y)) => Some(java_double_compare(*x, *y)),
+        (Value::Double(x), Value::Double(y)) => Some(double_compare(*x, *y)),
         (Value::String(x), Value::String(y)) => Some(x.encode_utf16().cmp(y.encode_utf16())),
         (Value::Boolean(x), Value::Boolean(y)) => Some(x.cmp(y)),
         (Value::BigDecimal(x), Value::BigDecimal(y)) => Some(x.compare(y)),
@@ -609,7 +609,7 @@ fn sortwith(stack: &mut Stack) -> Result<()> {
 
 /// `Collections.shuffle(list, rnd)`: swap every position, from the last one down, with a
 /// random earlier one.
-pub(crate) fn shuffle_with(items: &mut [Value], rnd: &mut JavaRandom) {
+pub(crate) fn shuffle_with(items: &mut [Value], rnd: &mut Lcg48) {
     for i in (1..items.len()).rev() {
         let j = rnd.next_int_bounded(i as i32 + 1) as usize;
         items.swap(i, j);
@@ -628,7 +628,7 @@ pub(crate) fn shuffle_impl(
     if list.borrow().len() > 1 {
         ensure_mutable(&list)?;
     }
-    let mut rnd = JavaRandom::new(seed);
+    let mut rnd = Lcg48::new(seed);
     shuffle_with(&mut list.borrow_mut(), &mut rnd);
     Ok(())
 }

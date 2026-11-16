@@ -33,7 +33,7 @@ use indexmap::{IndexMap, IndexSet};
 
 use super::Entry;
 use super::args::{compute_and_check_index, fail, fail_with_cause, pop_list, pop_long, pop_map};
-use super::gts_reduce::{java_hash_order, java_string_hash, table_size_for};
+use super::gts_reduce::{hash_order, table_size_for, utf16_hash};
 use crate::error::collections::CollectionError;
 use crate::error::fault::BoundsError;
 use crate::error::{Error, Result};
@@ -1310,8 +1310,8 @@ fn pivot_target<'a>(
         .or_insert_with(|| {
             let hash = gts_labels
                 .iter()
-                .fold(name.as_deref().map_or(0, java_string_hash), |h, (k, v)| {
-                    h.wrapping_add(java_string_hash(k) ^ java_string_hash(v))
+                .fold(name.as_deref().map_or(0, utf16_hash), |h, (k, v)| {
+                    h.wrapping_add(utf16_hash(k) ^ utf16_hash(v))
                 });
             // The labels of the Java `HashMap` copied from those of the series, which the
             // class name is put into (under the `null` key) before being removed.
@@ -1325,13 +1325,13 @@ fn pivot_target<'a>(
             keys.push(None);
             let key_hashes: Vec<i32> = keys
                 .iter()
-                .map(|key| key.map_or(0, |(k, _)| java_string_hash(k)))
+                .map(|key| key.map_or(0, |(k, _)| utf16_hash(k)))
                 .collect();
             // `setLabels` copies that map (null key included) into a `new HashMap(map)`.
-            let order = java_hash_order(&key_hashes, capacity);
+            let order = hash_order(&key_hashes, capacity);
             let copy_hashes: Vec<i32> = order.iter().map(|&i| key_hashes[i]).collect();
             let copy_capacity = table_size_for((keys.len() as f32 / 0.75 + 1.0) as usize);
-            let labels = java_hash_order(&copy_hashes, copy_capacity)
+            let labels = hash_order(&copy_hashes, copy_capacity)
                 .into_iter()
                 .filter_map(|j| keys[order[j]])
                 .map(|(k, v)| (k.clone(), v.clone()))
@@ -1533,7 +1533,7 @@ fn pivot_impl(stack: &mut Stack, name: &str, synchronous: bool) -> Result<()> {
     let mut results: Vec<Option<GeoTimeSerie>> =
         labeled.into_values().map(|(_, gts)| Some(gts)).collect();
     stack.push(Value::list(
-        java_hash_order(&hashes, 16)
+        hash_order(&hashes, 16)
             .into_iter()
             .filter_map(|i| results[i].take())
             .map(|gts| Value::Gts(gts.shared()))

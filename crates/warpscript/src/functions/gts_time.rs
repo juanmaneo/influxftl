@@ -1010,7 +1010,7 @@ fn sorted_merge(params: &[Value], reversed: bool) -> Result<GtsEncoder> {
     }
     let tick = |sources: &[MergeSource], s: usize| sources[s].points[sources[s].idx].0;
     let order = |a: i64, b: i64| if reversed { b.cmp(&a) } else { a.cmp(&b) };
-    let mut queue = JavaQueue::default();
+    let mut queue = SiftHeap::default();
     for s in 0..sources.len() {
         queue.add(s, |a, b| order(tick(&sources, a), tick(&sources, b)));
     }
@@ -1054,11 +1054,11 @@ fn sorted_merge(params: &[Value], reversed: bool) -> Result<GtsEncoder> {
 /// A `java.util.PriorityQueue` of source indexes (`siftUp` / `siftDown` with the given
 /// comparator), whose layout decides the order of the sources sharing a tick.
 #[derive(Default)]
-struct JavaQueue {
+struct SiftHeap {
     heap: Vec<usize>,
 }
 
-impl JavaQueue {
+impl SiftHeap {
     fn add(&mut self, entry: usize, cmp: impl Fn(usize, usize) -> Ordering) {
         let mut k = self.heap.len();
         self.heap.push(entry);

@@ -13,7 +13,7 @@ use super::Entry;
 use super::args::fail;
 use super::gts::gts_or_list_try;
 use super::gts_stats::value_counts;
-use super::template::java_trim;
+use super::template::trim_control;
 use crate::error::series::SeriesError;
 use crate::error::{Class, Error, Result};
 use crate::gts::{GeoTimeSerie, Gts};
@@ -108,7 +108,7 @@ fn cprob_given(gts: &Gts, separator: &str) -> Result<Value> {
             if given_events != given {
                 break;
             }
-            *histogram.entry(java_trim(event)).or_insert(0) += 1;
+            *histogram.entry(trim_control(event)).or_insert(0) += 1;
             events.push(event);
         }
         let total = events.len() as f64;

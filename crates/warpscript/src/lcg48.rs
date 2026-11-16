@@ -14,7 +14,7 @@ const DOUBLE_UNIT: f64 = 1.0 / (1u64 << 53) as f64;
 
 /// A `java.util.Random` instance.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct JavaRandom {
+pub struct Lcg48 {
     /// The 48-bit state (`seed` in the JDK).
     seed: i64,
     /// The second Gaussian number of the pair `nextGaussian` makes (`nextNextGaussian`), as
@@ -22,18 +22,18 @@ pub struct JavaRandom {
     next_gaussian: Option<u64>,
 }
 
-impl JavaRandom {
+impl Lcg48 {
     /// `new Random(seed)`.
     pub fn new(seed: i64) -> Self {
-        JavaRandom {
+        Lcg48 {
             seed: (seed ^ MULTIPLIER) & MASK,
             next_gaussian: None,
         }
     }
 
-    /// Rebuild a generator from a state saved with [`JavaRandom::state`].
+    /// Rebuild a generator from a state saved with [`Lcg48::state`].
     pub fn from_state(state: i64) -> Self {
-        JavaRandom {
+        Lcg48 {
             seed: state & MASK,
             next_gaussian: None,
         }

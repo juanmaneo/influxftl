@@ -6,7 +6,7 @@ use std::rc::Rc;
 
 use crate::geoxp::to_geoxp_point;
 use crate::gts::{
-    GeoTimeSerie, NO_ELEVATION, NO_LOCATION, Type, Values, encode_value, java_binary_search,
+    GeoTimeSerie, NO_ELEVATION, NO_LOCATION, Type, Values, binary_search, encode_value,
 };
 use crate::value::Value;
 
@@ -353,14 +353,14 @@ fn text_forms() {
 
 #[test]
 fn binary_search_is_javas() {
-    assert_eq!(java_binary_search(&[], 1), None);
-    assert_eq!(java_binary_search(&[1, 3, 5], 3), Some(1));
-    assert_eq!(java_binary_search(&[1, 3, 5], 4), None);
-    assert_eq!(java_binary_search(&[1, 3, 5], 0), None);
-    assert_eq!(java_binary_search(&[1, 3, 5], 9), None);
+    assert_eq!(binary_search(&[], 1), None);
+    assert_eq!(binary_search(&[1, 3, 5], 3), Some(1));
+    assert_eq!(binary_search(&[1, 3, 5], 4), None);
+    assert_eq!(binary_search(&[1, 3, 5], 0), None);
+    assert_eq!(binary_search(&[1, 3, 5], 9), None);
     // Among equal ticks, the one Java's loop lands on.
-    assert_eq!(java_binary_search(&[2, 2, 2, 2, 2], 2), Some(2));
-    assert_eq!(java_binary_search(&[1, 2, 2, 2], 2), Some(1));
+    assert_eq!(binary_search(&[2, 2, 2, 2, 2], 2), Some(2));
+    assert_eq!(binary_search(&[1, 2, 2, 2], 2), Some(1));
 }
 
 #[test]

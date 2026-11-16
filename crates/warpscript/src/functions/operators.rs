@@ -710,7 +710,7 @@ fn todouble(stack: &mut Stack) -> Result<()> {
     let value = match stack.pop()? {
         ref n if n.is_number() => Value::Double(n.as_f64().unwrap_or(f64::NAN)),
         Value::Boolean(b) => Value::Double(if b { 1.0 } else { 0.0 }),
-        Value::String(s) => Value::Double(parse_java_double(&s)?),
+        Value::String(s) => Value::Double(parse_double_text(&s)?),
         _ => {
             return Err(fail(
                 "TODOUBLE",
@@ -727,7 +727,7 @@ fn todouble(stack: &mut Stack) -> Result<()> {
 /// `Infinity`, a decimal number or a hexadecimal one (`0x1.8p3`), the numbers optionally
 /// followed by one of the type suffixes `f`, `F`, `d`, `D`. The Rust-only forms `inf`, `nan`…
 /// are rejected.
-pub(crate) fn parse_java_double(s: &str) -> std::result::Result<f64, NumberFormatError> {
+pub(crate) fn parse_double_text(s: &str) -> std::result::Result<f64, NumberFormatError> {
     let trimmed = s.trim_matches(|c: char| c <= ' ');
     if trimmed.is_empty() {
         return Err(NumberFormatError::Empty);

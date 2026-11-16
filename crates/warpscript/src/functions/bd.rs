@@ -20,7 +20,7 @@ use crate::bigdecimal::{
 };
 use crate::error::Result;
 use crate::error::fault::ArithmeticError;
-use crate::jrandom::JavaRandom;
+use crate::lcg48::Lcg48;
 use crate::stack::Stack;
 use crate::value::Value;
 
@@ -453,7 +453,7 @@ fn bdisprobableprime(stack: &mut Stack) -> Result<()> {
 /// SHA-256 counter mode generator keyed with 32 bytes from the operating system (Java uses
 /// a `SecureRandom`).
 pub(super) enum Source {
-    Seeded(JavaRandom),
+    Seeded(Lcg48),
     Secure { key: [u8; 32], counter: u64 },
 }
 
@@ -466,7 +466,7 @@ impl Source {
         let Some(Value::Long(state)) = stack.attribute(ATTRIBUTE_SEEDED_PRNG) else {
             return Err(fail(name, "seeded PRNG was not initialized."));
         };
-        Ok(Source::Seeded(JavaRandom::from_state(*state)))
+        Ok(Source::Seeded(Lcg48::from_state(*state)))
     }
 
     /// The secure source of the operating system entropy `key`.

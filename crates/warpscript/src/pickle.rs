@@ -21,7 +21,7 @@ use crate::error::fault::NumberFormatError;
 use crate::error::{Result, compat};
 use crate::geoxp::from_geoxp_point;
 use crate::gts::{GeoTimeSerie, NO_LOCATION};
-use crate::javamap::JavaHashMap;
+use crate::hash_order_map::HashOrderMap;
 use crate::unpickle::PyKind;
 use crate::value::{Value, ValueKind};
 
@@ -248,7 +248,7 @@ pub enum PickleError {
     #[error(
         "couldn't introspect javabean: java.lang.IllegalArgumentException: wrong number of arguments: 0 expected: {expected}"
     )]
-    JavaBean {
+    BeanIntrospection {
         /// The number of arguments of the constructor Pyrolite looks for.
         expected: u8,
     },
@@ -392,18 +392,18 @@ fn hash_code(value: &Value, visiting: &mut Vec<usize>) -> Result<i32> {
 }
 
 /// Java `equals` as the memo compares objects: byte arrays and vectors by identity.
-fn java_equals(a: &Value, b: &Value) -> bool {
+fn values_equal(a: &Value, b: &Value) -> bool {
     match (a, b) {
         (Value::Bytes(x), Value::Bytes(y)) => Rc::ptr_eq(x, y),
         (Value::List(x), Value::List(y)) => {
             let (x, y) = (x.borrow(), y.borrow());
-            x.len() == y.len() && x.iter().zip(y.iter()).all(|(a, b)| java_equals(a, b))
+            x.len() == y.len() && x.iter().zip(y.iter()).all(|(a, b)| values_equal(a, b))
         }
         (Value::Map(x), Value::Map(y)) => {
             let (x, y) = (x.borrow(), y.borrow());
             x.len() == y.len()
                 && x.iter()
-                    .all(|(k, v)| y.get(k).is_some_and(|w| java_equals(v, w)))
+                    .all(|(k, v)| y.get(k).is_some_and(|w| values_equal(v, w)))
         }
         _ => a == b,
     }
@@ -530,7 +530,7 @@ impl Pickler {
 
     fn lookup_memo(&mut self, value: &Value, hash: i32) -> bool {
         match self.memo.get(&hash) {
-            Some((memoized, index)) if java_equals(memoized, value) => {
+            Some((memoized, index)) if values_equal(memoized, value) => {
                 let index = *index;
                 if index <= 0xff {
                     self.out.extend([op::BINGET, index as u8]);
@@ -602,7 +602,7 @@ impl Pickler {
             Value::Set(set) => {
                 self.global("__builtin__\nset\n");
                 self.out.extend([op::EMPTY_LIST, op::MARK]);
-                let mut ordered = JavaHashMap::new();
+                let mut ordered = HashOrderMap::new();
                 for item in set.borrow().iter() {
                     ordered.put(Pickler::part_hash(item), item.clone(), ());
                 }
@@ -637,7 +637,7 @@ impl Pickler {
                 } else {
                     2
                 };
-                return Err(PickleError::JavaBean { expected }.into());
+                return Err(PickleError::BeanIntrospection { expected }.into());
             }
             _ => {
                 return Err(PickleError::Unpicklable(value.kind()).into());
@@ -677,7 +677,7 @@ impl Pickler {
     /// `GTSPickler`: the map a series is pickled as, in Java `HashMap` order.
     fn gts_map(&mut self, gts: &GeoTimeSerie) -> Value {
         fn hash_map(entries: Vec<(Value, Value)>) -> Value {
-            let mut map = JavaHashMap::new();
+            let mut map = HashOrderMap::new();
             for (k, v) in entries {
                 map.put(Pickler::part_hash(&k), k, v);
             }

@@ -10,7 +10,7 @@ use crate::error::math::MathError;
 use crate::error::{Error, Result};
 use crate::interpolation::linear_combination;
 use crate::jmath;
-use crate::jrandom::JavaRandom;
+use crate::lcg48::Lcg48;
 
 /// The parameters of a microsphere.
 #[derive(Clone, Copy, Debug)]
@@ -95,7 +95,7 @@ impl Microsphere {
     ///
     /// A dimension or a size that is not positive, a dark fraction outside of `[0, 1]`, or a
     /// negative dark threshold.
-    pub fn new(params: MicrosphereParams, random: &mut JavaRandom) -> Result<Microsphere> {
+    pub fn new(params: MicrosphereParams, random: &mut Lcg48) -> Result<Microsphere> {
         let MicrosphereParams {
             dimension,
             size,

@@ -1,8 +1,8 @@
 // Copyright 2026 The influxftl Authors. Licensed under the Apache License, Version 2.0.
 
 use super::format::{
-    decimal_value, is_double, is_long, java_double_to_string, java_float_to_string, parse_double,
-    parse_long, parse_radix_wrapping, snapshot_encode_readable, url_decode, url_encode,
+    decimal_value, double_to_text, float_to_text, is_double, is_long, parse_double, parse_long,
+    parse_radix_wrapping, snapshot_encode_readable, url_decode, url_encode,
 };
 
 #[test]
@@ -39,7 +39,7 @@ fn double_to_string_matches_java() {
         (0.5, "0.5"),
     ];
     for (value, expected) in cases {
-        assert_eq!(java_double_to_string(*value), *expected, "{value}");
+        assert_eq!(double_to_text(*value), *expected, "{value}");
     }
 }
 
@@ -75,19 +75,16 @@ fn tiny_subnormals_pick_the_closest_two_digit_decimal() {
         "1.2E-322",
     ];
     for (m, text) in (1u64..).zip(expected) {
-        assert_eq!(java_double_to_string(f64::from_bits(m)), text, "{m}");
+        assert_eq!(double_to_text(f64::from_bits(m)), text, "{m}");
         assert_eq!(
-            java_double_to_string(-f64::from_bits(m)),
+            double_to_text(-f64::from_bits(m)),
             format!("-{text}"),
             "-{m}"
         );
     }
-    assert_eq!(
-        java_double_to_string(f64::MIN_POSITIVE),
-        "2.2250738585072014E-308"
-    );
-    assert_eq!(java_double_to_string(1e23), "1.0E23");
-    assert_eq!(java_double_to_string(9e-324), "9.9E-324");
+    assert_eq!(double_to_text(f64::MIN_POSITIVE), "2.2250738585072014E-308");
+    assert_eq!(double_to_text(1e23), "1.0E23");
+    assert_eq!(double_to_text(9e-324), "9.9E-324");
 }
 
 #[test]
@@ -118,7 +115,7 @@ fn float_to_string_matches_java() {
         (f32::NEG_INFINITY, "-Infinity"),
     ];
     for (value, expected) in cases {
-        assert_eq!(java_float_to_string(*value), *expected, "{value}");
+        assert_eq!(float_to_text(*value), *expected, "{value}");
     }
 }
 
@@ -130,9 +127,9 @@ fn tiny_float_subnormals_pick_the_closest_two_digit_decimal() {
         "2.4E-44", "2.5E-44", "2.7E-44", "2.8E-44", "2.9E-44", "3.1E-44", "3.2E-44", "3.4E-44",
     ];
     for (m, text) in (1u32..).zip(expected) {
-        assert_eq!(java_float_to_string(f32::from_bits(m)), text, "{m}");
+        assert_eq!(float_to_text(f32::from_bits(m)), text, "{m}");
         assert_eq!(
-            java_float_to_string(-f32::from_bits(m)),
+            float_to_text(-f32::from_bits(m)),
             format!("-{text}"),
             "-{m}"
         );
@@ -315,9 +312,6 @@ fn decimal_values_are_signed_digits_that_wrap() {
 /// (JDK-4511638), a divergence documented in `docs/DIVERGENCES.md`.
 #[test]
 fn powers_of_two_whose_closest_decimal_does_not_read_back_take_the_shortest() {
-    assert_eq!(
-        java_double_to_string(2f64.powi(-24)),
-        "5.960464477539063E-8"
-    );
-    assert_eq!(java_float_to_string(2f32.powi(-96)), "1.2621775E-29");
+    assert_eq!(double_to_text(2f64.powi(-24)), "5.960464477539063E-8");
+    assert_eq!(float_to_text(2f32.powi(-96)), "1.2621775E-29");
 }

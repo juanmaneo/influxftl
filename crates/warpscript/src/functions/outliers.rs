@@ -8,7 +8,7 @@
 
 use super::Entry;
 use super::args::fail;
-use super::functional::java_double_compare;
+use super::functional::double_compare;
 use super::gts::gts_or_list_try;
 use super::gts_stats::musigma;
 use crate::distribution::TDistribution;
@@ -38,7 +38,7 @@ pub(super) fn double_values(gts: &GeoTimeSerie) -> Result<&[f64]> {
 fn median(values: &[f64]) -> f64 {
     let n = values.len();
     let mut sorted = values.to_vec();
-    sorted.sort_by(|a, b| java_double_compare(*a, *b));
+    sorted.sort_by(|a, b| double_compare(*a, *b));
     if n.is_multiple_of(2) {
         (sorted[n / 2] + sorted[n / 2 - 1]) / 2.0
     } else {

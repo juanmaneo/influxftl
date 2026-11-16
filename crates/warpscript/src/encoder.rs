@@ -14,9 +14,9 @@ use std::fmt;
 use std::rc::Rc;
 
 use crate::error::{Error, IoFailure, Result, compat};
-use crate::format::{decimal_value, java_double_to_string};
+use crate::format::{decimal_value, double_to_text};
 use crate::functions::compression::{gzip_vec, ungzip_bytes};
-use crate::functions::strings::decode_utf8_java;
+use crate::functions::strings::decode_utf8_replacing;
 use crate::gts::{GeoTimeSerie, Metadata, NO_ELEVATION, NO_LOCATION, Type, Values};
 use crate::thrift::GtsWrapper;
 use crate::value::{Value, ValueKind};
@@ -91,7 +91,7 @@ impl Decimal {
     /// `BigDecimal.valueOf(d)` (`new BigDecimal(Double.toString(d))`) of a finite double,
     /// stripped of its trailing zeros as the encoder does.
     pub fn from_double(d: f64) -> Decimal {
-        let text = java_double_to_string(d);
+        let text = double_to_text(d);
         let (mantissa, exponent) = match text.split_once('E') {
             Some((mantissa, exponent)) => (mantissa, decimal_value(exponent) as i32),
             None => (text.as_str(), 0),
@@ -1090,7 +1090,7 @@ impl GtsDecoder {
                     let text = if binary {
                         latin1_string(bytes)
                     } else {
-                        decode_utf8_java(bytes)
+                        decode_utf8_replacing(bytes)
                     };
                     self.previous.string = self.last.string.take();
                     self.last.string = Some(Rc::from(text));

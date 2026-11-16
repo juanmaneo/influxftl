@@ -788,7 +788,7 @@ fn pickle_failures_have_the_wording_and_class_of_pyrolite() {
             true,
         ),
         (
-            PickleError::JavaBean { expected: 2 },
+            PickleError::BeanIntrospection { expected: 2 },
             "couldn't introspect javabean: java.lang.IllegalArgumentException: wrong number of arguments: 0 expected: 2",
             PICKLE,
             true,

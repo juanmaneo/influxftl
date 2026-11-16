@@ -302,7 +302,7 @@ fn urlencode(stack: &mut Stack) -> Result<()> {
 /// `URLDECODE`: `java.net.URLDecoder.decode(s, "UTF-8")`, which also turns `+` into a space.
 fn urldecode(stack: &mut Stack) -> Result<()> {
     let s = pop_string(stack, "URLDECODE", OPERATES_ON_STRING)?;
-    stack.push(java_url_decode(&s)?);
+    stack.push(url_decode_form(&s)?);
     Ok(())
 }
 
@@ -320,7 +320,7 @@ fn url_hex_digit(c: char) -> Result<u8> {
 /// `java.net.URLDecoder.decode(input, "UTF-8")`: `+` becomes a space, each run of `%xx`
 /// escapes is decoded as UTF-8 (malformed bytes become U+FFFD), a `%` without two
 /// following characters is an error.
-pub(crate) fn java_url_decode(input: &str) -> Result<String> {
+pub(crate) fn url_decode_form(input: &str) -> Result<String> {
     let chars: Vec<char> = input.chars().collect();
     let mut out = String::with_capacity(input.len());
     let mut bytes = Vec::new();
@@ -345,7 +345,7 @@ pub(crate) fn java_url_decode(input: &str) -> Result<String> {
                         _ => break,
                     }
                 }
-                out.push_str(&decode_utf8_java(&bytes));
+                out.push_str(&decode_utf8_replacing(&bytes));
             }
             _ => {
                 out.push(c);
@@ -653,7 +653,7 @@ impl Charset {
     /// `new String(bytes, charset)`: malformed input is replaced with U+FFFD.
     pub(crate) fn decode(self, bytes: &[u8]) -> String {
         match self {
-            Charset::Utf8 => decode_utf8_java(bytes),
+            Charset::Utf8 => decode_utf8_replacing(bytes),
             Charset::Latin1 => bytes.iter().map(|&b| char::from(b)).collect(),
             Charset::Ascii => bytes
                 .iter()
@@ -673,7 +673,7 @@ impl Charset {
 /// `new String(bytes, UTF_8)`: like `String::from_utf8_lossy`, except that an encoded
 /// surrogate (`ED A0..BF xx`) is one malformed sequence for Java (a single U+FFFD) whereas
 /// Rust reports each of its bytes.
-pub(crate) fn decode_utf8_java(bytes: &[u8]) -> String {
+pub(crate) fn decode_utf8_replacing(bytes: &[u8]) -> String {
     let mut out = String::with_capacity(bytes.len());
     let mut rest = bytes;
     loop {

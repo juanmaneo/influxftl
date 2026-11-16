@@ -328,7 +328,7 @@ the order that unlocks the most:
    `PARSE` (`gtsparse.rs`, the GTS input format of `GTSHelper.parse`, reusable by `UPDATE`).
    `IMMUTABLE` (frozen copies, DIVERGENCES §25).
    `->PICKLE` / `PICKLE->` (`pickle.rs`, `unpickle.rs`, ports of Pyrolite 4.30, with the Java
-   `HashMap` order of `javamap.rs`; DIVERGENCES §26).
+   `HashMap` order of `hash_order_map.rs`; DIVERGENCES §26).
    `SMARTPARSE` (`smartparse.rs`, with the Java `HashMap` order of the series, from the Thrift
    `Metadata.hashCode`; DIVERGENCES §27).
    `GEOSHAPE` (`geoshape.rs`, `geohash.rs`, `coverage.rs`, ports of `GeoXPLib` and

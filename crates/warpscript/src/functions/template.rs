@@ -144,7 +144,7 @@ fn mustache_error(message: &str, line: u32) -> Error {
 }
 
 /// Java `String.trim()`.
-pub(super) fn java_trim(s: &str) -> &str {
+pub(super) fn trim_control(s: &str) -> &str {
     s.trim_matches(|c: char| c <= ' ')
 }
 
@@ -266,7 +266,7 @@ impl Parser {
                 let Some(ch) = command.chars().next() else {
                     return Err(mustache_error("Empty mustache", self.line));
                 };
-                let variable = java_trim(&command[ch.len_utf8()..]);
+                let variable = trim_control(&command[ch.len_utf8()..]);
                 match ch {
                     '#' | '^' | '<' | '?' | '$' => {
                         start_of_line &= only_whitespace;
@@ -360,7 +360,7 @@ impl Parser {
                     }
                     '=' => {
                         write(&mut codes, &mut out);
-                        let trimmed = java_trim(&command[1..]);
+                        let trimmed = trim_control(&command[1..]);
                         let split: Vec<&str> = trimmed
                             .split([' ', '\t', '\n', '\x0B', '\x0C', '\r'])
                             .filter(|part| !part.is_empty())
@@ -381,7 +381,7 @@ impl Parser {
                         write(&mut codes, &mut out);
                         codes.push(Code {
                             kind: Kind::Variable {
-                                name: java_trim(&command).to_owned(),
+                                name: trim_control(&command).to_owned(),
                                 escaped: true,
                             },
                             appended: String::new(),
@@ -547,7 +547,7 @@ fn member(scope: &Value, name: &str) -> Option<Value> {
             "isEmpty" | "empty" => Some(Value::Boolean(s.is_empty())),
             "toUpperCase" => Some(Value::from(s.to_uppercase())),
             "toLowerCase" => Some(Value::from(s.to_lowercase())),
-            "trim" => Some(Value::from(java_trim(s))),
+            "trim" => Some(Value::from(trim_control(s))),
             "toString" => Some(scope.clone()),
             _ => None,
         },

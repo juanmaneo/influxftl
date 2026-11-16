@@ -16,8 +16,8 @@ use crate::curvefit::polynomial_value;
 use crate::encoder::EncodedValue;
 use crate::error::math::MathError;
 use crate::error::{Class, Error, Result};
-use crate::gts::{GeoTimeSerie, NO_ELEVATION, NO_LOCATION, java_binary_search};
-use crate::jrandom::JavaRandom;
+use crate::gts::{GeoTimeSerie, NO_ELEVATION, NO_LOCATION, binary_search};
+use crate::lcg48::Lcg48;
 use crate::macros::{Callable, StackFunction, StackObject};
 use crate::snapshot::value_snapshot;
 use crate::stack::Stack;
@@ -54,7 +54,7 @@ impl PolyFunc {
         if has_locations || has_elevations {
             gts.sort(false);
         }
-        match java_binary_search(&gts.ticks, tick) {
+        match binary_search(&gts.ticks, tick) {
             Some(idx) => (gts.location_at(idx), gts.elevation_at(idx)),
             None => (NO_LOCATION, NO_ELEVATION),
         }
@@ -292,7 +292,7 @@ impl RandPdf {
             let Some(Value::Long(state)) = stack.attribute(ATTRIBUTE_SEEDED_PRNG) else {
                 return Err(fail(self.name, "seeded PRNG was not initialized."));
             };
-            let mut generator = JavaRandom::from_state(*state);
+            let mut generator = Lcg48::from_state(*state);
             let rand = generator.next_double();
             stack.set_attribute(ATTRIBUTE_SEEDED_PRNG, Some(Value::Long(generator.state())));
             rand
