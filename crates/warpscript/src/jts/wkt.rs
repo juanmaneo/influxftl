@@ -466,31 +466,17 @@ fn write_tagged(geometry: &Geometry, out: &mut String) -> Result<()> {
         Geometry::LineString(line) => write_coords(line.coords(), out),
         Geometry::LinearRing(ring) => write_coords(ring.coords(), out),
         Geometry::Polygon(polygon) => write_polygon(polygon, out),
-        Geometry::MultiPoint(points) => {
+        Geometry::MultiPoint(points) => write_list(points, out, |point, out| {
+            let point = point.as_ref().ok_or(Error::NullPointer)?;
             out.push('(');
-            for (index, point) in points.iter().enumerate() {
-                if index > 0 {
-                    out.push_str(", ");
-                }
-                let point = point.as_ref().ok_or(Error::NullPointer)?;
-                out.push('(');
-                write_coord(point, out);
-                out.push(')');
-            }
+            write_coord(point, out);
             out.push(')');
-        }
+            Ok(())
+        })?,
         Geometry::MultiLineString(lines) => {
-            write_list(lines, out, |line, out| {
-                write_coords(line.coords(), out);
-                Ok(())
-            })?;
+            write_each(lines, out, |line, out| write_coords(line.coords(), out));
         }
-        Geometry::MultiPolygon(polygons) => {
-            write_list(polygons, out, |polygon, out| {
-                write_polygon(polygon, out);
-                Ok(())
-            })?;
-        }
+        Geometry::MultiPolygon(polygons) => write_each(polygons, out, write_polygon),
         Geometry::Collection(elements) => write_list(elements, out, write_tagged)?,
     }
     Ok(())
@@ -500,7 +486,7 @@ fn write_tagged(geometry: &Geometry, out: &mut String) -> Result<()> {
 fn write_list<T>(
     items: &[T],
     out: &mut String,
-    write_item: impl Fn(&T, &mut String) -> Result<()>,
+    mut write_item: impl FnMut(&T, &mut String) -> Result<()>,
 ) -> Result<()> {
     out.push('(');
     for (index, item) in items.iter().enumerate() {
@@ -511,6 +497,18 @@ fn write_list<T>(
     }
     out.push(')');
     Ok(())
+}
+
+/// A parenthesized list of `items` that cannot fail to be written.
+fn write_each<T>(items: &[T], out: &mut String, mut write_item: impl FnMut(&T, &mut String)) {
+    out.push('(');
+    for (index, item) in items.iter().enumerate() {
+        if index > 0 {
+            out.push_str(", ");
+        }
+        write_item(item, out);
+    }
+    out.push(')');
 }
 
 /// The coordinates of a line or a ring, `EMPTY` for none.
@@ -622,28 +620,27 @@ pub fn format_number(value: f64) -> String {
 /// Whether the digits `tail` that follow the 16 `fraction` digits kept round them up (half
 /// even). Rounding only happens to numbers below 1, of which the integer part is `0`.
 fn rounds_up(fraction: &[u8], tail: &[u8], value: f64) -> bool {
-    match tail {
-        [b'5'] => {
-            // Exactly half of the shortest digits: the exact value tells whether they were
-            // rounded. Both texts are `0.` and fraction digits, padded to the same length. The
-            // binary expansion of a number that has 17 fraction digits ends before the 120th.
-            let exact = format!("{value:.120}").into_bytes();
-            let mut shortest = [b"0.", fraction, b"5"].concat();
-            shortest.resize(exact.len(), b'0');
-            match exact.cmp(&shortest) {
-                std::cmp::Ordering::Greater => true,
-                std::cmp::Ordering::Less => false,
-                // ASCII digits are odd when the digits are.
-                std::cmp::Ordering::Equal => fraction.last().is_some_and(|digit| digit % 2 == 1),
-            }
+    if tail == b"5" {
+        // Exactly half of the shortest digits: the exact value tells whether they were
+        // rounded. Both texts are `0.` and fraction digits, padded to the same length. The
+        // binary expansion of a number that has 17 fraction digits ends before the 120th.
+        let exact = format!("{value:.120}").into_bytes();
+        let mut shortest = [b"0.", fraction, b"5"].concat();
+        shortest.resize(exact.len(), b'0');
+        match exact.cmp(&shortest) {
+            std::cmp::Ordering::Greater => true,
+            std::cmp::Ordering::Less => false,
+            // ASCII digits are odd when the digits are.
+            std::cmp::Ordering::Equal => fraction.last().is_some_and(|digit| digit % 2 == 1),
         }
-        [first, ..] => *first > b'5' || (*first == b'5' && tail.len() > 1),
-        [] => false,
+    } else {
+        tail.first()
+            .is_some_and(|first| *first > b'5' || (*first == b'5' && tail.len() > 1))
     }
 }
 
 /// Add one unit in the last place of `whole.fraction`.
-fn increment(whole: &mut Vec<u8>, fraction: &mut [u8]) {
+pub(super) fn increment(whole: &mut Vec<u8>, fraction: &mut [u8]) {
     for digit in fraction.iter_mut().rev().chain(whole.iter_mut().rev()) {
         if *digit == b'9' {
             *digit = b'0';

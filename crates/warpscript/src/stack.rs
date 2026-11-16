@@ -832,7 +832,7 @@ impl Stack {
     pub fn exec_multi(&mut self, script: &str) -> Result<()> {
         let saved = self.line_number;
         let mut result = Ok(());
-        for (idx, line) in script.lines().enumerate() {
+        for (idx, line) in script_lines(script).enumerate() {
             self.line_number = Some(idx + 1);
             match self.exec_line(line) {
                 Ok(()) => {}
@@ -1345,6 +1345,30 @@ impl Stack {
 enum Found {
     Stack(Callable),
     Object(Value),
+}
+
+/// The lines of `script` the way `BufferedReader.readLine` cuts them: at `\n`, at `\r` and at
+/// `\r\n` (`str::lines` ignores a lone `\r`, and a string cannot span two lines).
+pub(crate) fn script_lines(script: &str) -> impl Iterator<Item = &str> {
+    let mut rest = script;
+    std::iter::from_fn(move || {
+        if rest.is_empty() {
+            return None;
+        }
+        let (line, after) = match rest.find(['\n', '\r']) {
+            None => (rest, ""),
+            Some(end) => {
+                let terminator = if rest[end..].starts_with("\r\n") {
+                    2
+                } else {
+                    1
+                };
+                (&rest[..end], &rest[end + terminator..])
+            }
+        };
+        rest = after;
+        Some(line)
+    })
 }
 
 /// Index of the first occurrence of `needle` in `haystack` at or after `from`.

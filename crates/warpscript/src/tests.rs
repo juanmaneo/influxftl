@@ -75,6 +75,17 @@ pub(crate) fn assert_top(script: &str, expected: impl Into<Value>) {
     assert_eq!(actual, expected, "{script}");
 }
 
+/// Run `test` on a thread with a large stack: the recursive descent over hundreds of nested
+/// containers needs more than the 2 MB of a test thread in debug builds.
+pub(crate) fn on_big_stack(test: fn()) {
+    std::thread::Builder::new()
+        .stack_size(64 << 20)
+        .spawn(test)
+        .expect("the thread should start")
+        .join()
+        .expect("the test should pass");
+}
+
 /// A source of random bytes that delivers `bytes`, then fails.
 pub(crate) fn scripted(bytes: Vec<u8>) -> impl FnMut(&mut [u8]) -> Result<(), getrandom::Error> {
     let mut offset = 0;

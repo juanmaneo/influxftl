@@ -14,3 +14,12 @@ pub mod geometry;
 pub mod outline;
 pub mod wkb;
 pub mod wkt;
+
+#[cfg(test)]
+mod cover_tests;
+#[cfg(test)]
+mod geometry_tests;
+#[cfg(test)]
+mod outline_tests;
+#[cfg(test)]
+mod wkt_tests;

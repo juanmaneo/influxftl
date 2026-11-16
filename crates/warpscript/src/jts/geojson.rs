@@ -333,28 +333,19 @@ impl Class {
         })
     }
 
-    /// The simple name of the class.
-    fn name(self) -> &'static str {
-        match self {
-            Class::Point => "Point",
-            Class::LineString => "LineString",
-            Class::Polygon => "Polygon",
-            Class::MultiPoint => "MultiPoint",
-            Class::MultiLineString => "MultiLineString",
-            Class::MultiPolygon => "MultiPolygon",
-            Class::Collection => "GeometryCollection",
-        }
-    }
-
     /// Read the object as an instance of the class.
     fn decode(self, object: Object<'_>, path: &mut Path) -> Result<Decoded> {
         Ok(match self {
-            Class::Point => Decoded::Point(coordinates(self, object, path)?),
-            Class::LineString => Decoded::LineString(coordinates(self, object, path)?),
-            Class::Polygon => Decoded::Polygon(coordinates(self, object, path)?),
-            Class::MultiPoint => Decoded::MultiPoint(coordinates(self, object, path)?),
-            Class::MultiLineString => Decoded::MultiLineString(coordinates(self, object, path)?),
-            Class::MultiPolygon => Decoded::MultiPolygon(coordinates(self, object, path)?),
+            Class::Point => Decoded::Point(coordinates("Point", object, path)?),
+            Class::LineString => Decoded::LineString(coordinates("LineString", object, path)?),
+            Class::Polygon => Decoded::Polygon(coordinates("Polygon", object, path)?),
+            Class::MultiPoint => Decoded::MultiPoint(coordinates("MultiPoint", object, path)?),
+            Class::MultiLineString => {
+                Decoded::MultiLineString(coordinates("MultiLineString", object, path)?)
+            }
+            Class::MultiPolygon => {
+                Decoded::MultiPolygon(coordinates("MultiPolygon", object, path)?)
+            }
             Class::Collection => Decoded::Collection(geometries(object, path)?),
         })
     }
@@ -397,10 +388,14 @@ fn property<T>(
 }
 
 /// The `coordinates` of an object of a class that has some (and its `bbox`).
-fn coordinates<T: Decode>(class: Class, object: Object<'_>, path: &mut Path) -> Result<Option<T>> {
+fn coordinates<T: Decode>(
+    class: &'static str,
+    object: Object<'_>,
+    path: &mut Path,
+) -> Result<Option<T>> {
     let mut coordinates = None;
     properties(
-        class.name(),
+        class,
         COORDINATES_PROPERTIES,
         object,
         path,
@@ -516,12 +511,9 @@ fn read_feature(json: &Json) -> Result<()> {
         .ok_or_else(wrapped_null_pointer)?
         .as_text();
     match type_name.as_str() {
-        "Feature" | "FeatureCollection" => Err(Error::wrapped(GeoJsonError::NotAGeometry(
-            if type_name == "Feature" {
-                "Feature"
-            } else {
-                "FeatureCollection"
-            },
+        "Feature" => Err(Error::wrapped(GeoJsonError::NotAGeometry("Feature"))),
+        "FeatureCollection" => Err(Error::wrapped(GeoJsonError::NotAGeometry(
+            "FeatureCollection",
         ))),
         _ => read_class(geometry, &type_name).map(|_| ()),
     }
@@ -605,16 +597,15 @@ fn parse(text: &str) -> Result<Json> {
 /// first numbers.
 fn convert_position(position: Option<&Position>) -> Result<Coord> {
     let position = position.ok_or(Error::NullPointer)?;
-    let at = |index: usize| {
-        position.get(index).copied().ok_or(BoundsError::ArrayIndex {
-            index: index as i64,
-            length: position.len(),
-        })
-    };
-    if position.len() == 2 {
-        Coord::new(at(0)?, at(1)?, None)
-    } else {
-        Coord::new(at(0)?, at(1)?, Some(at(2)?))
+    match position.as_slice() {
+        [x, y] => Coord::new(*x, *y, None),
+        [x, y, z, ..] => Coord::new(*x, *y, Some(*z)),
+        // Java reads the first number that is missing: its index is the length.
+        short => Err(BoundsError::ArrayIndex {
+            index: short.len() as i64,
+            length: short.len(),
+        }
+        .into()),
     }
 }
 

@@ -7,7 +7,7 @@ use indexmap::IndexMap;
 
 use super::error::Error;
 use super::macros::Macro;
-use super::stack::{DEFAULT_REGISTERS, Limits, SecureCodec, SecureScript, Stack};
+use super::stack::{DEFAULT_REGISTERS, Limits, SecureCodec, SecureScript, Stack, script_lines};
 use super::tests::{assert_fails, assert_stack, assert_top, exec, fail, fail_msg, top};
 use super::value::Value;
 
@@ -63,6 +63,21 @@ fn strings() {
     assert_fails("'", "Cannot find end of string");
     assert_fails("'a'b", "Cannot find end of string");
     assert_fails("'%zz'", "Illegal hex characters");
+}
+
+#[test]
+fn lines_end_at_lf_cr_or_crlf() {
+    let lines = |script| script_lines(script).collect::<Vec<_>>();
+    assert_eq!(lines(""), Vec::<&str>::new());
+    assert_eq!(lines("a"), ["a"]);
+    assert_eq!(lines("a\nb\n"), ["a", "b"]);
+    assert_eq!(lines("a\rb\r"), ["a", "b"]);
+    assert_eq!(lines("a\r\nb\r\n"), ["a", "b"]);
+    assert_eq!(lines("a\n\nb\r\r\n\rc"), ["a", "", "b", "", "", "c"]);
+    // A string cannot go over a line end, a lone `\r` included.
+    assert_fails("'a\rb'", "Cannot find end of string");
+    assert_fails("'a\r\nb'", "Cannot find end of string");
+    assert_top("'a'\r'b'", "b");
 }
 
 #[test]

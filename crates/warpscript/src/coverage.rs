@@ -454,6 +454,11 @@ impl Coverage {
             .collect()
     }
 
+    /// The number of cells of all the resolutions.
+    pub fn cell_count(&self) -> usize {
+        self.cells.iter().map(BTreeSet::len).sum()
+    }
+
     /// `toGeoCells`: the geocells of the resolutions up to `finest` (at most 30), sorted as
     /// signed longs.
     pub fn to_geocells(&self, finest: i32) -> Vec<i64> {

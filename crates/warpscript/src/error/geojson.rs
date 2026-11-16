@@ -134,6 +134,25 @@ pub enum StringTarget {
     Properties,
 }
 
+impl StringTarget {
+    /// The Java type, as Jackson writes it.
+    fn class_name(self) -> String {
+        match self {
+            StringTarget::Doubles(dimensions) => format!("double{}", "[]".repeat(dimensions)),
+            StringTarget::Geometries => "org.wololo.geojson.Geometry[]".to_owned(),
+            StringTarget::Properties => "java.util.LinkedHashMap".to_owned(),
+        }
+    }
+
+    /// What Jackson adds after the type: a map has a creator, but not from a string.
+    fn hint(self) -> &'static str {
+        match self {
+            StringTarget::Properties => " (although at least one Creator exists)",
+            StringTarget::Doubles(_) | StringTarget::Geometries => "",
+        }
+    }
+}
+
 /// A failure of the GeoJSON reader.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum GeoJsonError {
@@ -203,14 +222,10 @@ pub enum GeoJsonError {
     /// A string where an array or a map is expected (`InvalidDefinitionException`, and
     /// `MismatchedInputException` for a map).
     #[error(
-        "Cannot construct instance of `{}`: no String-argument constructor/factory method to \
+        "Cannot construct instance of `{}`{}: no String-argument constructor/factory method to \
          deserialize from String value ('{text}')  {SOURCE}{}",
-        match target {
-            StringTarget::Doubles(dimensions) => format!("double{}", "[]".repeat(*dimensions)),
-            StringTarget::Geometries => "org.wololo.geojson.Geometry[]".to_owned(),
-            StringTarget::Properties =>
-                "java.util.LinkedHashMap` (although at least one Creator exists".to_owned(),
-        },
+        target.class_name(),
+        target.hint(),
         chain.through(None)
     )]
     NoStringConstructor {

@@ -61,17 +61,16 @@ pub fn cover_cells(
         }
     };
     let min_resolution = if uniform { resolution } else { MIN_RESOLUTION };
-    let Some(mut coverage) =
-        cover_geometry(
-            geometry,
-            min_resolution,
-            resolution,
-            inside,
-            Budget {
-                cells: max_cells,
-                pending: MAX_PENDING_CELLS,
-            },
-        )?
+    let Some(mut coverage) = cover_geometry(
+        geometry,
+        min_resolution,
+        resolution,
+        inside,
+        Budget {
+            cells: max_cells,
+            pending: MAX_PENDING_CELLS,
+        },
+    )?
     else {
         return Ok(None);
     };
@@ -104,7 +103,7 @@ fn bounding_box(geometry: &Geometry) -> [i64; 4] {
 /// `HHCodeHelper.toLongLat` and `toLongLon`: the units of a latitude (`limit` 90) or a
 /// longitude (`limit` 180), the last one for the limit itself and the one before the first for
 /// the degrees that are below the planisphere.
-fn to_units(degrees: f64, limit: f64, degrees_per_unit: f64) -> i64 {
+pub(super) fn to_units(degrees: f64, limit: f64, degrees_per_unit: f64) -> i64 {
     let shifted = degrees + limit;
     let units = if degrees == limit {
         0xFFFF_FFFF
@@ -126,10 +125,11 @@ fn to_units(degrees: f64, limit: f64, degrees_per_unit: f64) -> i64 {
 ///
 /// [`NotFinite`](crate::finite::NotFinite) for a distance, or a tolerated error, that is not
 /// finite (Java compares with `NaN` and goes on to the resolution 2).
-fn optimal_resolution(bounds: &[i64; 4], error_fraction: f64) -> Result<u32> {
+pub(super) fn optimal_resolution(bounds: &[i64; 4], error_fraction: f64) -> Result<u32> {
     let [south, west, north, east] = *bounds;
-    let diagonal = ensure_finite(orthodromic_distance_units(south, west, north, east))?;
-    let tolerated = ensure_finite(diagonal * error_fraction)?;
+    // The distance is `NaN` when the haversine rounds past 1, and the product keeps that.
+    let tolerated =
+        ensure_finite(orthodromic_distance_units(south, west, north, east) * error_fraction)?;
     let mut resolution = 32;
     while resolution > 2 {
         let lon_span = PI * 2.0 / (1u64 << resolution) as f64;
@@ -211,7 +211,9 @@ pub fn cover_geometry(
             for sub in sub_geo_cells(geocell) {
                 let ring = cell_bounds(sub, 32);
                 let shape = cell_ring(&ring);
-                if (target.intersects(&ring, &shape)? && !inside) || target.covers(&ring, &shape)? {
+                // `covers` cannot fail after `intersects` did not: both need the same topology.
+                let meets = target.intersects(&ring, &shape)?;
+                if (meets && !inside) || target.covers_checked(&ring, &shape) {
                     coverage.add_cell(32, sub);
                     count += 1;
                 }
@@ -323,15 +325,16 @@ impl Target {
 
     /// `Geometry.covers(shape)` for a `shape` of the bounds `cell`.
     fn covers(&self, cell: &Envelope, shape: &geo::Geometry<f64>) -> Result<bool> {
-        if !self.envelope.covers(cell) {
-            return Ok(false);
+        if self.envelope.covers(cell) && !self.rectangle {
+            self.check_topology(cell)?;
         }
-        if self.rectangle {
-            return Ok(true);
-        }
-        self.refuse_collection()?;
-        self.locate_corner(cell)?;
-        Ok(self.parts.relate(shape).is_covers())
+        Ok(self.covers_checked(cell, shape))
+    }
+
+    /// [`covers`](Self::covers) once the topology of the geometry is known to be computable
+    /// for `cell`.
+    fn covers_checked(&self, cell: &Envelope, shape: &geo::Geometry<f64>) -> bool {
+        self.envelope.covers(cell) && (self.rectangle || self.parts.relate(shape).is_covers())
     }
 
     /// `Geometry.intersects(shape)` for a `shape` of the bounds `cell`.
@@ -342,9 +345,19 @@ impl Target {
         if self.rectangle {
             return Ok(self.any_part_meets(shape));
         }
-        self.refuse_collection()?;
-        self.locate_corner(cell)?;
+        self.check_topology(cell)?;
         Ok(self.parts.relate(shape).is_intersects())
+    }
+
+    /// What `Geometry.relate` needs of a geometry that is not a rectangle.
+    ///
+    /// # Errors
+    ///
+    /// [`GeometryError::CollectionArgument`] for a `GeometryCollection`, [`Error::NullPointer`]
+    /// for an empty point that `locate_corner` meets.
+    fn check_topology(&self, cell: &Envelope) -> Result<()> {
+        self.refuse_collection()?;
+        self.locate_corner(cell)
     }
 
     /// The location of the first corner of a cell in the geometry, that `RelateOp` needs unless

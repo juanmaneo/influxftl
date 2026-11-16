@@ -153,21 +153,16 @@ fn border_set(mut queue: Queue) -> JavaHashMap<i64, ()> {
         if (start, end) == (open_start, open_end) {
             // Both sides have a cell there: not a border.
             open = None;
-        } else if end <= open_end {
-            // Inside the open segment (the queue hands out the segments by start): it is cut.
+        } else if start < open_end {
+            // The segments are aligned on the grid of the cells, so two of them are nested or
+            // apart: one that starts inside the open segment (the queue hands out the segments
+            // by start) ends inside it, and is cut out.
             if start > open_start {
                 queue.add(open_start, start);
             }
             if end < open_end {
                 queue.add(end, open_end);
             }
-            open = None;
-        } else if start < open_end {
-            // Overlaps the end of the open segment.
-            if start > open_start {
-                queue.add(open_start, start);
-            }
-            queue.add(open_end, end);
             open = None;
         } else {
             kept.add(open_start, open_end);
@@ -234,13 +229,21 @@ fn rings(cells: &[i64]) -> Vec<Vec<Vertex>> {
 /// Walk the segments of a graph (a vertex and the vertices it is joined to) into rings, as
 /// `CoverageHelper.toEnvelope` does: start from the first vertex of the table, take the last
 /// neighbor of each vertex, close the ring when back at the start.
-fn trace(mut graph: JavaHashMap<i64, Vec<i64>>) -> Vec<Vec<i64>> {
+///
+/// `rings` builds graphs whose segments are joined both ways. Where one is not, Java fails (an
+/// `NullPointerException` on a neighbor that is no vertex, an `ArrayIndexOutOfBoundsException`
+/// on a vertex without a neighbor left); here the walk ends there, the vertex is dropped, and
+/// the next ring starts.
+pub(crate) fn trace(mut graph: JavaHashMap<i64, Vec<i64>>) -> Vec<Vec<i64>> {
     let mut rings = Vec::new();
     while let Some(first) = graph.first().map(|(_, key, _)| *key) {
         let mut ring = vec![first];
         let mut vertex = first;
-        // A vertex without a segment left ends the ring short of its start.
-        while let Some(next) = graph.get_mut(long_hash(vertex), &vertex).and_then(Vec::pop) {
+        loop {
+            let Some(next) = graph.get_mut(long_hash(vertex), &vertex).and_then(Vec::pop) else {
+                graph.remove(long_hash(vertex), &vertex);
+                break;
+            };
             if let Some(neighbors) = graph.get_mut(long_hash(next), &next) {
                 if let Some(position) = neighbors.iter().position(|n| *n == vertex) {
                     neighbors.remove(position);

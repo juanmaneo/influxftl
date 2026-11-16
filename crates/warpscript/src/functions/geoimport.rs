@@ -192,29 +192,27 @@ fn export(
     expected: &str,
     write: fn(Option<Geometry>) -> Result<Value>,
 ) -> Result<()> {
-    if matches!(stack.peek()?, Value::GeoShape(_) | Value::Boolean(_)) {
-        shape_to_text(stack, name)?;
+    let mut object = stack.pop()?;
+    if matches!(object, Value::GeoShape(_) | Value::Boolean(_)) {
+        object = Value::from(shape_to_text(stack, name, object)?);
     }
-    let object = stack.pop()?;
     write_object(stack, name, expected, &object, write)
 }
 
-/// `TOGEOJSON` on a `GEOSHAPE`, or on a `BOOLEAN` (every cell) and the `GEOSHAPE` under it.
-fn shape_to_text(stack: &mut Stack, name: &str) -> Result<()> {
-    let mut all_cells = false;
-    let mut top = stack.pop()?;
-    if let Value::Boolean(flag) = top {
-        all_cells = flag;
-        top = stack.pop()?;
-    }
-    let Value::GeoShape(shape) = top else {
+/// `TOGEOJSON` on a `GEOSHAPE`, or on a `BOOLEAN` (every cell) and the `GEOSHAPE` under it:
+/// `top` is the value popped, the shape is under it when it is a `BOOLEAN`.
+fn shape_to_text(stack: &mut Stack, name: &str, top: Value) -> Result<String> {
+    let (all_cells, shape) = match top {
+        Value::Boolean(flag) => (flag, stack.pop()?),
+        shape => (false, shape),
+    };
+    let Value::GeoShape(shape) = shape else {
         return Err(fail(
             name,
             "operates on a GEOSHAPE when first given a BOOLEAN.",
         ));
     };
-    stack.push(Value::from(shape_to_geojson(shape.cells(), all_cells)?));
-    Ok(())
+    shape_to_geojson(shape.cells(), all_cells)
 }
 
 /// `->WKT`: the WKT of a `GEOSHAPE` or of a geometry.
@@ -247,10 +245,12 @@ fn towkb(stack: &mut Stack) -> Result<()> {
 /// `->GEOJSON`: the GeoJSON of a `GEOSHAPE` or of a geometry.
 fn togeojson(stack: &mut Stack) -> Result<()> {
     const NAME: &str = "->GEOJSON";
-    if matches!(stack.peek()?, Value::GeoShape(_) | Value::Boolean(_)) {
-        return shape_to_text(stack, NAME);
-    }
     let object = stack.pop()?;
+    if matches!(object, Value::GeoShape(_) | Value::Boolean(_)) {
+        let json = shape_to_text(stack, NAME, object)?;
+        stack.push(Value::from(json));
+        return Ok(());
+    }
     write_object(
         stack,
         NAME,
