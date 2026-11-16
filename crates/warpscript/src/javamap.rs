@@ -64,348 +64,270 @@ fn spread(hash: i32) -> i32 {
     (h ^ (h >> 16)) as i32
 }
 
-/// A node of a tree bin (`HashMap.TreeNode`): the links are positions in the bin's nodes.
-#[derive(Clone, Debug)]
-struct Node<K, V> {
-    entry: Entry<K, V>,
-    parent: Option<usize>,
-    left: Option<usize>,
-    right: Option<usize>,
-    /// The previous and next nodes in iteration order.
-    prev: Option<usize>,
-    next: Option<usize>,
+/// The sentinel node of the trees: the black node that stands for the missing children and parent
+/// of `HashMap.TreeNode` (its `null`). Its colour is never changed; its other links are written
+/// where Java tests for `null`, and never read.
+const NIL: usize = 0;
+
+/// The links of a node of a tree bin: its place in the tree (`parent`, `left`, `right`), its place
+/// in the iteration order of the bin (`prev`, `next`) and its colour. The default is the sentinel's.
+#[derive(Clone, Copy, Debug, Default)]
+struct Link {
+    parent: usize,
+    left: usize,
+    right: usize,
+    prev: usize,
+    next: usize,
     red: bool,
 }
 
-/// A bin made a red-black tree (`HashMap.TreeNode`). The nodes it removed stay in `nodes`,
-/// out of reach.
-#[derive(Clone, Debug)]
-struct Tree<K, V> {
-    nodes: Vec<Node<K, V>>,
-    root: usize,
-    /// The head of the bin: where iteration starts.
-    first: usize,
+/// The side of a node: the left or the right child of its parent.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Side {
+    Left,
+    Right,
 }
 
-/// What removing a node from a tree bin leaves.
-enum Removal {
-    /// A tree.
-    Tree,
-    /// Too few nodes: the bin is a list again.
-    List,
-    /// No node.
-    Empty,
+impl Side {
+    fn other(self) -> Side {
+        match self {
+            Side::Left => Side::Right,
+            Side::Right => Side::Left,
+        }
+    }
+}
+
+/// A bin made a red-black tree (`HashMap.TreeNode`). Node `n` (`n >= 1`) holds `entries[n - 1]`
+/// and has the links `links[n]`. A removal leaves its node in the vectors, out of reach: a tree
+/// that gets too small to be a tree is converted to a list, and dropped.
+#[derive(Clone, Debug)]
+struct Tree<K, V> {
+    entries: Vec<Entry<K, V>>,
+    links: Vec<Link>,
+    /// The root (always black).
+    root: usize,
+    /// The head of the bin: where the iteration starts.
+    first: usize,
 }
 
 impl<K, V> Tree<K, V> {
     /// `TreeNode.treeify` of a list of entries, which `HashMap.treeifyBin` and the split of a
-    /// tree make into a tree. The list is not empty.
+    /// table doubling make into a tree. The list is not empty.
     fn from_list(entries: Vec<Entry<K, V>>, order: Order<K>) -> Self {
         let count = entries.len();
-        let nodes = entries
-            .into_iter()
-            .enumerate()
-            .map(|(position, entry)| Node {
-                entry,
-                parent: None,
-                left: None,
-                right: None,
-                prev: position.checked_sub(1),
-                next: (position + 1 < count).then_some(position + 1),
-                red: false,
-            })
+        let links = std::iter::once(Link::default())
+            .chain((0..count).map(|position| Link {
+                prev: position,
+                next: if position + 1 < count {
+                    position + 2
+                } else {
+                    NIL
+                },
+                ..Link::default()
+            }))
             .collect();
         let mut tree = Tree {
-            nodes,
-            root: 0,
-            first: 0,
+            entries,
+            links,
+            root: NIL,
+            first: 1,
         };
         tree.treeify(order);
         tree
     }
 
-    /// `TreeNode.treeify`: insert the nodes in list order, then bring the root to the front.
+    fn entry(&self, node: usize) -> &Entry<K, V> {
+        &self.entries[node - 1]
+    }
+
+    fn entry_mut(&mut self, node: usize) -> &mut Entry<K, V> {
+        &mut self.entries[node - 1]
+    }
+
+    fn child(&self, node: usize, side: Side) -> usize {
+        match side {
+            Side::Left => self.links[node].left,
+            Side::Right => self.links[node].right,
+        }
+    }
+
+    fn set_child(&mut self, node: usize, side: Side, child: usize) {
+        match side {
+            Side::Left => self.links[node].left = child,
+            Side::Right => self.links[node].right = child,
+        }
+    }
+
+    /// The side of its parent that `node` is on.
+    fn side_of(&self, node: usize) -> Side {
+        if self.links[self.links[node].parent].left == node {
+            Side::Left
+        } else {
+            Side::Right
+        }
+    }
+
+    /// `TreeNode.treeify`: the nodes are inserted in iteration order, then the root moves to the
+    /// front of the bin.
     fn treeify(&mut self, order: Order<K>) {
-        let mut at = Some(self.first);
-        let mut rooted = false;
-        while let Some(x) = at {
-            at = self.nodes[x].next;
-            self.nodes[x].left = None;
-            self.nodes[x].right = None;
-            if !rooted {
-                self.nodes[x].parent = None;
-                self.nodes[x].red = false;
-                self.root = x;
-                rooted = true;
-                continue;
-            }
-            let (parent, dir) = self.place(x, order);
-            self.nodes[x].parent = Some(parent);
-            if dir <= 0 {
-                self.nodes[parent].left = Some(x);
-            } else {
-                self.nodes[parent].right = Some(x);
-            }
+        self.root = self.first;
+        let mut x = self.links[self.first].next;
+        while x != NIL {
+            let next = self.links[x].next;
+            let entry = self.entry(x);
+            let (parent, side) = self.place(spread(entry.0), &entry.1, order);
+            self.links[x].parent = parent;
+            self.set_child(parent, side, x);
             self.balance_insertion(x);
+            x = next;
         }
         self.move_root_to_front();
     }
 
-    /// The node under which `x` is attached, and on which side (`dir <= 0`: left).
-    fn place(&self, x: usize, order: Order<K>) -> (usize, i32) {
-        let entry = &self.nodes[x].entry;
-        let h = spread(entry.0);
+    /// The node under which a key of spread hash `h` goes, and the side it goes to.
+    fn place(&self, h: i32, key: &K, order: Order<K>) -> (usize, Side) {
         let mut p = self.root;
         loop {
-            let dir = self.direction(p, h, &entry.1, order);
-            match if dir <= 0 {
-                self.nodes[p].left
-            } else {
-                self.nodes[p].right
-            } {
-                Some(child) => p = child,
-                None => return (p, dir),
+            let side = self.direction(p, h, key, order);
+            match self.child(p, side) {
+                NIL => return (p, side),
+                child => p = child,
             }
         }
     }
 
-    /// Which way a key of spread hash `h` goes from the node `p`: by hash, then by order. Keys
-    /// the order does not tell apart go left (Java breaks that tie with identity hash codes).
-    fn direction(&self, p: usize, h: i32, key: &K, order: Order<K>) -> i32 {
-        let node = &self.nodes[p];
-        match spread(node.entry.0).cmp(&h) {
-            Ordering::Greater => -1,
-            Ordering::Less => 1,
-            Ordering::Equal => match order(key, &node.entry.1) {
-                Some(Ordering::Greater) => 1,
-                _ => -1,
+    /// The side of the node `p` a key of spread hash `h` goes to: by the hash, then by `order`.
+    /// Keys that `order` does not tell apart go left (Java breaks that tie with the identity hash
+    /// codes, which no model follows).
+    fn direction(&self, p: usize, h: i32, key: &K, order: Order<K>) -> Side {
+        let node = self.entry(p);
+        match spread(node.0).cmp(&h) {
+            Ordering::Greater => Side::Left,
+            Ordering::Less => Side::Right,
+            Ordering::Equal => match order(key, &node.1) {
+                Some(Ordering::Greater) => Side::Right,
+                _ => Side::Left,
             },
         }
     }
 
-    /// `TreeNode.moveRootToFront`.
+    /// `TreeNode.moveRootToFront`: the root heads the iteration order of the bin.
     fn move_root_to_front(&mut self) {
         let root = self.root;
         if root == self.first {
             return;
         }
-        let (prev, next) = (self.nodes[root].prev, self.nodes[root].next);
-        if let Some(next) = next {
-            self.nodes[next].prev = prev;
-        }
-        if let Some(prev) = prev {
-            self.nodes[prev].next = next;
-        }
-        self.nodes[self.first].prev = Some(root);
-        self.nodes[root].next = Some(self.first);
-        self.nodes[root].prev = None;
+        let Link { prev, next, .. } = self.links[root];
+        self.links[next].prev = prev;
+        self.links[prev].next = next;
+        self.links[self.first].prev = root;
+        self.links[root].next = self.first;
+        self.links[root].prev = NIL;
         self.first = root;
     }
 
-    /// `TreeNode.rotateLeft`.
-    fn rotate_left(&mut self, p: usize) {
-        let Some(r) = self.nodes[p].right else {
-            return;
-        };
-        let rl = self.nodes[r].left;
-        self.nodes[p].right = rl;
-        if let Some(rl) = rl {
-            self.nodes[rl].parent = Some(p);
+    /// `TreeNode.rotateLeft` (`side` is `Left`) or `rotateRight`: the child of `p` on the other
+    /// side rises in its place, and `p` moves down on `side`.
+    fn rotate(&mut self, p: usize, side: Side) {
+        let risen = self.child(p, side.other());
+        let moved = self.child(risen, side);
+        self.set_child(p, side.other(), moved);
+        self.links[moved].parent = p;
+        let pp = self.links[p].parent;
+        self.links[risen].parent = pp;
+        if pp == NIL {
+            self.root = risen;
+            self.links[risen].red = false;
+        } else {
+            let pp_side = self.side_of(p);
+            self.set_child(pp, pp_side, risen);
         }
-        let pp = self.nodes[p].parent;
-        self.nodes[r].parent = pp;
-        match pp {
-            None => {
-                self.root = r;
-                self.nodes[r].red = false;
-            }
-            Some(pp) if self.nodes[pp].left == Some(p) => self.nodes[pp].left = Some(r),
-            Some(pp) => self.nodes[pp].right = Some(r),
-        }
-        self.nodes[r].left = Some(p);
-        self.nodes[p].parent = Some(r);
+        self.set_child(risen, side, p);
+        self.links[p].parent = risen;
     }
 
-    /// `TreeNode.rotateRight`.
-    fn rotate_right(&mut self, p: usize) {
-        let Some(l) = self.nodes[p].left else {
-            return;
-        };
-        let lr = self.nodes[l].right;
-        self.nodes[p].left = lr;
-        if let Some(lr) = lr {
-            self.nodes[lr].parent = Some(p);
-        }
-        let pp = self.nodes[p].parent;
-        self.nodes[l].parent = pp;
-        match pp {
-            None => {
-                self.root = l;
-                self.nodes[l].red = false;
-            }
-            Some(pp) if self.nodes[pp].right == Some(p) => self.nodes[pp].right = Some(l),
-            Some(pp) => self.nodes[pp].left = Some(l),
-        }
-        self.nodes[l].right = Some(p);
-        self.nodes[p].parent = Some(l);
-    }
-
-    /// Whether a node, when there is one, is red.
-    fn is_red(&self, node: Option<usize>) -> bool {
-        node.is_some_and(|node| self.nodes[node].red)
-    }
-
-    /// `TreeNode.balanceInsertion`. The code of the two sides of Java is one, `parent_is_left`
-    /// telling which one it runs on.
+    /// `TreeNode.balanceInsertion` of the new red node `x`: recolouring and rotations until the
+    /// rules hold again.
     fn balance_insertion(&mut self, mut x: usize) {
-        self.nodes[x].red = true;
+        self.links[x].red = true;
         loop {
-            let Some(xp) = self.nodes[x].parent else {
-                self.nodes[x].red = false;
+            let xp = self.links[x].parent;
+            if xp == NIL {
+                self.links[x].red = false;
                 self.root = x;
                 return;
-            };
-            let Some(xpp) = self.nodes[xp].parent.filter(|_| self.nodes[xp].red) else {
+            }
+            if !self.links[xp].red {
                 return;
-            };
-            let parent_is_left = self.nodes[xpp].left == Some(xp);
-            let uncle = if parent_is_left {
-                self.nodes[xpp].right
-            } else {
-                self.nodes[xpp].left
-            };
-            if self.is_red(uncle) {
-                for node in [uncle, Some(xp)].into_iter().flatten() {
-                    self.nodes[node].red = false;
-                }
-                self.nodes[xpp].red = true;
+            }
+            // A red node is never the root: its parent exists.
+            let xpp = self.links[xp].parent;
+            let xp_side = self.side_of(xp);
+            let uncle = self.child(xpp, xp_side.other());
+            if self.links[uncle].red {
+                self.links[uncle].red = false;
+                self.links[xp].red = false;
+                self.links[xpp].red = true;
                 x = xpp;
                 continue;
             }
-            let inner = if parent_is_left {
-                self.nodes[xp].right
+            // An inner child is rotated outwards first: it is then the one that rises.
+            let (xp, xpp) = if x == self.child(xp, xp_side.other()) {
+                self.rotate(xp, xp_side);
+                (x, xpp)
             } else {
-                self.nodes[xp].left
+                (xp, xpp)
             };
-            let (xp, xpp) = if inner == Some(x) {
-                x = xp;
-                if parent_is_left {
-                    self.rotate_left(x);
-                } else {
-                    self.rotate_right(x);
-                }
-                let xp = self.nodes[x].parent;
-                (xp, xp.and_then(|parent| self.nodes[parent].parent))
-            } else {
-                (Some(xp), Some(xpp))
-            };
-            if let Some(xp) = xp {
-                self.nodes[xp].red = false;
-                if let Some(xpp) = xpp {
-                    self.nodes[xpp].red = true;
-                    if parent_is_left {
-                        self.rotate_right(xpp);
-                    } else {
-                        self.rotate_left(xpp);
-                    }
-                }
-            }
+            self.links[xp].red = false;
+            self.links[xpp].red = true;
+            self.rotate(xpp, xp_side.other());
+            return;
         }
     }
 
-    /// `TreeNode.balanceDeletion`, the two sides of Java written once: `x_is_left` tells which
-    /// one this is.
-    fn balance_deletion(&mut self, mut x: Option<usize>) {
+    /// `TreeNode.balanceDeletion` of the black node `x`, which a removal leaves one black short:
+    /// recolouring and rotations, the shortage moving up while the sibling has no red child.
+    fn balance_deletion(&mut self, mut x: usize) {
         loop {
-            // The root has no parent: nothing to balance (nor does an absent node).
-            let Some((xi, xp)) = x.and_then(|xi| self.nodes[xi].parent.map(|xp| (xi, xp))) else {
-                return;
-            };
-            if self.nodes[xi].red {
-                self.nodes[xi].red = false;
+            if x == self.root {
                 return;
             }
-            let x_is_left = self.nodes[xp].left == Some(xi);
-            let mut xp = Some(xp);
-            let mut sibling = self.sibling_of(xp, x_is_left);
-            if self.is_red(sibling) {
-                if let Some(node) = sibling {
-                    self.nodes[node].red = false;
-                }
-                if let Some(node) = xp {
-                    self.nodes[node].red = true;
-                    if x_is_left {
-                        self.rotate_left(node);
-                    } else {
-                        self.rotate_right(node);
-                    }
-                }
-                xp = self.nodes[xi].parent;
-                sibling = self.sibling_of(xp, x_is_left);
+            if self.links[x].red {
+                self.links[x].red = false;
+                return;
             }
-            // The children of the sibling: `near` the side `x` is on, and `far` from it.
-            let (near, far) = sibling.map_or((None, None), |s| {
-                let (left, right) = (self.nodes[s].left, self.nodes[s].right);
-                if x_is_left {
-                    (left, right)
-                } else {
-                    (right, left)
-                }
-            });
-            if !self.is_red(near) && !self.is_red(far) {
-                if let Some(node) = sibling {
-                    self.nodes[node].red = true;
-                }
+            let xp = self.links[x].parent;
+            let x_side = self.side_of(x);
+            let mut sibling = self.child(xp, x_side.other());
+            if self.links[sibling].red {
+                self.links[sibling].red = false;
+                self.links[xp].red = true;
+                self.rotate(xp, x_side);
+                sibling = self.child(xp, x_side.other());
+            }
+            // The children of the sibling: `near` is on the side of `x`, `far` is not.
+            let near = self.child(sibling, x_side);
+            let far = self.child(sibling, x_side.other());
+            if !self.links[near].red && !self.links[far].red {
+                self.links[sibling].red = true;
                 x = xp;
                 continue;
             }
-            if !self.is_red(far) {
-                if let Some(node) = near {
-                    self.nodes[node].red = false;
-                }
-                if let Some(node) = sibling {
-                    self.nodes[node].red = true;
-                    if x_is_left {
-                        self.rotate_right(node);
-                    } else {
-                        self.rotate_left(node);
-                    }
-                }
-                xp = self.nodes[xi].parent;
-                sibling = self.sibling_of(xp, x_is_left);
-            }
-            if let Some(node) = sibling {
-                self.nodes[node].red = self.is_red(xp);
-                let far = if x_is_left {
-                    self.nodes[node].right
-                } else {
-                    self.nodes[node].left
-                };
-                if let Some(far) = far {
-                    self.nodes[far].red = false;
-                }
-            }
-            if let Some(node) = xp {
-                self.nodes[node].red = false;
-                if x_is_left {
-                    self.rotate_left(node);
-                } else {
-                    self.rotate_right(node);
-                }
-            }
-            x = Some(self.root);
-        }
-    }
-
-    /// The child of `parent` that is not on the side of `x_is_left`.
-    fn sibling_of(&self, parent: Option<usize>, x_is_left: bool) -> Option<usize> {
-        parent.and_then(|p| {
-            if x_is_left {
-                self.nodes[p].right
+            let far = if self.links[far].red {
+                far
             } else {
-                self.nodes[p].left
-            }
-        })
+                self.links[near].red = false;
+                self.links[sibling].red = true;
+                self.rotate(sibling, x_side.other());
+                sibling = self.child(xp, x_side.other());
+                self.child(sibling, x_side.other())
+            };
+            self.links[sibling].red = self.links[xp].red;
+            self.links[far].red = false;
+            self.links[xp].red = false;
+            self.rotate(xp, x_side);
+            return;
+        }
     }
 
     /// `TreeNode.find`: the node of `key`, whose spread hash is `h`, below `start`.
@@ -413,22 +335,23 @@ impl<K, V> Tree<K, V> {
     where
         K: PartialEq,
     {
-        let mut at = Some(start);
-        while let Some(p) = at {
-            let node = &self.nodes[p];
-            at = match spread(node.entry.0).cmp(&h) {
-                Ordering::Greater => node.left,
-                Ordering::Less => node.right,
-                Ordering::Equal if node.entry.1 == *key => return Some(p),
-                Ordering::Equal => match (node.left, node.right) {
-                    (None, right) => right,
-                    (left, None) => left,
-                    (Some(left), Some(right)) => match order(key, &node.entry.1) {
-                        Some(Ordering::Less) => Some(left),
-                        Some(Ordering::Greater) => Some(right),
+        let mut at = start;
+        while at != NIL {
+            let Link { left, right, .. } = self.links[at];
+            let entry = self.entry(at);
+            at = match spread(entry.0).cmp(&h) {
+                Ordering::Greater => left,
+                Ordering::Less => right,
+                Ordering::Equal if entry.1 == *key => return Some(at),
+                Ordering::Equal => match (left, right) {
+                    (NIL, right) => right,
+                    (left, NIL) => left,
+                    (left, right) => match order(key, &entry.1) {
+                        Some(Ordering::Less) => left,
+                        Some(Ordering::Greater) => right,
                         _ => match self.find(right, h, key, order) {
                             Some(found) => return Some(found),
-                            None => Some(left),
+                            None => left,
                         },
                     },
                 },
@@ -437,205 +360,182 @@ impl<K, V> Tree<K, V> {
         None
     }
 
-    /// `TreeNode.putTreeVal` of a key that the tree does not have: the new node follows its
-    /// parent in iteration order.
+    /// `TreeNode.putTreeVal` of a key the tree does not have: the new node comes after its parent
+    /// in the iteration order.
     fn insert(&mut self, entry: Entry<K, V>, order: Order<K>) {
-        let h = spread(entry.0);
-        let mut p = self.root;
-        let (parent, dir) = loop {
-            let dir = self.direction(p, h, &entry.1, order);
-            match if dir <= 0 {
-                self.nodes[p].left
-            } else {
-                self.nodes[p].right
-            } {
-                Some(child) => p = child,
-                None => break (p, dir),
-            }
-        };
-        let next = self.nodes[parent].next;
-        let x = self.nodes.len();
-        self.nodes.push(Node {
-            entry,
-            parent: Some(parent),
-            left: None,
-            right: None,
-            prev: Some(parent),
+        let (parent, side) = self.place(spread(entry.0), &entry.1, order);
+        let x = self.links.len();
+        let next = self.links[parent].next;
+        self.entries.push(entry);
+        self.links.push(Link {
+            parent,
+            prev: parent,
             next,
-            red: false,
+            ..Link::default()
         });
-        if dir <= 0 {
-            self.nodes[parent].left = Some(x);
-        } else {
-            self.nodes[parent].right = Some(x);
-        }
-        self.nodes[parent].next = Some(x);
-        if let Some(next) = next {
-            self.nodes[next].prev = Some(x);
-        }
+        self.set_child(parent, side, x);
+        self.links[parent].next = x;
+        self.links[next].prev = x;
         self.balance_insertion(x);
         self.move_root_to_front();
     }
 
-    /// `TreeNode.removeTreeNode` (movable) of the node `p`.
-    fn remove(&mut self, p: usize) -> Removal {
-        let (prev, next) = (self.nodes[p].prev, self.nodes[p].next);
-        match (prev, next) {
-            (None, None) => return Removal::Empty,
-            (None, Some(next)) => self.first = next,
-            (Some(prev), _) => self.nodes[prev].next = next,
+    /// The two children case of a removal: the successor `s` of `p` (the leftmost node of its
+    /// right subtree) takes the place of `p` in the tree, and the two exchange their colours. `p`
+    /// then has at most a right child. Returns the node that takes the place of `p` in the
+    /// balancing: that child, or `p` itself when it has none.
+    fn move_successor_up(&mut self, p: usize) -> usize {
+        let Link {
+            left: pl,
+            right: pr,
+            parent: pp,
+            ..
+        } = self.links[p];
+        let mut s = pr;
+        while self.links[s].left != NIL {
+            s = self.links[s].left;
         }
-        if let Some(next) = next {
-            self.nodes[next].prev = prev;
+        let (s_red, p_red) = (self.links[s].red, self.links[p].red);
+        self.links[s].red = p_red;
+        self.links[p].red = s_red;
+        let sr = self.links[s].right;
+        if s == pr {
+            self.links[p].parent = s;
+            self.links[s].right = p;
+        } else {
+            let sp = self.links[s].parent;
+            self.links[p].parent = sp;
+            self.links[sp].left = p;
+            self.links[s].right = pr;
+            self.links[pr].parent = s;
         }
-        let mut root = self.root;
-        let root_node = &self.nodes[root];
-        if root_node.right.is_none()
-            || root_node
-                .left
-                .is_none_or(|left| self.nodes[left].left.is_none())
-        {
-            return Removal::List;
+        self.links[p].left = NIL;
+        self.links[p].right = sr;
+        self.links[sr].parent = p;
+        self.links[s].left = pl;
+        self.links[pl].parent = s;
+        self.links[s].parent = pp;
+        if pp == NIL {
+            self.root = s;
+        } else if self.links[pp].left == p {
+            self.links[pp].left = s;
+        } else {
+            self.links[pp].right = s;
         }
-        let (pl, pr) = (self.nodes[p].left, self.nodes[p].right);
-        let replacement = match (pl, pr) {
-            (Some(pl), Some(pr)) => {
-                // The successor of `p`: the leftmost node on its right takes its place.
-                let mut s = pr;
-                while let Some(left) = self.nodes[s].left {
-                    s = left;
-                }
-                let red = self.nodes[s].red;
-                self.nodes[s].red = self.nodes[p].red;
-                self.nodes[p].red = red;
-                let sr = self.nodes[s].right;
-                let pp = self.nodes[p].parent;
-                if s == pr {
-                    self.nodes[p].parent = Some(s);
-                    self.nodes[s].right = Some(p);
-                } else {
-                    let sp = self.nodes[s].parent;
-                    self.nodes[p].parent = sp;
-                    if let Some(sp) = sp {
-                        if self.nodes[sp].left == Some(s) {
-                            self.nodes[sp].left = Some(p);
-                        } else {
-                            self.nodes[sp].right = Some(p);
-                        }
-                    }
-                    self.nodes[s].right = Some(pr);
-                    self.nodes[pr].parent = Some(s);
-                }
-                self.nodes[p].left = None;
-                self.nodes[p].right = sr;
-                if let Some(sr) = sr {
-                    self.nodes[sr].parent = Some(p);
-                }
-                self.nodes[s].left = Some(pl);
-                self.nodes[pl].parent = Some(s);
-                self.nodes[s].parent = pp;
-                match pp {
-                    None => root = s,
-                    Some(pp) if self.nodes[pp].left == Some(p) => self.nodes[pp].left = Some(s),
-                    Some(pp) => self.nodes[pp].right = Some(s),
-                }
-                if let Some(sr) = sr { sr } else { p }
-            }
-            (Some(only), None) | (None, Some(only)) => only,
-            (None, None) => p,
+        if sr == NIL { p } else { sr }
+    }
+
+    /// `TreeNode.removeTreeNode` of the node `p`: `p` leaves the iteration order, then the tree,
+    /// which is rebalanced. `true` when the tree is too small to stay a tree: the bin is a list
+    /// again, and the caller converts it.
+    fn remove(&mut self, p: usize) -> bool {
+        let Link { prev, next, .. } = self.links[p];
+        if prev == NIL {
+            self.first = next;
+        } else {
+            self.links[prev].next = next;
+        }
+        self.links[next].prev = prev;
+        let left = self.links[self.root].left;
+        if self.links[self.root].right == NIL || left == NIL || self.links[left].left == NIL {
+            return true;
+        }
+        let Link {
+            left: pl,
+            right: pr,
+            ..
+        } = self.links[p];
+        let replacement = if pl != NIL && pr != NIL {
+            self.move_successor_up(p)
+        } else if pl != NIL {
+            pl
+        } else if pr != NIL {
+            pr
+        } else {
+            p
         };
         if replacement != p {
-            let pp = self.nodes[p].parent;
-            self.nodes[replacement].parent = pp;
-            match pp {
-                None => root = replacement,
-                Some(pp) if self.nodes[pp].left == Some(p) => {
-                    self.nodes[pp].left = Some(replacement);
-                }
-                Some(pp) => self.nodes[pp].right = Some(replacement),
+            let pp = self.links[p].parent;
+            self.links[replacement].parent = pp;
+            if self.links[pp].left == p {
+                self.links[pp].left = replacement;
+            } else {
+                self.links[pp].right = replacement;
             }
-            self.nodes[p].left = None;
-            self.nodes[p].right = None;
-            self.nodes[p].parent = None;
+            self.links[p].left = NIL;
+            self.links[p].right = NIL;
+            self.links[p].parent = NIL;
         }
-        self.root = root;
-        if !self.nodes[p].red {
-            self.balance_deletion(Some(replacement));
+        if !self.links[p].red {
+            self.balance_deletion(replacement);
         }
         if replacement == p {
-            // `p` is a leaf: detach it.
-            let pp = self.nodes[p].parent;
-            self.nodes[p].parent = None;
-            if let Some(pp) = pp {
-                if self.nodes[pp].left == Some(p) {
-                    self.nodes[pp].left = None;
-                } else if self.nodes[pp].right == Some(p) {
-                    self.nodes[pp].right = None;
-                }
+            // A leaf: it leaves its parent once the balancing is done.
+            let pp = self.links[p].parent;
+            self.links[p].parent = NIL;
+            if self.links[pp].left == p {
+                self.links[pp].left = NIL;
+            } else {
+                self.links[pp].right = NIL;
             }
         }
         self.move_root_to_front();
-        Removal::Tree
+        false
     }
 
     /// The nodes in iteration order.
     fn order(&self) -> Vec<usize> {
-        let mut nodes = Vec::new();
-        let mut at = Some(self.first);
-        while let Some(node) = at {
-            nodes.push(node);
-            at = self.nodes[node].next;
+        let mut order = Vec::with_capacity(self.entries.len());
+        let mut at = self.first;
+        while at != NIL {
+            order.push(at);
+            at = self.links[at].next;
         }
-        nodes
+        order
     }
 
-    /// The entries of the tree, each in the slot of its node.
-    fn into_slots(self) -> Vec<Option<Entry<K, V>>> {
-        self.nodes
-            .into_iter()
-            .map(|node| Some(node.entry))
-            .collect()
-    }
-
-    /// The entries of the tree in iteration order.
+    /// The entries in iteration order, the removed ones left out.
     fn into_list(self) -> Vec<Entry<K, V>> {
         let order = self.order();
-        take_entries(&mut self.into_slots(), &order)
+        let mut slots: Vec<Option<Entry<K, V>>> = self.entries.into_iter().map(Some).collect();
+        take_entries(&mut slots, &order)
     }
 
     /// `TreeNode.split` of the tree of a bin that the table doubling splits in two: the entries
-    /// whose spread hash has the `bit` of the old capacity go to the second bin. A part with
-    /// more than 6 entries is a tree, the old one when it is all of them.
+    /// whose spread hash has the `bit` of the old capacity go to the second bin. A part with more
+    /// than 6 entries is a tree. When every entry lands in one part, that part is the tree
+    /// itself, unchanged if it still has more than 6 entries.
     fn split(self, bit: usize, order: Order<K>) -> (Bin<K, V>, Bin<K, V>) {
-        let nodes = self.order();
-        let (high, low): (Vec<usize>, Vec<usize>) = nodes
-            .iter()
-            .partition(|node| (spread(self.nodes[**node].entry.0) as u32 as usize) & bit != 0);
+        let (high, low): (Vec<usize>, Vec<usize>) = self
+            .order()
+            .into_iter()
+            .partition(|&node| (spread(self.entry(node).0) as u32 as usize) & bit != 0);
         if high.is_empty() || low.is_empty() {
-            let all = if high.is_empty() { &low } else { &high };
-            let whole = if all.len() <= UNTREEIFY_THRESHOLD {
+            let count = high.len() + low.len();
+            let whole = if count <= UNTREEIFY_THRESHOLD {
                 Bin::List(self.into_list())
             } else {
                 Bin::Tree(Box::new(self))
             };
-            return if high.is_empty() {
-                (whole, Bin::List(Vec::new()))
-            } else {
+            return if low.is_empty() {
                 (Bin::List(Vec::new()), whole)
+            } else {
+                (whole, Bin::List(Vec::new()))
             };
         }
-        let mut slots = self.into_slots();
+        let mut slots: Vec<Option<Entry<K, V>>> = self.entries.into_iter().map(Some).collect();
         let low = Bin::from_list(take_entries(&mut slots, &low), order);
         let high = Bin::from_list(take_entries(&mut slots, &high), order);
         (low, high)
     }
 }
 
-/// The entries of the slots `order` lists, in that order, taken out of them.
+/// The entries of the nodes `order` lists, in that order, taken out of their slots (the slot of
+/// node `n` is `slots[n - 1]`).
 fn take_entries<K, V>(slots: &mut [Option<Entry<K, V>>], order: &[usize]) -> Vec<Entry<K, V>> {
     order
         .iter()
-        .filter_map(|node| slots.get_mut(*node).and_then(Option::take))
+        .filter_map(|&node| slots[node - 1].take())
         .collect()
 }
 
@@ -673,7 +573,7 @@ impl<K, V> Bin<K, V> {
     fn iter(&self) -> BinIter<'_, K, V> {
         match self {
             Bin::List(entries) => BinIter::List(entries.iter()),
-            Bin::Tree(tree) => BinIter::Tree(tree, Some(tree.first)),
+            Bin::Tree(tree) => BinIter::Tree(tree, tree.first),
         }
     }
 
@@ -686,10 +586,38 @@ impl<K, V> Bin<K, V> {
     }
 }
 
+impl<K: PartialEq, V> Bin<K, V> {
+    /// `HashMap.removeNode` within the bin: `true` when the key was there. A tree that gets too
+    /// small is a list again.
+    fn remove(&mut self, hash: i32, key: &K, order: Order<K>) -> bool {
+        match self {
+            Bin::List(entries) => {
+                let Some(position) = entries.iter().position(|(h, k, _)| *h == hash && k == key)
+                else {
+                    return false;
+                };
+                entries.remove(position);
+                true
+            }
+            Bin::Tree(tree) => {
+                let Some(at) = tree.find(tree.root, spread(hash), key, order) else {
+                    return false;
+                };
+                if tree.remove(at) {
+                    let tree = std::mem::replace(self, Bin::List(Vec::new()));
+                    *self = Bin::List(tree.into_entries());
+                }
+                true
+            }
+        }
+    }
+}
+
 /// The entries of a bin in iteration order.
 enum BinIter<'a, K, V> {
     List(std::slice::Iter<'a, Entry<K, V>>),
-    Tree(&'a Tree<K, V>, Option<usize>),
+    /// The tree, and the node the iteration is at (`NIL` at the end).
+    Tree(&'a Tree<K, V>, usize),
 }
 
 impl<'a, K, V> Iterator for BinIter<'a, K, V> {
@@ -699,9 +627,12 @@ impl<'a, K, V> Iterator for BinIter<'a, K, V> {
         match self {
             BinIter::List(entries) => entries.next(),
             BinIter::Tree(tree, at) => {
-                let node = &tree.nodes[(*at)?];
-                *at = node.next;
-                Some(&node.entry)
+                if *at == NIL {
+                    return None;
+                }
+                let node = *at;
+                *at = tree.links[node].next;
+                Some(tree.entry(node))
             }
         }
     }
@@ -837,7 +768,7 @@ impl<K: PartialEq, V> JavaHashMap<K, V> {
             }
             Bin::Tree(bin) => match bin.find(bin.root, spread(hash), &key, order) {
                 Some(at) => {
-                    bin.nodes[at].entry.2 = value;
+                    bin.entry_mut(at).2 = value;
                     return;
                 }
                 None => bin.insert((hash, key, value), order),
@@ -861,7 +792,7 @@ impl<K: PartialEq, V> JavaHashMap<K, V> {
             Bin::List(bin) => bin.iter().find(|(h, k, _)| *h == hash && k == key),
             Bin::Tree(bin) => bin
                 .find(bin.root, spread(hash), key, self.order)
-                .map(|at| &bin.nodes[at].entry),
+                .map(|at| bin.entry(at)),
         }
     }
 
@@ -886,7 +817,7 @@ impl<K: PartialEq, V> JavaHashMap<K, V> {
                 .map(|(_, _, value)| value),
             Bin::Tree(bin) => {
                 let at = bin.find(bin.root, spread(hash), key, order)?;
-                Some(&mut bin.nodes[at].entry.2)
+                Some(&mut bin.entry_mut(at).2)
             }
         }
     }
@@ -899,29 +830,8 @@ impl<K: PartialEq, V> JavaHashMap<K, V> {
         let Some(bin) = self.table.get_mut(index) else {
             return false;
         };
-        match bin {
-            Bin::List(entries) => {
-                let Some(position) = entries.iter().position(|(h, k, _)| *h == hash && k == key)
-                else {
-                    return false;
-                };
-                entries.remove(position);
-            }
-            Bin::Tree(tree) => {
-                let Some(at) = tree.find(tree.root, spread(hash), key, order) else {
-                    return false;
-                };
-                match tree.remove(at) {
-                    Removal::Tree => {}
-                    Removal::List => {
-                        let Bin::Tree(tree) = std::mem::replace(bin, Bin::List(Vec::new())) else {
-                            return false;
-                        };
-                        *bin = Bin::List(tree.into_list());
-                    }
-                    Removal::Empty => *bin = Bin::List(Vec::new()),
-                }
-            }
+        if !bin.remove(hash, key, order) {
+            return false;
         }
         self.size -= 1;
         true
@@ -1491,7 +1401,10 @@ mod tests {
         let mut entries = BTreeMap::new();
         for (hash, key, value) in map.iter() {
             assert_eq!(*hash, long_hash(*key));
-            assert!(entries.insert(*key, *value).is_none(), "{key} is listed twice");
+            assert!(
+                entries.insert(*key, *value).is_none(),
+                "{key} is listed twice"
+            );
         }
         assert_eq!(&entries, model);
         for bin in &map.table {
@@ -1502,16 +1415,17 @@ mod tests {
     }
 
     fn check_tree(tree: &Tree<i64, i64>, ordered_keys: bool) {
-        assert!(!tree.nodes[tree.root].red, "the root is black");
-        assert_eq!(tree.nodes[tree.root].parent, None);
+        assert!(!tree.links[tree.root].red, "the root is black");
+        assert_eq!(tree.links[tree.root].parent, NIL);
         let mut count = 0;
-        check_subtree(tree, Some(tree.root), None, (None, None), ordered_keys, &mut count);
+        check_subtree(tree, tree.root, NIL, (None, None), ordered_keys, &mut count);
         let listed = tree.order();
         assert_eq!(count, listed.len(), "every node of the tree is listed");
-        assert_eq!(tree.nodes[tree.first].prev, None);
+        assert_eq!(tree.links[tree.first].prev, NIL);
         for node in listed {
-            if let Some(next) = tree.nodes[node].next {
-                assert_eq!(tree.nodes[next].prev, Some(node));
+            let next = tree.links[node].next;
+            if next != NIL {
+                assert_eq!(tree.links[next].prev, node);
             }
         }
     }
@@ -1519,31 +1433,46 @@ mod tests {
     /// The black height below `at` (a missing node is black), checking the rules on the way.
     fn check_subtree(
         tree: &Tree<i64, i64>,
-        at: Option<usize>,
-        parent: Option<usize>,
+        at: usize,
+        parent: usize,
         (lower, upper): (Option<(i32, i64)>, Option<(i32, i64)>),
         ordered_keys: bool,
         count: &mut usize,
     ) -> usize {
-        let Some(at) = at else {
+        if at == NIL {
             return 1;
-        };
-        let node = &tree.nodes[at];
+        }
+        let link = tree.links[at];
         *count += 1;
-        assert_eq!(node.parent, parent);
-        let key = (spread(node.entry.0), node.entry.1);
+        assert_eq!(link.parent, parent);
+        let key = (spread(tree.entry(at).0), tree.entry(at).1);
         if ordered_keys {
-            assert!(lower.is_none_or(|bound| key > bound), "{key:?} below {lower:?}");
-            assert!(upper.is_none_or(|bound| key < bound), "{key:?} above {upper:?}");
+            assert!(
+                lower.is_none_or(|bound| key > bound),
+                "{key:?} below {lower:?}"
+            );
+            assert!(
+                upper.is_none_or(|bound| key < bound),
+                "{key:?} above {upper:?}"
+            );
         }
-        let children = [node.left, node.right];
-        for child in children.into_iter().flatten() {
-            assert!(!(node.red && tree.nodes[child].red), "two red nodes in a row");
+        for child in [link.left, link.right] {
+            assert!(
+                !(link.red && tree.links[child].red),
+                "two red nodes in a row"
+            );
         }
-        let left = check_subtree(tree, node.left, Some(at), (lower, Some(key)), ordered_keys, count);
-        let right = check_subtree(tree, node.right, Some(at), (Some(key), upper), ordered_keys, count);
+        let left = check_subtree(tree, link.left, at, (lower, Some(key)), ordered_keys, count);
+        let right = check_subtree(
+            tree,
+            link.right,
+            at,
+            (Some(key), upper),
+            ordered_keys,
+            count,
+        );
         assert_eq!(left, right, "the black heights of {key:?} differ");
-        left + usize::from(!node.red)
+        left + usize::from(!link.red)
     }
 
     /// Random puts (new keys and replacements), removes and lookups, checked against a model:
@@ -1584,12 +1513,18 @@ mod tests {
             for i in 0..ops {
                 let key = (((next() % range) << shift) | salt) as i64;
                 if next() % 100 < remove {
-                    assert_eq!(map.remove(long_hash(key), &key), model.remove(&key).is_some());
+                    assert_eq!(
+                        map.remove(long_hash(key), &key),
+                        model.remove(&key).is_some()
+                    );
                 } else {
                     map.put(long_hash(key), key, i as i64);
                     model.insert(key, i as i64);
                 }
-                assert_eq!(map.get(long_hash(key), &key).copied(), model.get(&key).copied());
+                assert_eq!(
+                    map.get(long_hash(key), &key).copied(),
+                    model.get(&key).copied()
+                );
                 if i % 61 == 0 {
                     check_map(&map, &model, ordered_keys);
                 }
@@ -1603,12 +1538,90 @@ mod tests {
     #[test]
     fn removes_in_tree_bins_like_java() {
         let scenarios: &[(u64, u64, u32, u64, usize, u64, [u64; 4])] = &[
-            (1600, 40, 24, 75, 0, 2000, [0x9e19c7c4d6990c97, 0x4d0cb850751a39c5, 0x82f0c8dc409029bf, 0x6f1fb78dd990c97]),
-            (2400, 12, 24, 70, 0, 2001, [0x8328ae0abeb6fed, 0xf3e8182ad2be94f, 0x554f8cec8dce13f5, 0x8328adb92eb6fed]),
-            (2000, 6, 20, 80, 0, 2002, [0xcbf29ce484222325, 0xa8328836543b6fed, 0x8f63bd4c4fa1b7df, 0xb83288ee602b6fed]),
-            (1200, 30, 26, 85, 0, 2003, [0xece700e23a876aa7, 0xda44042601a39c5, 0x98c5b03449ce13f5, 0xdb4abbdd1c0f2fb7]),
-            (3000, 100, 24, 45, 0, 2004, [0xf17abd33b34a45d7, 0xe18e14273011f6fd, 0x261e5f3935a00ff, 0xb937b8c1d580ec8f]),
-            (6000, 8, 22, 50, 0, 2005, [0x19546ca46b4f2fb7, 0x88328ba3a82b6fed, 0x8d2e0ea8814e13f5, 0x19547042eb0f2fb7]),
+            (
+                1600,
+                40,
+                24,
+                75,
+                0,
+                2000,
+                [
+                    0x9e19c7c4d6990c97,
+                    0x4d0cb850751a39c5,
+                    0x82f0c8dc409029bf,
+                    0x6f1fb78dd990c97,
+                ],
+            ),
+            (
+                2400,
+                12,
+                24,
+                70,
+                0,
+                2001,
+                [
+                    0x8328ae0abeb6fed,
+                    0xf3e8182ad2be94f,
+                    0x554f8cec8dce13f5,
+                    0x8328adb92eb6fed,
+                ],
+            ),
+            (
+                2000,
+                6,
+                20,
+                80,
+                0,
+                2002,
+                [
+                    0xcbf29ce484222325,
+                    0xa8328836543b6fed,
+                    0x8f63bd4c4fa1b7df,
+                    0xb83288ee602b6fed,
+                ],
+            ),
+            (
+                1200,
+                30,
+                26,
+                85,
+                0,
+                2003,
+                [
+                    0xece700e23a876aa7,
+                    0xda44042601a39c5,
+                    0x98c5b03449ce13f5,
+                    0xdb4abbdd1c0f2fb7,
+                ],
+            ),
+            (
+                3000,
+                100,
+                24,
+                45,
+                0,
+                2004,
+                [
+                    0xf17abd33b34a45d7,
+                    0xe18e14273011f6fd,
+                    0x261e5f3935a00ff,
+                    0xb937b8c1d580ec8f,
+                ],
+            ),
+            (
+                6000,
+                8,
+                22,
+                50,
+                0,
+                2005,
+                [
+                    0x19546ca46b4f2fb7,
+                    0x88328ba3a82b6fed,
+                    0x8d2e0ea8814e13f5,
+                    0x19547042eb0f2fb7,
+                ],
+            ),
         ];
         for &(ops, range, shift, remove, capacity, scenario, expected) in scenarios {
             assert_eq!(
