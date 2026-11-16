@@ -374,6 +374,6 @@ the order that unlocks the most:
    oracle (DIVERGENCES §37).
 6. **What is left** (117 of 2193): `GEO.BUFFER` (the JTS buffer); `GEO.GML`, `GEO.KML`, `->GML`
    and `->KML` (J2: the `<` texts, which Warp 10 parses with XML handlers); `METASET`; PGP
-   (8 functions, BouncyCastle's OpenPGP); and 101 Processing `P*` functions. Processing is an
-   LGPL library (§8): its functions can only be ported from observation, and its rendering is
-   not reproduced bit for bit. The datastore functions on InfluxDB 3 are done (DIVERGENCES §34).
+   (8 functions, BouncyCastle's OpenPGP); and 101 Processing `P*` functions. Processing's core
+   library is LGPL-2.1 (upstream README, "License & Copyright", checked on 16 Nov 2026; §8): its functions can
+   only be ported from observation, and its rendering is not reproduced bit for bit. The datastore functions on InfluxDB 3 are done (DIVERGENCES §34).
