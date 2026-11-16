@@ -305,7 +305,7 @@ fn tolist(stack: &mut Stack) -> Result<()> {
         }
         Value::Long(_) => {
             let n = getn(stack)?;
-            let items = stack.popn(n).unwrap_or_default();
+            let items = stack.take_top(n);
             stack.push(Value::list(items));
             Ok(())
         }
@@ -318,7 +318,7 @@ fn tolist(stack: &mut Stack) -> Result<()> {
 
 fn tomap(stack: &mut Stack) -> Result<()> {
     let n = getn(stack)?;
-    let items = stack.popn(n).unwrap_or_default();
+    let items = stack.take_top(n);
     let map = build_map(items)?;
     stack.push(Value::map(map));
     Ok(())
@@ -357,7 +357,7 @@ fn tovector(stack: &mut Stack) -> Result<()> {
 
 /// `STACKTOLIST`: replace the whole (visible) stack with a list of its elements, bottom first.
 fn stacktolist(stack: &mut Stack) -> Result<()> {
-    let items = stack.popn(stack.depth()).unwrap_or_default();
+    let items = stack.take_top(stack.depth());
     stack.push(Value::list(items));
     Ok(())
 }

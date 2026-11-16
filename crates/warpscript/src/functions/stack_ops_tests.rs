@@ -129,6 +129,7 @@ fn conversions() {
         Value::map(IndexMap::from([(Value::from("a"), long(1))])),
     );
     assert_fails("'a' 1 ->MAP", "Odd number of elements, cannot create map.");
+    assert_fails("3 ->MAP", "Index out of bound.");
     assert_fails("'a' ->MAP", "Unexpected type, expecting a numerical value.");
     assert_top(
         "[ 1 1 2 ] ->SET",

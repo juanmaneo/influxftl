@@ -39,9 +39,10 @@ fn split_lines(text: &str) -> Vec<&str> {
     lines
 }
 
-/// The series of an encoder.
-fn series_of(encoder: &GtsEncoder) -> Value {
-    Value::Gts(encoder.decoder().decode().unwrap_or_default().shared())
+/// The series of an encoder. The encoder was written by `PARSE` itself, so its content decodes;
+/// when it does not, the failure is reported rather than an empty series.
+pub(super) fn series_of(encoder: &GtsEncoder) -> Result<Value> {
+    Ok(Value::Gts(encoder.decoder().decode()?.shared()))
 }
 
 /// `PARSE`: the series of the lines of a text (blank lines and `#` comments skipped).
@@ -51,7 +52,7 @@ fn parse(stack: &mut Stack) -> Result<()> {
         return Err(fail(NAME, "expects a String on top of the stack."));
     };
     let now = current_time();
-    let mut series = Vec::new();
+    let mut encoders = Vec::new();
     let mut current: Option<GtsEncoder> = None;
     for line in split_lines(&text) {
         let line = line.trim_matches(|c: char| c <= ' ');
@@ -71,7 +72,7 @@ fn parse(stack: &mut Stack) -> Result<()> {
             });
             if !same {
                 if let Some(previous) = current.take() {
-                    series.push(series_of(&previous));
+                    encoders.push(previous);
                 }
                 let mut encoder = GtsEncoder::new(0);
                 encoder.metadata.name = Some(name);
@@ -88,9 +89,10 @@ fn parse(stack: &mut Stack) -> Result<()> {
         let (tick, location, elevation, value) = parsed.point;
         encoder.add_value(tick, location, elevation, &value);
     }
-    if let Some(encoder) = current {
-        series.push(series_of(&encoder));
-    }
-    stack.push(Value::list(series));
-    Ok(())
+    encoders.extend(current);
+    let series = encoders
+        .iter()
+        .map(series_of)
+        .collect::<Result<Vec<Value>>>();
+    series.map(|series| stack.push(Value::list(series)))
 }

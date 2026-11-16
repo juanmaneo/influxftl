@@ -4,8 +4,22 @@
 //! The expectations are the answers of Warp 10 3.5.0 to the same scripts:
 //! the JSON stack (top first) or the error message (in its JDK 11+ form).
 
+use crate::encoder::{EncodedValue, GtsEncoder};
+use crate::gts::{NO_ELEVATION, NO_LOCATION};
 use crate::tests::test_stack;
 use crate::value::Value;
+
+#[test]
+fn an_encoder_that_does_not_decode_is_an_error_not_an_empty_series() {
+    let mut whole = GtsEncoder::new(0);
+    whole.add_value(1, NO_LOCATION, NO_ELEVATION, &EncodedValue::Long(5));
+    whole.add_value(2, NO_LOCATION, NO_ELEVATION, &EncodedValue::Long(6));
+    let stream = whole.stream_bytes();
+    let cut = GtsEncoder::with_stream(&stream[..stream.len() - 1]);
+    super::gts_parse::series_of(&cut).expect_err("the second datapoint is cut short");
+    let intact = super::gts_parse::series_of(&whole).expect("the whole encoder decodes");
+    assert!(matches!(intact, Value::Gts(_)));
+}
 
 const ONE: &str = r"1";
 

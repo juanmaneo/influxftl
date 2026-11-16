@@ -30,7 +30,7 @@ use crate::error::{Error, Result};
 use crate::lcg48::Lcg48;
 use crate::macros::Macro;
 use crate::stack::Stack;
-use crate::value::{List, Value, ensure_mutable, is_frozen};
+use crate::value::{List, Map, Value, ensure_mutable, is_frozen};
 
 /// The functions of this module.
 pub const FUNCTIONS: &[(&str, Entry)] = &[
@@ -89,14 +89,16 @@ fn list_element(list: &List, index: usize) -> Result<Value> {
 /// The entries of a map, cloned so that the macro may touch the map.
 fn map_entries(value: &Value) -> Option<Vec<(Value, Value)>> {
     match value {
-        Value::Map(map) => Some(
-            map.borrow()
-                .iter()
-                .map(|(k, v)| (k.clone(), v.clone()))
-                .collect(),
-        ),
+        Value::Map(map) => Some(entries_of(map)),
         _ => None,
     }
+}
+
+fn entries_of(map: &Map) -> Vec<(Value, Value)> {
+    map.borrow()
+        .iter()
+        .map(|(k, v)| (k.clone(), v.clone()))
+        .collect()
 }
 
 // -----------------------------------------------------------------------------------------
@@ -437,7 +439,7 @@ fn sortby(stack: &mut Stack) -> Result<()> {
             *list.borrow_mut() = sort_by_keys(items, keys);
         }
         Value::Map(map) if !is_frozen(map) => {
-            let entries = map_entries(&collection).unwrap_or_default();
+            let entries = entries_of(map);
             let args: Vec<Vec<Value>> = entries
                 .iter()
                 .map(|(k, v)| vec![k.clone(), v.clone()])
@@ -584,7 +586,7 @@ fn sortwith(stack: &mut Stack) -> Result<()> {
             *list.borrow_mut() = items;
         }
         Value::Map(map) if !is_frozen(map) => {
-            let mut entries = map_entries(&collection).unwrap_or_default();
+            let mut entries = entries_of(map);
             sort_with(&mut entries, |a, b| {
                 compare_with(
                     stack,

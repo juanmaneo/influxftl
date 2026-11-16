@@ -1113,9 +1113,7 @@ fn snapshot_impl(stack: &mut Stack, name: &str, flags: SnapshotFlags) -> Result<
             .collect();
         for (symbol, value) in &symbols {
             add_element(&mut out, value, flags.readable)?;
-            // A string never fails to render.
-            add_element(&mut out, &Value::from(symbol.as_str()), flags.readable)
-                .unwrap_or_default();
+            crate::snapshot::string_element(&mut out, symbol, flags.readable);
             out.push_str("STORE ");
         }
         out.push_str("CLEARREGS ");

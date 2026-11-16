@@ -83,6 +83,17 @@ fn macro_snapshot_at(m: &Macro, hide_secure: bool, depth: usize) -> String {
     out
 }
 
+/// The source of a string literal, followed by a space. A string never fails to render.
+pub fn string_element(out: &mut String, text: &str, readable: bool) {
+    out.push('\'');
+    if readable {
+        out.push_str(&snapshot_encode_readable(text));
+    } else {
+        out.push_str(&url_encode(text));
+    }
+    out.push_str("' ");
+}
+
 fn append(out: &mut String, value: &Value, depth: usize, readable: bool) -> Result<()> {
     if depth > MAX_RECURSION_LEVEL {
         return Err(PlatformError::RecursiveStructure.into());
@@ -125,15 +136,7 @@ fn append(out: &mut String, value: &Value, depth: usize, readable: bool) -> Resu
             out.push_str(&bd.to_plain_string());
             out.push_str("' ->BD ");
         }
-        Value::String(s) => {
-            out.push('\'');
-            if readable {
-                out.push_str(&snapshot_encode_readable(s));
-            } else {
-                out.push_str(&url_encode(s));
-            }
-            out.push_str("' ");
-        }
+        Value::String(s) => string_element(out, s, readable),
         Value::Bytes(b) => {
             out.push('\'');
             out.push_str(&opb64_encode(b));
