@@ -21,8 +21,9 @@ use geo::{Intersects, Relate};
 
 use super::geometry::{Coord, Envelope, Geometry, Polygon};
 use crate::coverage::{Coverage, MIN_RESOLUTION};
-use crate::error::{Error, Result};
+use crate::error::fault::ResourceError;
 use crate::error::geometry::GeometryError;
+use crate::error::{Error, Result};
 use crate::finite::ensure_finite;
 use crate::geoxp::{
     DEGREES_PER_LAT_UNIT, DEGREES_PER_LON_UNIT, orthodromic_distance_units, stable_split_hhcode,
@@ -61,7 +62,16 @@ pub fn cover_cells(
     };
     let min_resolution = if uniform { resolution } else { MIN_RESOLUTION };
     let Some(mut coverage) =
-        cover_geometry(geometry, min_resolution, resolution, inside, max_cells)?
+        cover_geometry(
+            geometry,
+            min_resolution,
+            resolution,
+            inside,
+            Budget {
+                cells: max_cells,
+                pending: MAX_PENDING_CELLS,
+            },
+        )?
     else {
         return Ok(None);
     };
@@ -136,20 +146,38 @@ fn optimal_resolution(bounds: &[i64; 4], error_fraction: f64) -> Result<u32> {
     Ok(resolution)
 }
 
+/// The cells a cover may leave to split at once. The cover splits breadth first, so a fine
+/// resolution over a large area queues an ever growing number of cells: Warp 10 dies of
+/// `Java heap space` once its heap is full (somewhere between the 43 million cells of a uniform
+/// cover of a 0.1 degree square at the resolution 24, which it answers after 90 seconds, and
+/// the 690 million of the resolution 26, which it does not).
+pub const MAX_PENDING_CELLS: usize = 1 << 26;
+
+/// What a cover may use.
+#[derive(Clone, Copy, Debug)]
+pub struct Budget {
+    /// The cells it may return (`warpscript.maxgeocells`).
+    pub cells: usize,
+    /// The cells it may queue to split, [`MAX_PENDING_CELLS`] for a script.
+    pub pending: usize,
+}
+
 /// `JTSHelper.coverGeometry`: the cells of the resolutions `min_resolution` to `max_resolution`
 /// that cover `geometry` (those inside it only when `inside`), `None` when more than
-/// `max_cells` would be needed.
+/// `budget.cells` would be needed.
 ///
 /// # Errors
 ///
-/// [`GeometryError::CollectionArgument`] where JTS refuses a `GeometryCollection`.
+/// [`GeometryError::CollectionArgument`] where JTS refuses a `GeometryCollection`,
+/// [`ResourceError::OutOfMemory`] when more than `budget.pending` cells wait to be split.
 pub fn cover_geometry(
     geometry: &Geometry,
     min_resolution: u32,
     max_resolution: u32,
     inside: bool,
-    max_cells: usize,
+    budget: Budget,
 ) -> Result<Option<Coverage>> {
+    let max_cells = budget.cells;
     let Some(target) = Target::new(geometry) else {
         // No cell meets a geometry without a point, but a limit of no cell is reached at once.
         return Ok((max_cells > 0).then(Coverage::new));
@@ -189,6 +217,9 @@ pub fn cover_geometry(
                 }
             }
             continue;
+        }
+        if queue.len() + 16 > budget.pending {
+            return Err(ResourceError::OutOfMemory.into());
         }
         queue.extend(sub_geo_cells(geocell));
     }
