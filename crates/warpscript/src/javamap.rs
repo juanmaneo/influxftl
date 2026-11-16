@@ -1533,6 +1533,90 @@ mod tests {
         }
     }
 
+    /// Keys that share their hash code: the ties of the trees, which the order of the keys breaks
+    /// (`ordered`), or, for keys the order does not tell apart, the search of both sides.
+    #[test]
+    fn equal_hashes_make_ties_in_the_trees() {
+        let key_of = |n: i64| (n << 32) | (n ^ 0x55);
+        for ordered_keys in [true, false] {
+            let order: Order<i64> = if ordered_keys { ordered } else { unordered };
+            let mut map = JavaHashMap::new().with_order(order);
+            let mut model = BTreeMap::new();
+            for n in (0..40).map(|n| (n * 17) % 40) {
+                map.put(long_hash(key_of(n)), key_of(n), n);
+                model.insert(key_of(n), n);
+            }
+            check_map(&map, &model, ordered_keys);
+            for n in 0..45 {
+                let key = key_of(n);
+                let changed = map.get_mut(long_hash(key), &key).map(|value| *value += 100);
+                assert_eq!(changed.is_some(), model.contains_key(&key));
+                if let Some(value) = model.get_mut(&key) {
+                    *value += 100;
+                }
+            }
+            for n in (0..40).step_by(3) {
+                let key = key_of(n);
+                assert_eq!(
+                    map.remove(long_hash(key), &key),
+                    model.remove(&key).is_some()
+                );
+            }
+            check_map(&map, &model, ordered_keys);
+            for n in 0..45 {
+                let key = key_of(n);
+                assert_eq!(
+                    map.get(long_hash(key), &key).copied(),
+                    model.get(&key).copied()
+                );
+            }
+        }
+    }
+
+    /// A tree bin that removals leave with 6 or 7 entries is still a tree. When the table doubles
+    /// it splits whole: 7 entries keep the tree, 6 make a list (`TreeNode.split`).
+    #[test]
+    fn small_trees_split_into_lists() {
+        let (mut lists, mut trees) = (0, 0);
+        for mask in 0u32..512 {
+            let removed = mask.count_ones();
+            if !(2..=3).contains(&removed) {
+                continue;
+            }
+            // Keys with the same low bits: they share the bin 0 of a 64-bucket table.
+            let key_of = |n: i64| n << 24;
+            let mut map = JavaHashMap::with_capacity(64).with_order(ordered);
+            let mut model = BTreeMap::new();
+            for n in 0..9 {
+                map.put(long_hash(key_of(n)), key_of(n), n);
+                model.insert(key_of(n), n);
+            }
+            for n in 0..9i64 {
+                if (mask >> n) & 1 == 1 {
+                    assert!(map.remove(long_hash(key_of(n)), &key_of(n)));
+                    model.remove(&key_of(n));
+                }
+            }
+            if !matches!(map.table[0], Bin::Tree(_)) {
+                continue;
+            }
+            // Other keys, in bins of their own, make the table double: the bin 0 splits.
+            for b in 1..=45i64 {
+                let key = (1 << 30) | b;
+                map.put(long_hash(key), key, b);
+                model.insert(key, b);
+            }
+            assert_eq!(map.table.len(), 128);
+            let tree_left = 9 - removed as usize > UNTREEIFY_THRESHOLD;
+            assert_eq!(matches!(map.table[0], Bin::Tree(_)), tree_left);
+            trees += usize::from(tree_left);
+            lists += usize::from(!tree_left);
+            check_map(&map, &model, true);
+            assert_eq!(map.into_entries().len(), model.len());
+        }
+        assert!(lists > 0 && trees > 0, "{lists} lists, {trees} trees");
+    }
+
     /// Scenarios of the JDK 27 `HashMap` with heavy removals (its digests come from a program
     /// with the same generator as `digests`).
     #[test]
