@@ -142,17 +142,28 @@ that they are not forgotten (`grep -rnF` the pattern to list them):
   stores `0` for an unparsable string, `->JSON` of an encoder that stops at a corrupt datapoint,
   `CHECKMACRO` answering `false` for a macro that cannot be loaded.
 
-### Open bugs found by the review
+### Silent `0.0` for a non-numeric value: traced, no wrong answer found
 
-- **Silent `0.0` for a non-numeric value** (wrong answers, not a documented tolerance). Warp 10
-  reads these values with `((Number) valueAtIndex(gts, i)).doubleValue()` (`FFT`, `CORRELATE`,
-  `INTERPOLATE`…), so a `STRING`, `BOOLEAN` or `BINARY` series fails with a `ClassCastException`.
-  The ports use `as_f64().unwrap_or_default()` instead: `patterns::number_at` (PATTERNS, ZPATTERNS,
-  DISCORDS), `gts_smoothing::number_at` (LTTB, TLTTB, the exponential smoothings) and
-  `fillers::numeric` (the fill functions) to check. Every series has a single type (`set_value`
-  fixes it with the first value), so a per-read `?` cannot be covered by tests: the first read
-  fails and the later ones never run their error branch. The fix is to check the type once before
-  the first read and then read through a typed view, with a test per function.
+The review suspected that `as_f64().unwrap_or_default()` turns a `STRING` or `BOOLEAN` value into
+`0.0` where Warp 10 fails with a `ClassCastException`. Each site was traced to its guard:
+
+- `patterns::number_at` (PATTERNS, ZPATTERNS, DISCORDS): `bsax_gts` accepts only `LONG` and
+  `DOUBLE` before any read, and DISCORDS calls `bsax_gts` first.
+- `gts_smoothing::number_at` (LTTB, TLTTB, the exponential smoothings): `smoothing_input` rejects
+  other types for the exponential forms; LTTB returns `STRING` and `BOOLEAN` series unchanged
+  (oracle-checked).
+- `dtw::series_data` (DTW on values): `compute` checks `LONG` or `DOUBLE` first.
+- `numbers::mu_sigma`: `decimals` rejects non-numeric series first.
+- `fillers::numeric`: `numeric_points` rejects `STRING` and `BOOLEAN` series before the ticker
+  reads them. In `trend_value`, a `(Some, None)` or `(None, next)` projection is reached only when
+  a pair holding the read value passed `has()`, and a slot without a tick has no value.
+- Out-of-range reads: `Values::get` answers `null` out of range, as `GTSHelper.valueAtIndex`
+  does. The sites above read indexes below the series size.
+
+The defaults therefore rely on these invariants, not on the type system. Turning them into typed
+variants (one check, then a typed view) is open work under "Conversions proven by a type check"
+above, and each new `?` needs a test. Every series has a single type (`set_value` fixes it with
+the first value), so a per-read `?` on a homogeneous series cannot be covered by tests.
 
 ### Clones (559 in non-test code)
 
