@@ -8,7 +8,7 @@ use std::rc::Rc;
 
 use super::Entry;
 use super::args::{fail, fail_with_cause};
-use super::runtime::macro_vars;
+use super::runtime::{macro_vars, register_of_name};
 use crate::error::fault::BoundsError;
 use crate::error::{Error, Result};
 use crate::macros::{Callable, Macro, Statement};
@@ -161,8 +161,7 @@ fn mark_used(inuse: &mut BTreeSet<i64>, register: i64) -> Result<()> {
 fn register_function(name: &str) -> Option<i64> {
     ["PUSHR", "POPR", "CPOPR", "RUNR"]
         .into_iter()
-        .find_map(|prefix| name.strip_prefix(prefix))
-        .and_then(|digits| digits.parse().ok())
+        .find_map(|prefix| register_of_name(name, prefix))
 }
 
 /// The operand of an access: the statement preceding it must push a `LONG` or a `STRING`.

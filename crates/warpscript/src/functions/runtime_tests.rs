@@ -11,7 +11,7 @@ use super::runtime::{
     ATTRIBUTE_CHRONOSTATS, ATTRIBUTE_DEBUG_DEPTH, ATTRIBUTE_ELAPSED, ATTRIBUTE_EXPORTED_SYMBOLS,
     ATTRIBUTE_HEADERS, ATTRIBUTE_INTERACTIVE_ECHO, ATTRIBUTE_INTERACTIVE_JSON,
     ATTRIBUTE_INTERACTIVE_TIME, ATTRIBUTE_LINENO, ATTRIBUTE_TIMINGS,
-    ATTRIBUTE_WRAPPED_STATEMENT_FACTORY, current_time,
+    ATTRIBUTE_WRAPPED_STATEMENT_FACTORY, current_time, register_of_name,
 };
 use crate::error::Error;
 use crate::stack::{Limits, REVISION, Stack};
@@ -1290,4 +1290,19 @@ fn stdout_stderr_and_sleep() {
         err.contains("SLEEP cannot parse capability sleep.maxtime: 'lots' is not a valid LONG"),
         "{err}"
     );
+}
+
+#[test]
+fn register_names_are_the_canonical_decimals_that_fit_a_long() {
+    assert_eq!(register_of_name("PUSHR7", "PUSHR"), Some(7));
+    assert_eq!(register_of_name("RUNR0", "RUNR"), Some(0));
+    assert_eq!(
+        register_of_name("POPR9223372036854775807", "POPR"),
+        Some(i64::MAX)
+    );
+    for name in ["PUSHR", "PUSHR07", "PUSHR+7", "PUSHR-7", "PUSHRx", "POPR7"] {
+        assert_eq!(register_of_name(name, "PUSHR"), None, "{name}");
+    }
+    assert_eq!(register_of_name("PUSHR9999999999999999999", "PUSHR"), None);
+    assert_eq!(register_of_name("PUSHR9223372036854775808", "PUSHR"), None);
 }

@@ -128,6 +128,21 @@ pub const FUNCTIONS: &[(&str, Entry)] = &[
 // Symbols and functions
 // -----------------------------------------------------------------------------------------
 
+/// The register that `name` denotes when it is `prefix` followed by a register number, as
+/// `PUSHR7` denotes register 7 for `PUSHR`. Warp 10 registers `PUSHR<i>` and the other register
+/// functions for their canonical decimal `i` only, so `PUSHR07`, `PUSHR+7` and a number that does
+/// not fit a `long` are ordinary function names.
+pub(super) fn register_of_name(name: &str, prefix: &str) -> Option<i64> {
+    let digits = name.strip_prefix(prefix)?;
+    let canonical = digits == "0" || (!digits.is_empty() && !digits.starts_with('0'));
+    if !canonical || !digits.bytes().all(|b| b.is_ascii_digit()) {
+        return None;
+    }
+    digits.bytes().try_fold(0i64, |acc, b| {
+        acc.checked_mul(10)?.checked_add(i64::from(b - b'0'))
+    })
+}
+
 /// `SYMBOLS`: the names of the symbols currently defined.
 fn symbols(stack: &mut Stack) -> Result<()> {
     let names: Vec<Value> = stack
@@ -225,7 +240,7 @@ fn deref_macro(m: &Macro, values: &IndexMap<Value, Value>) -> Result<Rc<Macro>> 
                 }
             }
             Statement::Call(callable) if callable.name().starts_with("PUSHR") => {
-                let register = callable.name()[5..].parse::<i64>().ok().map(Value::Long);
+                let register = register_of_name(callable.name(), "PUSHR").map(Value::Long);
                 match register.and_then(|r| values.get(&r)) {
                     Some(Value::Macro(value)) => {
                         // `MacroHelper.wrap`: the macro is executed in place.
@@ -1235,11 +1250,7 @@ impl VarScan {
     /// Scan the statements of one macro.
     fn scan(&mut self, statements: &[Statement], only_store_and_popr: bool) -> Result<()> {
         let abort = || StackError::NonExplicitSymbol.into();
-        let register = |name: &str, prefix: &str| -> Option<Value> {
-            name.strip_prefix(prefix)
-                .and_then(|digits| digits.parse::<i64>().ok())
-                .map(Value::Long)
-        };
+        let register = |name: &str, prefix: &str| register_of_name(name, prefix).map(Value::Long);
         for (i, stmt) in statements.iter().enumerate() {
             let Statement::Call(callable) = stmt else {
                 if let Statement::Push(Value::Macro(inner)) = stmt {
