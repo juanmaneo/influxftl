@@ -160,6 +160,12 @@ The oracle wrapper `port_helpers/w10.sh` is a four-liner: `curl -s -D - --data-b
 http://127.0.0.1:18080/api/v0/exec`, printing the `X-Warp10-Error-Message` header when
 present and the body (the JSON stack) otherwise.
 
+Start the oracle containers with `systemd-run --user --unit=influxftl-oracle --remain-after-exit -p
+KillMode=none podman start w10 idb3`, not from a `bgjob` run: the job's cgroup is killed when the job
+ends, which takes the container's `conmon` and its port forwarding down with it. Warp 10 can take up
+to 3 minutes to answer after a start; poll `curl -s -o /dev/null -w '%{http_code}'
+http://127.0.0.1:18080/api/v0/plasma` until it prints `200`.
+
 A coverage gap finder, once `cargo llvm-cov report --text -- --show-regions=true > /tmp/cov.txt`
 has run: `awk '$0 ~ "/<file>.rs:$" {p=1;next} /^\/home.*\.rs:$/ {p=0} p' /tmp/cov.txt | grep -n
 -B6 '\^0\|      0|'`. Note that `if let … else`-less blocks, `?` and closures all create regions:
