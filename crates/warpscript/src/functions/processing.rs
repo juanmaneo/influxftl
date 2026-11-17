@@ -134,7 +134,7 @@ impl Params {
     }
 
     /// The arity failure: the values given are not a count the function accepts.
-    fn arity(&self) -> Error {
+    pub fn arity(&self) -> Error {
         ProcessingError::Arity {
             expected: self.counts,
             found: self.args.len(),
@@ -169,6 +169,18 @@ impl Params {
         let values = self.values::<N>(0)?;
         let mut out = [0; N];
         for (slot, value) in out.iter_mut().zip(values) {
+            *slot = int_of(value)?;
+        }
+        Ok(out)
+    }
+
+    /// The `N` values from the `skip`-th one on, as `int`s. Unlike [`Params::ints`], the values
+    /// after those `N` are not read: a function whose last value is a mode reads the window before
+    /// it.
+    pub fn ints_window<const N: usize>(&self, skip: usize) -> Result<[i32; N]> {
+        let window = self.args.get(skip..skip + N).ok_or_else(|| self.arity())?;
+        let mut out = [0; N];
+        for (slot, value) in out.iter_mut().zip(window) {
             *slot = int_of(value)?;
         }
         Ok(out)

@@ -55,7 +55,9 @@ pub mod pickle;
 pub mod platform;
 pub mod polyfunc;
 pub mod processing;
+pub mod processing_codec;
 pub mod processing_color;
+pub mod processing_image;
 pub mod processing_style;
 pub mod processing_transform;
 pub mod quaternions;
@@ -149,6 +151,8 @@ const TABLES: &[&[(&str, Entry)]] = &[
     processing_style::FUNCTIONS,
     processing_color::FUNCTIONS,
     processing_transform::FUNCTIONS,
+    processing_image::FUNCTIONS,
+    processing_codec::FUNCTIONS,
     mv::FUNCTIONS,
     geo::FUNCTIONS,
     geoimport::FUNCTIONS,
@@ -401,7 +405,11 @@ mod platform_tests;
 #[cfg(test)]
 mod polyfunc_tests;
 #[cfg(test)]
+mod processing_codec_tests;
+#[cfg(test)]
 mod processing_color_tests;
+#[cfg(test)]
+mod processing_image_tests;
 #[cfg(test)]
 mod processing_manual_tests;
 #[cfg(test)]

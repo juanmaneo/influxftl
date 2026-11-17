@@ -27,6 +27,10 @@ fancy-regex = "0.20"
 # Guava `BaseEncoding.base64()` / `base64Url()` equivalents (`->B64`, `B64->`…). The default
 # `simd-unsafe` feature is left out: the pure Rust code path is plenty fast for script data.
 base64 = { version = "0.23", default-features = false, features = ["std"] }
+# PNG, JPEG, GIF and BMP codecs of `Pencode` and `Pdecode`. `png` writes the text chunks
+# (`tEXt`, `zTXt`, `iTXt`) of `Pencode`'s options, which the `image` crate does not expose.
+image = { version = "0.25", default-features = false, features = ["png", "jpeg", "gif", "bmp"] }
+png = "0.18"
 # Message digests of the `DIGEST` family (BouncyCastle `*Digest` classes in Warp 10) and HMAC.
 digest = "0.11"
 md2 = "0.11"

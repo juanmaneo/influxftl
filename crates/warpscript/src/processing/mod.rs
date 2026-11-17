@@ -8,11 +8,15 @@
 //! contexts. Anti-aliasing and the glyph shapes of the JDK fonts are not reproduced (see
 //! `DIVERGENCES.md`).
 
+pub mod blend;
+pub mod codec;
 pub mod color;
+pub mod filter;
 pub mod font;
 pub mod geometry;
 pub mod image;
 pub mod paint;
+pub mod raster;
 pub mod shape;
 
 use std::rc::Rc;
@@ -245,6 +249,16 @@ pub struct Graphics {
     pub clip: Option<paint::Clip>,
 }
 
+/// The depth buffer of a context of `pixels` pixels: only a `3D` context has one, with nothing
+/// drawn yet.
+fn depth_buffer(three_d: bool, pixels: usize) -> Vec<f32> {
+    if three_d {
+        vec![f32::MAX; pixels]
+    } else {
+        Vec::new()
+    }
+}
+
 impl Graphics {
     /// Every pixel set to `colour`, and the depth buffer cleared (`background`).
     pub fn background(&mut self, colour: u32) {
@@ -280,14 +294,18 @@ impl Graphics {
         Ok(())
     }
 
+    /// Every pixel scaled to `width` by `height` (`Presize` on a `PGRAPHICS`, see
+    /// [`Image::resized`]), and the depth buffer restarted empty.
+    pub fn resize(&mut self, width: usize, height: usize) -> crate::error::Result<()> {
+        self.image = self.image.resized(width, height)?;
+        self.depth = depth_buffer(self.three_d, self.image.pixels.len());
+        Ok(())
+    }
+
     /// A new context of `width` by `height` pixels, transparent, with the default style.
     pub fn new(width: usize, height: usize, three_d: bool) -> crate::error::Result<Self> {
         let image = Image::new(width, height)?;
-        let depth = if three_d {
-            vec![f32::MAX; image.pixels.len()]
-        } else {
-            Vec::new()
-        };
+        let depth = depth_buffer(three_d, image.pixels.len());
         Ok(Graphics {
             image,
             three_d,

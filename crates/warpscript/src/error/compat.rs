@@ -151,10 +151,25 @@ fn processing_class(err: &ProcessingError) -> &'static str {
         ProcessingError::Arity { .. }
         | ProcessingError::Refused { .. }
         | ProcessingError::TooManyPixels { .. }
-        | ProcessingError::NonPositiveMaximum => WARP_SCRIPT_EXCEPTION,
-        ProcessingError::EmptyImage { .. } | ProcessingError::NegativeWidth => {
-            JAVA_ILLEGAL_ARGUMENT_EXCEPTION
-        }
+        | ProcessingError::PixelCount { .. }
+        | ProcessingError::PixelNotLong { .. }
+        | ProcessingError::NonPositiveMaximum
+        | ProcessingError::Decode(_)
+        | ProcessingError::Encode(_)
+        | ProcessingError::UnsupportedFormat
+        | ProcessingError::ChunkNotList
+        | ProcessingError::ChunkNotMap { .. }
+        | ProcessingError::ChunkFields { .. }
+        | ProcessingError::UnknownChunk
+        | ProcessingError::QualityType => WARP_SCRIPT_EXCEPTION,
+        ProcessingError::EmptyImage { .. }
+        | ProcessingError::NegativeWidth
+        | ProcessingError::ResizeWithoutSize
+        | ProcessingError::FilterTakesNoParam { .. }
+        | ProcessingError::PosterizeNeedsLevels
+        | ProcessingError::PosterizeLevels
+        | ProcessingError::QualityOutOfBounds => JAVA_ILLEGAL_ARGUMENT_EXCEPTION,
+        ProcessingError::NegativeRegion => "java.lang.NegativeArraySizeException",
         ProcessingError::StyleUnderflow
         | ProcessingError::MatrixUnderflow
         | ProcessingError::MatrixOverflow => "java.lang.RuntimeException",

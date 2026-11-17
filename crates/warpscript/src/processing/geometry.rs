@@ -105,6 +105,31 @@ impl Transform {
         Ok(t)
     }
 
+    /// The inverse of the transform on the plane `z = 0`, as the six coefficients `[a, b, c, d,
+    /// e, f]` of `x = a·x' + b·y' + c` and `y = d·x' + e·y' + f`: the drawing point `(x', y')` in
+    /// the plane of the context. `None` when the transform flattens the plane (no inverse).
+    pub fn inverse_plane(&self) -> Result<Option<[f32; 6]>> {
+        let rows = self.rows;
+        let (offset_x, offset_y) = (rows[0][3], rows[1][3]);
+        let det = finite(rows[0][0] * rows[1][1] - rows[0][1] * rows[1][0])?;
+        if det == 0.0 {
+            return Ok(None);
+        }
+        let coefficients = [
+            rows[1][1] / det,
+            -rows[0][1] / det,
+            (rows[0][1] * offset_y - rows[1][1] * offset_x) / det,
+            -rows[1][0] / det,
+            rows[0][0] / det,
+            (rows[1][0] * offset_x - rows[0][0] * offset_y) / det,
+        ];
+        let mut inverse = [0.0; 6];
+        for (slot, value) in inverse.iter_mut().zip(coefficients) {
+            *slot = finite(value)?;
+        }
+        Ok(Some(inverse))
+    }
+
     /// The transformed point `(x, y, z)`: each coordinate must stay finite.
     pub fn apply(&self, x: f32, y: f32, z: f32) -> Result<[f32; 3]> {
         let row = |r: usize| {

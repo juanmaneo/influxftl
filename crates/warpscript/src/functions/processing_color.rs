@@ -65,7 +65,7 @@ fn arity(found: usize) -> Error {
 }
 
 /// A colour as the `LONG` a function pushes: the ARGB `int` read as a signed Java `int`.
-fn colour_long(colour: u32) -> Value {
+pub(super) fn colour_long(colour: u32) -> Value {
     Value::Long(i64::from(colour as i32))
 }
 
