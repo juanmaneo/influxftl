@@ -54,6 +54,10 @@ pub mod patterns;
 pub mod pickle;
 pub mod platform;
 pub mod polyfunc;
+pub mod processing;
+pub mod processing_color;
+pub mod processing_style;
+pub mod processing_transform;
 pub mod quaternions;
 pub mod rsa;
 pub mod runtime;
@@ -141,6 +145,10 @@ const TABLES: &[&[(&str, Entry)]] = &[
     dtw::FUNCTIONS,
     patterns::FUNCTIONS,
     polyfunc::FUNCTIONS,
+    processing::FUNCTIONS,
+    processing_style::FUNCTIONS,
+    processing_color::FUNCTIONS,
+    processing_transform::FUNCTIONS,
     mv::FUNCTIONS,
     geo::FUNCTIONS,
     geoimport::FUNCTIONS,
@@ -392,6 +400,16 @@ mod pivot_tests;
 mod platform_tests;
 #[cfg(test)]
 mod polyfunc_tests;
+#[cfg(test)]
+mod processing_color_tests;
+#[cfg(test)]
+mod processing_manual_tests;
+#[cfg(test)]
+mod processing_style_tests;
+#[cfg(test)]
+mod processing_tests;
+#[cfg(test)]
+mod processing_transform_tests;
 #[cfg(test)]
 mod quaternions_tests;
 #[cfg(test)]

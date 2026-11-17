@@ -206,6 +206,11 @@ fn append(out: &mut String, value: &Value, depth: usize, readable: bool) -> Resu
         Value::Mark => out.push_str("MARK "),
         // Unsupported types keep their stack level as an informative string.
         Value::Context(_) => out.push_str("'UNSUPPORTED:CONTEXT' "),
+        Value::Graphics(_) | Value::Image(_) | Value::Shape(_) | Value::Font(_) => {
+            out.push_str("'UNSUPPORTED:");
+            out.push_str(value.type_name());
+            out.push_str("' ");
+        }
         Value::Counter(c) => {
             out.push_str("COUNTER ");
             if c.get() != 0 {

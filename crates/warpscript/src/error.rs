@@ -23,6 +23,7 @@ pub mod geojson;
 pub mod geometry;
 pub mod math;
 pub mod platform;
+pub mod processing;
 pub mod series;
 pub mod stack;
 pub mod text;
@@ -44,6 +45,7 @@ use self::geojson::GeoJsonError;
 use self::geometry::GeometryError;
 use self::math::MathError;
 use self::platform::PlatformError;
+use self::processing::ProcessingError;
 use self::series::SeriesError;
 use self::stack::StackError;
 use self::text::TextError;
@@ -115,6 +117,14 @@ pub enum Class {
     ArrayConstructor,
     /// The class of an unpickled object.
     Pickled(PyKind),
+    /// A Processing graphics context, as the type a cast asks for.
+    Graphics,
+    /// A Processing image, as the type a cast asks for.
+    Image,
+    /// A Processing shape, as the type a cast asks for.
+    Shape,
+    /// A Processing font, as the type a cast asks for.
+    Font,
 }
 
 impl From<ValueKind> for Class {
@@ -277,6 +287,9 @@ pub enum Error {
     /// A failure of a Commons Math routine.
     #[error(transparent)]
     Math(#[from] MathError),
+    /// A failure of a Processing function.
+    #[error(transparent)]
+    Processing(#[from] ProcessingError),
     /// A failure of the pickle encoder or decoder.
     #[error(transparent)]
     Pickle(#[from] PickleError),
@@ -358,6 +371,7 @@ impl Error {
             Error::Encoder(err) => err.is_runtime(),
             Error::Pickle(err) => err.is_runtime(),
             Error::Text(err) => err.is_runtime(),
+            Error::Processing(err) => err.is_runtime(),
             Error::Math(_)
             | Error::Arithmetic(_)
             | Error::NumberFormat(_)

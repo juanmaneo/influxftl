@@ -10,6 +10,7 @@ use super::geo::GeoError;
 use super::geojson::{GeoJsonError, StringTarget};
 use super::geometry::GeometryError;
 use super::math::MathError;
+use super::processing::ProcessingError;
 use super::text::ReplacementClass;
 use super::{Class, Error};
 use crate::encoder::EncoderError;
@@ -107,6 +108,7 @@ pub fn exception_class(err: &Error) -> &'static str {
         | Error::Format(_)
         | Error::Wrapped { .. }
         | Error::NotFinite(_) => WARP_SCRIPT_EXCEPTION,
+        Error::Processing(err) => processing_class(err),
         Error::Geometry(err) => geometry_class(err),
         Error::GeoJson(err) => geojson_class(err),
         Error::Thrift(err) => thrift_class(err),
@@ -139,6 +141,24 @@ pub fn exception_class(err: &Error) -> &'static str {
         Error::EmptyStack => "io.warp10.script.InformativeEmptyStackException",
         Error::ClassCast { .. } => "java.lang.ClassCastException",
         Error::NullPointer => "java.lang.NullPointerException",
+    }
+}
+
+/// The class of the exception a Processing failure stands for: Warp 10's own for a refused
+/// argument, the JDK's for what Processing itself throws.
+fn processing_class(err: &ProcessingError) -> &'static str {
+    match err {
+        ProcessingError::Arity { .. }
+        | ProcessingError::Refused { .. }
+        | ProcessingError::TooManyPixels { .. }
+        | ProcessingError::NonPositiveMaximum => WARP_SCRIPT_EXCEPTION,
+        ProcessingError::EmptyImage { .. } | ProcessingError::NegativeWidth => {
+            JAVA_ILLEGAL_ARGUMENT_EXCEPTION
+        }
+        ProcessingError::StyleUnderflow
+        | ProcessingError::MatrixUnderflow
+        | ProcessingError::MatrixOverflow => "java.lang.RuntimeException",
+        ProcessingError::OutOfMemory { .. } => "java.lang.OutOfMemoryError",
     }
 }
 
@@ -195,6 +215,10 @@ pub fn class_name(class: Class) -> &'static str {
         Class::ObjectConstructor => "net.razorvine.pickle.IObjectConstructor",
         Class::ArrayConstructor => "net.razorvine.pickle.objects.ArrayConstructor",
         Class::Pickled(kind) => py_class(kind),
+        Class::Graphics => "processing.core.PGraphics",
+        Class::Image => "processing.core.PImage",
+        Class::Shape => "processing.core.PShape",
+        Class::Font => "processing.core.PFont",
     }
 }
 
@@ -223,6 +247,10 @@ pub fn value_class(kind: ValueKind) -> &'static str {
         ValueKind::Encoder => "io.warp10.continuum.gts.GTSEncoder",
         ValueKind::GeoShape => "com.geoxp.GeoXPLib$GeoXPShape",
         ValueKind::Key => "io.warp10.script.functions.ECPRIVATE$1",
+        ValueKind::Graphics => "processing.core.PGraphicsJava2D",
+        ValueKind::Image => "processing.core.PImage",
+        ValueKind::Shape => "processing.core.PShapeJava2D",
+        ValueKind::Font => "processing.core.PFont",
     }
 }
 

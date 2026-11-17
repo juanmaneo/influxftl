@@ -124,6 +124,14 @@ pub enum Value {
     GeoShape(Rc<GeoShape>),
     /// An elliptic curve key (`ECPRIVATE`, `ECPUBLIC`: a `java.security.Key` in Warp 10).
     Key(Rc<crate::ec::Key>),
+    /// `PGRAPHICS`: a Processing graphics context, drawn on and shared like the Java object.
+    Graphics(Rc<RefCell<crate::processing::Graphics>>),
+    /// `PIMAGE`: a Processing image, an ARGB pixel buffer.
+    Image(Rc<RefCell<crate::processing::Image>>),
+    /// `PSHAPE`: a Processing shape read from SVG (immutable).
+    Shape(Rc<crate::processing::Shape>),
+    /// `PFONT`: a Processing font (immutable).
+    Font(Rc<crate::processing::Font>),
 }
 
 /// The kind of a [`Value`], without its content. Failures carry it instead of the value; the
@@ -174,6 +182,14 @@ pub enum ValueKind {
     GeoShape,
     /// An elliptic curve key.
     Key,
+    /// `PGRAPHICS`.
+    Graphics,
+    /// `PIMAGE`.
+    Image,
+    /// `PSHAPE`.
+    Shape,
+    /// `PFONT`.
+    Font,
 }
 
 /// A `GTSENCODER` as held by the stack.
@@ -230,6 +246,10 @@ impl Value {
             Value::Encoder(_) => "GTSENCODER",
             Value::GeoShape(_) => "GEOSHAPE",
             Value::Key(_) => "KEY",
+            Value::Graphics(_) => "PGRAPHICS",
+            Value::Image(_) => "PIMAGE",
+            Value::Shape(_) => "PSHAPE",
+            Value::Font(_) => "PFONT",
         }
     }
 
@@ -258,6 +278,10 @@ impl Value {
             Value::Encoder(_) => ValueKind::Encoder,
             Value::GeoShape(_) => ValueKind::GeoShape,
             Value::Key(_) => ValueKind::Key,
+            Value::Graphics(_) => ValueKind::Graphics,
+            Value::Image(_) => ValueKind::Image,
+            Value::Shape(_) => ValueKind::Shape,
+            Value::Font(_) => ValueKind::Font,
         }
     }
 
@@ -326,6 +350,10 @@ impl Value {
             (Value::Encoder(a), Value::Encoder(b)) => Rc::ptr_eq(a, b),
             (Value::GeoShape(a), Value::GeoShape(b)) => Rc::ptr_eq(a, b),
             (Value::Key(a), Value::Key(b)) => Rc::ptr_eq(a, b),
+            (Value::Graphics(a), Value::Graphics(b)) => Rc::ptr_eq(a, b),
+            (Value::Image(a), Value::Image(b)) => Rc::ptr_eq(a, b),
+            (Value::Shape(a), Value::Shape(b)) => Rc::ptr_eq(a, b),
+            (Value::Font(a), Value::Font(b)) => Rc::ptr_eq(a, b),
             (Value::String(a), Value::String(b)) => Rc::ptr_eq(a, b),
             (Value::Bytes(a), Value::Bytes(b)) => Rc::ptr_eq(a, b),
             _ => false,
@@ -411,7 +439,11 @@ impl PartialEq for Value {
             | (Value::Counter(_), Value::Counter(_))
             | (Value::Gts(_), Value::Gts(_))
             | (Value::Encoder(_), Value::Encoder(_))
-            | (Value::Key(_), Value::Key(_)) => self.same_object(other),
+            | (Value::Key(_), Value::Key(_))
+            | (Value::Graphics(_), Value::Graphics(_))
+            | (Value::Image(_), Value::Image(_))
+            | (Value::Shape(_), Value::Shape(_))
+            | (Value::Font(_), Value::Font(_)) => self.same_object(other),
             // `GeoXPShape` has no `equals`; `EQ` compares the geocells.
             (Value::GeoShape(a), Value::GeoShape(b)) => a == b,
             _ => false,
@@ -468,6 +500,10 @@ impl Hash for Value {
             // hashes them by identity (DIVERGENCES.md, section 38).
             Value::GeoShape(s) => s.hash(state),
             Value::Key(k) => (Rc::as_ptr(k) as usize).hash(state),
+            Value::Graphics(g) => (Rc::as_ptr(g) as usize).hash(state),
+            Value::Image(i) => (Rc::as_ptr(i) as usize).hash(state),
+            Value::Shape(s) => (Rc::as_ptr(s) as usize).hash(state),
+            Value::Font(f) => (Rc::as_ptr(f) as usize).hash(state),
         }
     }
 }
@@ -537,6 +573,26 @@ impl fmt::Display for Value {
             ),
             // The identity hash is not shown: the object holds a secret.
             Value::Key(_) => write!(f, "{}@0", crate::error::compat::value_class(ValueKind::Key)),
+            Value::Graphics(_) => write!(
+                f,
+                "{}@0",
+                crate::error::compat::value_class(ValueKind::Graphics)
+            ),
+            Value::Image(_) => write!(
+                f,
+                "{}@0",
+                crate::error::compat::value_class(ValueKind::Image)
+            ),
+            Value::Shape(_) => write!(
+                f,
+                "{}@0",
+                crate::error::compat::value_class(ValueKind::Shape)
+            ),
+            Value::Font(_) => write!(
+                f,
+                "{}@0",
+                crate::error::compat::value_class(ValueKind::Font)
+            ),
         }
     }
 }

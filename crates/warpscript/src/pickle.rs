@@ -393,6 +393,10 @@ fn hash_code(value: &Value, visiting: &mut Vec<usize>) -> Result<i32> {
         Value::Encoder(e) => identity(e),
         Value::GeoShape(s) => identity(s),
         Value::Key(k) => identity(k),
+        Value::Graphics(g) => identity(g),
+        Value::Image(i) => identity(i),
+        Value::Shape(s) => identity(s),
+        Value::Font(f) => identity(f),
     })
 }
 
@@ -622,7 +626,12 @@ impl Pickler {
                 self.save(&map)?;
                 self.write_memo(value, hash);
             }
-            Value::GeoShape(_) | Value::Key(_) => {
+            Value::GeoShape(_)
+            | Value::Key(_)
+            | Value::Graphics(_)
+            | Value::Image(_)
+            | Value::Shape(_)
+            | Value::Font(_) => {
                 // A bean without a property (a key does not give its secret): the dictionary of
                 // its class.
                 let class = Value::string(compat::value_class(value.kind()));

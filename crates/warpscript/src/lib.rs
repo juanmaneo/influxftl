@@ -72,6 +72,7 @@ pub mod microsphere;
 mod microsphere_tests;
 pub mod pickle;
 pub mod position;
+pub mod processing;
 pub mod rsa;
 pub mod sax;
 pub mod selector;
