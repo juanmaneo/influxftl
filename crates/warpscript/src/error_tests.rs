@@ -92,6 +92,18 @@ fn signals() {
 }
 
 #[test]
+fn a_line_failure_names_its_line_and_keeps_its_cause() {
+    let line = Error::Line {
+        line: 3,
+        source: Box::new(Error::Break),
+    };
+    assert_eq!(line.message(), "Line #3");
+    assert_eq!(line.to_string(), format!("Line #3 ({})", Error::Break));
+    assert_eq!(line.cause(), Some(&Error::Break));
+    assert_eq!(line.messages().len(), 2);
+}
+
+#[test]
 fn typed_failures() {
     assert_eq!(Error::empty_stack(), Error::EmptyStack);
     assert_eq!(Error::empty_stack().to_string(), "Empty stack.");

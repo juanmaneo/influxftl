@@ -128,9 +128,10 @@ that they are not forgotten (`grep -rnF` the pattern to list them):
 - **Warp 10 `int` casts**: a `LONG` used as an index, a key or a register is cut to 32 bits by
   `args::long_as_int`, as Warp 10's `(int)` cast does (oracle: `[ 10 20 30 ] 4294967297 GET`
   answers `20`).
-- **Probes of a conversion**: `parse::<i64>().ok()`, `u32::try_from(x).ok()`,
-  `usize::try_from(x) else { … }` (about 40). The error carries no information; `None` leads to a
-  typed error or to the alternative path.
+- **Probes of a conversion**: `usize::try_from(x) else { … }` (about 40). The error carries no
+  information; `None` leads to a typed error or to the alternative path. No `.ok()` is left in
+  non-test code: a number that is parsed is folded with checked arithmetic (`position`, the
+  register names, the time fields), and a Java `int` limit is a checked `i32` fold.
 - **`map_err(|_| …)`** (36): the dropped error is a `TryFromIntError`/`ParseIntError`; the typed
   replacement names the input.
 - **Infallible by construction, not yet expressed as such**: `->PICKLE` of an encoder
