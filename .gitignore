@@ -3,7 +3,6 @@
 /target-*
 
 # coverage / proof artifacts produced by `cargo xtask`
-/coverage
 /lcov.info
 /*.profraw
 /*.profdata

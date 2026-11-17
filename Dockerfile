@@ -28,8 +28,8 @@ FROM docker.io/library/rust:${RUST_VERSION}-${DEBIAN_VERSION} AS builder
 
 WORKDIR /src
 
-# Copy the manifests and sources. `.dockerignore` keeps target/, reference/ and
-# coverage artifacts out of the build context.
+# Copy the manifests and sources. `.dockerignore` keeps target/ (which holds the coverage
+# reports too) and reference/ out of the build context.
 COPY . .
 
 # Build only the binary crate (and its dependency, the warpscript library).

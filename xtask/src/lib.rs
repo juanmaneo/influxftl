@@ -240,7 +240,8 @@ fn test(runner: &mut dyn Runner) -> Result<(), Error> {
 
 fn coverage(runner: &mut dyn Runner) -> Result<(), Error> {
     let root = runner.workspace_root();
-    let out_dir = root.join("coverage");
+    // The reports are generated output: under `target/`, `cargo clean` removes them with the rest.
+    let out_dir = root.join("target").join("coverage");
     std::fs::create_dir_all(&out_dir)?;
     let json_path = out_dir.join("coverage.json");
     // `llvm-cov report --html` creates an `html/` directory inside `--output-dir`.
