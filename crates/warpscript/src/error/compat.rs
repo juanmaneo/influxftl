@@ -172,7 +172,8 @@ fn processing_class(err: &ProcessingError) -> &'static str {
         ProcessingError::NegativeRegion => "java.lang.NegativeArraySizeException",
         ProcessingError::StyleUnderflow
         | ProcessingError::MatrixUnderflow
-        | ProcessingError::MatrixOverflow => "java.lang.RuntimeException",
+        | ProcessingError::MatrixOverflow
+        | ProcessingError::ShapeState { .. } => "java.lang.RuntimeException",
         ProcessingError::OutOfMemory { .. } => "java.lang.OutOfMemoryError",
     }
 }

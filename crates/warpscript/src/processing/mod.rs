@@ -11,12 +11,17 @@
 pub mod blend;
 pub mod codec;
 pub mod color;
+pub mod curve;
+pub mod draw;
 pub mod filter;
 pub mod font;
 pub mod geometry;
 pub mod image;
 pub mod paint;
+pub mod path;
+pub mod primitive;
 pub mod raster;
+pub mod recording;
 pub mod shape;
 
 use std::rc::Rc;
@@ -247,6 +252,8 @@ pub struct Graphics {
     pub saved_transforms: Vec<Transform>,
     /// The clipping rectangle set by `clip`, in pixels.
     pub clip: Option<paint::Clip>,
+    /// The shape between `beginShape` and `endShape`, if one is begun.
+    pub recording: Option<recording::Recording>,
 }
 
 /// The depth buffer of a context of `pixels` pixels: only a `3D` context has one, with nothing
@@ -315,6 +322,7 @@ impl Graphics {
             transform: Transform::identity(),
             saved_transforms: Vec::new(),
             clip: None,
+            recording: None,
         })
     }
 }

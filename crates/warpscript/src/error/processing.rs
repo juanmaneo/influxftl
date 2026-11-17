@@ -184,6 +184,13 @@ pub enum ProcessingError {
         "Parameter 'quality' for format 'jpeg' must be a DOUBLE between 0.0 and 1.0, or a LONG between 0 and 100."
     )]
     QualityType,
+    /// A vertex function used where the shape it needs is not begun: Processing's own message,
+    /// which names no WarpScript function.
+    #[error("{message}")]
+    ShapeState {
+        /// The message, as Processing words it.
+        message: &'static str,
+    },
 }
 
 impl ProcessingError {
@@ -205,6 +212,7 @@ impl ProcessingError {
             | ProcessingError::ChunkFields { .. }
             | ProcessingError::UnknownChunk
             | ProcessingError::QualityType => false,
+            ProcessingError::ShapeState { .. } => true,
             ProcessingError::EmptyImage { .. }
             | ProcessingError::StyleUnderflow
             | ProcessingError::MatrixUnderflow

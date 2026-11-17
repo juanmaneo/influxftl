@@ -130,6 +130,14 @@ impl Transform {
         Ok(Some(inverse))
     }
 
+    /// The factor that lengths in the plane are scaled by: the square root of the determinant of
+    /// the `x`-`y` part, which is what stroke widths follow (a non-uniform scale stretches them by
+    /// their geometric mean).
+    pub fn plane_scale(&self) -> Result<f32> {
+        let det = self.rows[0][0] * self.rows[1][1] - self.rows[0][1] * self.rows[1][0];
+        finite(det.abs().sqrt())
+    }
+
     /// The transformed point `(x, y, z)`: each coordinate must stay finite.
     pub fn apply(&self, x: f32, y: f32, z: f32) -> Result<[f32; 3]> {
         let row = |r: usize| {

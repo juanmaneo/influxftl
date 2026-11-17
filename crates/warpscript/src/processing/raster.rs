@@ -8,6 +8,7 @@
 //! the depth buffer applies to an image (see `DIVERGENCES.md`).
 
 use super::image::{Image, argb, channels};
+use super::primitive::place;
 use super::{Graphics, Mode, finite};
 use crate::error::Result;
 
@@ -94,20 +95,6 @@ impl Graphics {
         }
         Ok(())
     }
-}
-
-/// The start and the length of an image on one axis, placed at `origin` with `extent` by `mode`
-/// (`imageMode`). The extent is the size of the image, or for `CORNERS` the coordinate of its
-/// second corner. `CENTER` puts `origin` at the middle; the rectangle rule of `RADIUS` (`origin`
-/// at the middle, twice `extent` long) is kept so that the match is total, although `imageMode`
-/// never sets it.
-fn place(mode: Mode, origin: f32, extent: f32) -> Result<(f32, f32)> {
-    Ok(match mode {
-        Mode::Corner => (origin, extent),
-        Mode::Corners => (origin, finite(extent - origin)?),
-        Mode::Center => (finite(origin - extent / 2.0)?, extent),
-        Mode::Radius => (finite(origin - extent)?, finite(2.0 * extent)?),
-    })
 }
 
 /// The pixel index a device coordinate starts or ends at, kept within `0..=limit`. The coordinate
