@@ -662,7 +662,9 @@ fn parse_signed(text: &str, pos: usize) -> Option<(i64, usize)> {
     if end == digits_start {
         return None;
     }
-    let value: i64 = text[digits_start..end].parse().ok()?;
+    let value = bytes[digits_start..end].iter().try_fold(0i64, |acc, &b| {
+        acc.checked_mul(10)?.checked_add(i64::from(b - b'0'))
+    })?;
     Some((if negative { -value } else { value }, end))
 }
 
@@ -1025,11 +1027,14 @@ fn unparsable(text: &str, index: usize) -> Error {
     .into()
 }
 
-/// Read exactly `n` digits at `pos`.
-fn digits(text: &str, pos: usize, n: usize) -> Option<u32> {
+/// Read exactly `n` digits at `pos`: `None` when they are not all digits or their value does not
+/// fit a `u32`.
+pub(super) fn digits(text: &str, pos: usize, n: usize) -> Option<u32> {
     let slice = text.get(pos..pos + n)?;
     if slice.len() == n && slice.bytes().all(|b| b.is_ascii_digit()) {
-        slice.parse().ok()
+        slice.bytes().try_fold(0u32, |acc, b| {
+            acc.checked_mul(10)?.checked_add(u32::from(b - b'0'))
+        })
     } else {
         None
     }

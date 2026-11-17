@@ -1417,28 +1417,40 @@ fn calendar_millis(fields: [i64; 7], zone: Option<&str>) -> i64 {
     local_to_utc(local, zone)
 }
 
+/// An identifier that names no zone of the time zone database.
+#[derive(Debug, thiserror::Error)]
+#[error("unknown time zone {0}")]
+struct UnknownZone(String);
+
 /// The instant of the local time `local` (milliseconds) in the zone `zone`.
 fn local_to_utc(local: i64, zone: Option<&str>) -> i64 {
-    // Java's `TimeZone.getTimeZone` answers GMT for an identifier it does not know: so does
-    // this, with an offset of zero.
-    let offset = zone
-        .and_then(|id| id.parse::<chrono_tz::Tz>().ok())
-        .map_or(0, |tz| {
-            use chrono::{Offset, TimeZone};
-            let naive = chrono::DateTime::from_timestamp_millis(local)
-                .unwrap_or_default()
-                .naive_utc();
-            // Ambiguous local times take the standard (later) offset; skipped ones the
-            // offset before the transition.
-            tz.offset_from_local_datetime(&naive)
-                .latest()
-                .unwrap_or_else(|| {
-                    tz.offset_from_utc_datetime(&(naive - chrono::Duration::days(1)))
-                })
-                .fix()
-                .local_minus_utc()
-        });
+    let offset = match zone.map(zone_named) {
+        Some(Ok(tz)) => offset_at(tz, local),
+        // Java's `TimeZone.getTimeZone` answers GMT for an identifier it does not know: such a
+        // zone is read with an offset of zero, as GMT is.
+        Some(Err(UnknownZone(_))) | None => 0,
+    };
     local - i64::from(offset) * 1000
+}
+
+/// The zone that `id` names in the time zone database.
+fn zone_named(id: &str) -> std::result::Result<chrono_tz::Tz, UnknownZone> {
+    id.parse().map_err(|_| UnknownZone(id.to_owned()))
+}
+
+/// The offset in seconds of the zone `tz` at the local time `local` (milliseconds).
+fn offset_at(tz: chrono_tz::Tz, local: i64) -> i32 {
+    use chrono::{Offset, TimeZone};
+    let naive = chrono::DateTime::from_timestamp_millis(local)
+        .unwrap_or_default()
+        .naive_utc();
+    // Ambiguous local times take the standard (later) offset; skipped ones the offset before
+    // the transition.
+    tz.offset_from_local_datetime(&naive)
+        .latest()
+        .unwrap_or_else(|| tz.offset_from_utc_datetime(&(naive - chrono::Duration::days(1))))
+        .fix()
+        .local_minus_utc()
 }
 
 /// `DateTimeConstructor`.

@@ -3,7 +3,9 @@
 //! Tests of the date and time functions against Joda-Time 2.13.1 and `java.time` values.
 
 use super::runtime::current_time;
-use super::time::{Period, Zone, add_period, parse_duration, parse_period, parse_timestamp};
+use super::time::{
+    Period, Zone, add_period, digits, parse_duration, parse_period, parse_timestamp,
+};
 use crate::tests::{assert_fails, assert_top, fail_msg, top};
 use crate::value::Value;
 
@@ -509,6 +511,9 @@ fn duration_matches_joda() {
     assert_eq!(parse_period("PT0.0005S", &mut period), 9);
     assert_eq!((period.seconds, period.millis), (0, 0));
     assert_eq!(parse_period("PT99999999999999999999S", &mut period), -3);
+    assert_eq!(parse_period("PT9223372036854775808S", &mut period), -3);
+    assert_eq!(parse_period("PT9223372036854775807S", &mut period), 22);
+    assert_eq!(period.seconds, i64::MAX);
     assert_eq!(parse_period("PT1.5", &mut period), -3);
     assert_eq!(parse_period("PT1H1", &mut period), 4);
     assert_eq!(parse_period("P1X", &mut period), 1);
@@ -910,4 +915,13 @@ fn zones() {
     assert!(Zone::for_id(Some("+")).is_err());
     assert!(Zone::for_id(Some("+0")).is_err());
     assert!(Zone::for_id(Some("-23:59:59")).is_ok());
+}
+
+#[test]
+fn digits_are_read_only_when_their_value_fits_a_u32() {
+    assert_eq!(digits("4294967295", 0, 10), Some(u32::MAX));
+    assert_eq!(digits("12", 0, 2), Some(12));
+    assert_eq!(digits("9999999999", 0, 10), None);
+    assert_eq!(digits("4294967296", 0, 10), None);
+    assert_eq!(digits("1x", 0, 2), None);
 }
