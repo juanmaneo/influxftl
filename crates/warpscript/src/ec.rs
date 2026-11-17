@@ -68,6 +68,8 @@ macro_rules! backend {
             use num_bigint::BigUint;
             use $krate::{AffinePoint, FieldBytes, ProjectivePoint, Scalar};
 
+            use crate::error::crypto::PointError;
+
             /// The size of a coordinate or a scalar, in bytes.
             pub(super) const SIZE: usize = $size;
 
@@ -109,14 +111,18 @@ macro_rules! backend {
                 base_mul(base) + mul(point, k)
             }
 
-            /// The point of an encoding (compressed or not, hybrid ones are refused).
+            /// The point of an encoding (compressed or not, hybrid ones are refused), or `refusal`
+            /// when the curve refuses the encoding.
             ///
             /// The curve crates say nothing of why an encoding is refused (their error has no
-            /// content): [`super::Point::decode`] tells why from the encoding.
-            pub(super) fn decode(encoded: &[u8]) -> Option<ProjectivePoint> {
+            /// content): the caller says why, from the encoding ([`super::Point::decode`]).
+            pub(super) fn decode(
+                encoded: &[u8],
+                refusal: PointError,
+            ) -> Result<ProjectivePoint, PointError> {
                 AffinePoint::from_sec1_bytes(encoded)
                     .map(ProjectivePoint::from)
-                    .ok()
+                    .map_err(|_| refusal)
             }
 
             /// The point encoded in full (`00` for the point at infinity).
@@ -197,14 +203,11 @@ impl Point {
     pub fn decode(curve: Curve, encoded: &[u8]) -> Result<Point, PointError> {
         let size = curve.size();
         let (&tag, body) = encoded.split_first().ok_or(PointError::Empty)?;
-        let canonical = |encoded: &[u8], error: PointError| {
-            match curve {
-                Curve::Secp256k1 => secp256k1::decode(encoded).map(Point::Secp256k1),
-                Curve::Secp256r1 => secp256r1::decode(encoded).map(Point::Secp256r1),
-                Curve::Secp384r1 => secp384r1::decode(encoded).map(Point::Secp384r1),
-                Curve::Secp521r1 => secp521r1::decode(encoded).map(Point::Secp521r1),
-            }
-            .ok_or(error)
+        let canonical = |encoded: &[u8], error: PointError| match curve {
+            Curve::Secp256k1 => secp256k1::decode(encoded, error).map(Point::Secp256k1),
+            Curve::Secp256r1 => secp256r1::decode(encoded, error).map(Point::Secp256r1),
+            Curve::Secp384r1 => secp384r1::decode(encoded, error).map(Point::Secp384r1),
+            Curve::Secp521r1 => secp521r1::decode(encoded, error).map(Point::Secp521r1),
         };
         // A coordinate must be below the prime of the field.
         let below_prime = |coordinate: &[u8]| {
