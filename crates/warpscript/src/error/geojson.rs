@@ -9,6 +9,7 @@ use super::compat::{
     GEOJSON_PACKAGE, GEOMETRY_ARRAY_DESCRIPTOR, GEOMETRY_CLASS, JAVA_LINKED_HASH_MAP,
     JAVA_PROPERTIES_TYPE,
 };
+use super::geometry::NumberError;
 
 /// `at [Source: UNKNOWN; byte offset: #UNKNOWN]`, the location Jackson gives to a failure of
 /// a tree it read (the text is gone by then).
@@ -218,6 +219,9 @@ pub enum GeoJsonError {
         text: String,
         /// The path to the value.
         chain: Chain,
+        /// Why the string is not a number.
+        #[source]
+        source: NumberError,
     },
     /// A string where an array or a map is expected (`InvalidDefinitionException`, and
     /// `MismatchedInputException` for a map).

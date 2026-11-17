@@ -14,7 +14,7 @@ use std::str::Chars;
 
 use super::geometry::{Coord, Geometry, Line, Polygon, Ring};
 use crate::error::fault::ResourceError;
-use crate::error::geometry::GeometryError;
+use crate::error::geometry::{GeometryError, NumberError};
 use crate::error::{Error, Result};
 
 /// The deepest nesting of geometry collections the reader follows (a JVM stack overflows
@@ -202,10 +202,11 @@ impl<'a> Reader<'a> {
     /// `getNextNumber`.
     fn next_number(&mut self) -> Result<f64> {
         match self.next_token() {
-            Token::Word(word) => parse_number(&word).ok_or_else(|| {
+            Token::Word(word) => parse_number(&word).map_err(|source| {
                 GeometryError::InvalidNumber {
                     text: word,
                     line: self.line,
+                    source,
                 }
                 .into()
             }),
@@ -371,14 +372,14 @@ impl<'a> Reader<'a> {
     }
 }
 
-/// `Double.parseDouble` of a word: `None` when it is not a number.
+/// `Double.parseDouble` of a word, as the callers that then refuse `NaN` and `Infinity` need it.
 ///
 /// The decimal forms Java accepts (an optional sign, digits with an optional point, an optional
 /// exponent, an optional `f` or `d` suffix) and the `NaN` and `Infinity` of the callers that
 /// then refuse them; the hexadecimal floating point literals Java also accepts are not read.
-pub(super) fn parse_number(word: &str) -> Option<f64> {
+pub(super) fn parse_number(word: &str) -> std::result::Result<f64, NumberError> {
     if word.eq_ignore_ascii_case("NaN") {
-        return Some(f64::NAN);
+        return Ok(f64::NAN);
     }
     let unsigned = word.strip_prefix(['+', '-']).unwrap_or(word);
     let magnitude = match unsigned {
@@ -386,33 +387,28 @@ pub(super) fn parse_number(word: &str) -> Option<f64> {
         "Infinity" => f64::INFINITY,
         decimal => parse_decimal(decimal)?,
     };
-    Some(if word.starts_with('-') {
+    Ok(if word.starts_with('-') {
         -magnitude
     } else {
         magnitude
     })
 }
 
-/// A decimal number without sign: `digits[.digits][e[sign]digits][f|d]`, at least one digit
+/// A decimal number without its sign: `digits[.digits][e[sign]digits][f|d]`, at least one digit
 /// around the point.
-fn parse_decimal(text: &str) -> Option<f64> {
+fn parse_decimal(text: &str) -> std::result::Result<f64, NumberError> {
     let body = text.strip_suffix(['f', 'F', 'd', 'D']).unwrap_or(text);
-    let (mantissa, exponent) = match body.split_once(['e', 'E']) {
-        Some((mantissa, exponent)) => (mantissa, Some(exponent)),
-        None => (body, None),
-    };
-    let digits = |s: &str| s.bytes().all(|b| b.is_ascii_digit());
-    let (whole, fraction) = mantissa.split_once('.').unwrap_or((mantissa, ""));
-    let has_digits = !whole.is_empty() || !fraction.is_empty();
-    let exponent_ok = exponent.is_none_or(|e| {
-        let e = e.strip_prefix(['+', '-']).unwrap_or(e);
-        !e.is_empty() && digits(e)
-    });
-    if has_digits && digits(whole) && digits(fraction) && exponent_ok {
-        body.parse().ok()
-    } else {
-        None
+    // The float parser of Rust reads `inf` and `nan` too, which Java refuses: a decimal form
+    // starts with a digit or a point and has nothing else but digits, the point, the exponent
+    // and its sign.
+    let starts_as_decimal = body.starts_with(|c: char| c.is_ascii_digit() || c == '.');
+    let only_decimal_characters = body
+        .bytes()
+        .all(|b| b.is_ascii_digit() || matches!(b, b'.' | b'e' | b'E' | b'+' | b'-'));
+    if !starts_as_decimal || !only_decimal_characters {
+        return Err(NumberError::NotDecimal);
     }
+    Ok(body.parse()?)
 }
 
 /// Read a geometry from WKT: `None` when the text does not start with a word.

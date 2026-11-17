@@ -243,10 +243,11 @@ fn double(json: &Json, path: &Path) -> Result<f64> {
             if text.is_empty() {
                 Ok(0.0)
             } else {
-                parse_number(text).ok_or_else(|| {
+                parse_number(text).map_err(|source| {
                     Error::wrapped(GeoJsonError::NotANumber {
                         text: text.to_owned(),
                         chain: Chain(path.clone()),
+                        source,
                     })
                 })
             }

@@ -6,7 +6,7 @@
 use super::geometry::{Coord, Geometry, Line};
 use super::wkt::{format_number, increment, parse_number, read, write};
 use crate::error::fault::ResourceError;
-use crate::error::geometry::GeometryError;
+use crate::error::geometry::{GeometryError, NumberError};
 use crate::error::{Error, Result};
 use crate::finite::NotFinite;
 use crate::tests::on_big_stack;
@@ -58,16 +58,31 @@ fn only_the_decimal_forms_are_numbers() {
         ("2.5f", 2.5),
         ("2.5D", 2.5),
     ] {
-        assert_eq!(parse_number(word), Some(expected), "{word}");
+        assert_eq!(
+            parse_number(word).expect("a decimal number"),
+            expected,
+            "{word}"
+        );
     }
     for word in [
-        "", ".", "-", "e5", "1e", "1e+", "1.2.3", "0x10", "1_0", "abc", "1 2", "--1",
+        "", "-", "e5", "0x10", "1_0", "abc", "1 2", "--1", "+-1", "inf", "-nan",
     ] {
-        assert_eq!(parse_number(word), None, "{word}");
+        assert!(
+            matches!(parse_number(word), Err(NumberError::NotDecimal)),
+            "{word}"
+        );
     }
-    assert!(parse_number("NaN").is_some_and(f64::is_nan));
-    assert!(parse_number("-nan").is_none());
-    assert_eq!(parse_number("-Infinity"), Some(f64::NEG_INFINITY));
+    for word in [".", "1e", "1e+", "1.2.3"] {
+        assert!(
+            matches!(parse_number(word), Err(NumberError::Parse(_))),
+            "{word}"
+        );
+    }
+    assert!(parse_number("NaN").expect("NaN").is_nan());
+    assert_eq!(
+        parse_number("-Infinity").expect("-Infinity"),
+        f64::NEG_INFINITY
+    );
 }
 
 #[test]
@@ -120,7 +135,8 @@ fn lines_and_comments_are_counted_like_a_stream_tokenizer() {
         parse_error("POINT\r\n(1\r2\r\nx)"),
         GeometryError::InvalidNumber {
             text: "x".to_owned(),
-            line: 4
+            line: 4,
+            source: NumberError::NotDecimal,
         }
     );
     assert_eq!(

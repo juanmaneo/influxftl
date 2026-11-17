@@ -5,6 +5,20 @@
 //! like the JTS Topology Suite 1.13 and the GeoJSON binding Warp 10 bundles: a script reads
 //! them in the cause chain of the failure of the function.
 
+use std::num::ParseFloatError;
+
+/// Why a word of a WKT or GeoJSON text is not a number.
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+pub enum NumberError {
+    /// A word that is not one of the decimal forms `Double.parseDouble` reads: a letter other
+    /// than the exponent, a sign inside the number, or no digit at all.
+    #[error("not a decimal number")]
+    NotDecimal,
+    /// A decimal form that the float parser refuses (`1e`, `1.2.3`).
+    #[error(transparent)]
+    Parse(#[from] ParseFloatError),
+}
+
 /// A failure of a geometry reader, writer or predicate.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum GeometryError {
@@ -33,6 +47,9 @@ pub enum GeometryError {
         text: String,
         /// The line of the text the reader was at.
         line: usize,
+        /// Why the word is not a number.
+        #[source]
+        source: NumberError,
     },
     /// A WKB geometry type that is not one of the 7 `WKBReader` knows (`ParseException`).
     #[error("Unknown WKB type {0}")]

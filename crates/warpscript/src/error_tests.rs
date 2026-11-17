@@ -1807,7 +1807,7 @@ fn remaining_domain_failures_have_the_wording_of_warp10() {
 #[test]
 fn geometry_and_geojson_failures_have_the_classes_of_warp10() {
     use super::error::geojson::{Chain, Found, GeoJsonError, Step, StringTarget};
-    use super::error::geometry::GeometryError;
+    use super::error::geometry::{GeometryError, NumberError};
 
     let geometry = [
         (
@@ -1831,6 +1831,7 @@ fn geometry_and_geojson_failures_have_the_classes_of_warp10() {
             GeometryError::InvalidNumber {
                 text: "x".to_owned(),
                 line: 1,
+                source: NumberError::NotDecimal,
             },
             "com.vividsolutions.jts.io.ParseException",
             false,
