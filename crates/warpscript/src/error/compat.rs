@@ -7,6 +7,7 @@
 use super::aggregator::AggregatorError;
 use super::fault::{BoundsError, ResourceError};
 use super::geo::GeoError;
+use super::geojson::{GeoJsonError, StringTarget};
 use super::geometry::GeometryError;
 use super::math::MathError;
 use super::text::ReplacementClass;
@@ -19,6 +20,71 @@ use crate::value::ValueKind;
 
 /// `WarpScriptException`, the exception of every failure Warp 10 reports itself.
 const WARP_SCRIPT_EXCEPTION: &str = "io.warp10.script.WarpScriptException";
+
+// The Java names that the messages of Warp 10 quote. The errors of the crate use these constants
+// in their wording, so that the names are spelled out in this module only.
+
+/// `java.io.IOException`.
+pub const JAVA_IO_EXCEPTION: &str = "java.io.IOException";
+/// `java.io.UnsupportedEncodingException`.
+pub const JAVA_UNSUPPORTED_ENCODING_EXCEPTION: &str = "java.io.UnsupportedEncodingException";
+/// `java.lang.Object`.
+pub const JAVA_OBJECT: &str = "java.lang.Object";
+/// `java.lang.String`.
+pub const JAVA_STRING: &str = "java.lang.String";
+/// `java.lang.NullPointerException`.
+pub const JAVA_NULL_POINTER_EXCEPTION: &str = "java.lang.NullPointerException";
+/// `java.lang.NoSuchMethodException`.
+pub const JAVA_NO_SUCH_METHOD_EXCEPTION: &str = "java.lang.NoSuchMethodException";
+/// `java.lang.ClassCastException`.
+pub const JAVA_CLASS_CAST_EXCEPTION: &str = "java.lang.ClassCastException";
+/// `java.lang.IllegalArgumentException`.
+pub const JAVA_ILLEGAL_ARGUMENT_EXCEPTION: &str = "java.lang.IllegalArgumentException";
+/// `java.lang.reflect.InvocationTargetException`.
+pub const JAVA_INVOCATION_TARGET_EXCEPTION: &str = "java.lang.reflect.InvocationTargetException";
+/// `java.util.LinkedHashMap`.
+pub const JAVA_LINKED_HASH_MAP: &str = "java.util.LinkedHashMap";
+/// The type of the properties of a feature, as Jackson writes it.
+pub const JAVA_PROPERTIES_TYPE: &str = "java.util.LinkedHashMap<java.lang.String,java.lang.Object>";
+/// `org.wololo.geojson`, the package of the GeoJSON binding of Warp 10.
+pub const GEOJSON_PACKAGE: &str = "org.wololo.geojson";
+/// `org.wololo.geojson.Geometry`, the abstract class of the geometries.
+pub const GEOMETRY_CLASS: &str = "org.wololo.geojson.Geometry";
+/// `[Lorg.wololo.geojson.Geometry;`, how Jackson writes a `Geometry[]`.
+pub const GEOMETRY_ARRAY_DESCRIPTOR: &str = "[Lorg.wololo.geojson.Geometry;";
+
+/// The Java class of a failure of the GeoJSON reader, as Jackson names the exception it throws.
+fn geojson_class(err: &GeoJsonError) -> &'static str {
+    match err {
+        GeoJsonError::Syntax {
+            end_of_input: true, ..
+        } => "com.fasterxml.jackson.core.io.JsonEOFException",
+        GeoJsonError::Syntax { .. } => "com.fasterxml.jackson.core.JsonParseException",
+        GeoJsonError::NoClass(_) => "java.lang.ClassNotFoundException",
+        GeoJsonError::AbstractClass
+        | GeoJsonError::NoStringConstructor {
+            target: StringTarget::Doubles(_) | StringTarget::Geometries,
+            ..
+        } => "com.fasterxml.jackson.databind.exc.InvalidDefinitionException",
+        GeoJsonError::UnknownProperty { .. } => {
+            "com.fasterxml.jackson.databind.exc.UnrecognizedPropertyException"
+        }
+        GeoJsonError::Mismatch { .. }
+        | GeoJsonError::NoStringConstructor {
+            target: StringTarget::Properties,
+            ..
+        } => "com.fasterxml.jackson.databind.exc.MismatchedInputException",
+        GeoJsonError::NotANumber { .. } => {
+            "com.fasterxml.jackson.databind.exc.InvalidFormatException"
+        }
+        GeoJsonError::UnknownTypeId { .. }
+        | GeoJsonError::NotSubtype { .. }
+        | GeoJsonError::MissingTypeId { .. } => {
+            "com.fasterxml.jackson.databind.exc.InvalidTypeIdException"
+        }
+        GeoJsonError::NotAGeometry(_) => "java.lang.ClassCastException",
+    }
+}
 
 /// The Java class of the exception `err` stands for.
 pub fn exception_class(err: &Error) -> &'static str {
@@ -41,7 +107,7 @@ pub fn exception_class(err: &Error) -> &'static str {
         | Error::Wrapped { .. }
         | Error::NotFinite(_) => WARP_SCRIPT_EXCEPTION,
         Error::Geometry(err) => geometry_class(err),
-        Error::GeoJson(err) => err.exception_class(),
+        Error::GeoJson(err) => geojson_class(err),
         Error::Thrift(err) => thrift_class(err),
         Error::Encoder(err) => encoder_class(err),
         Error::Math(err) => math_class(err),

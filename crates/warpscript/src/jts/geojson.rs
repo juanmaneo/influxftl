@@ -16,6 +16,7 @@ use serde::de::{Deserialize, Deserializer, MapAccess, SeqAccess, Visitor};
 
 use super::geometry::{Coord, Geometry, Line, Polygon, Ring};
 use super::wkt::parse_number;
+use crate::error::compat::{JAVA_NULL_POINTER_EXCEPTION, JAVA_OBJECT};
 use crate::error::fault::BoundsError;
 use crate::error::geojson::{Chain, Found, GeoJsonError, Step, StringTarget, Target};
 use crate::error::geometry::GeometryError;
@@ -157,7 +158,7 @@ impl Json {
 /// The `NullPointerException` of the reader of a tree, thrown wrapped in a
 /// `RuntimeException` as `GeoJSONFactory.create` does.
 fn wrapped_null_pointer() -> Error {
-    Error::with_cause("java.lang.NullPointerException", Error::NullPointer)
+    Error::with_cause(JAVA_NULL_POINTER_EXCEPTION, Error::NullPointer)
 }
 
 /// The path being followed in the tree.
@@ -279,7 +280,7 @@ impl<T: Decode> Decode for Vec<Option<T>> {
         elements(
             json,
             Array::Doubles(Self::DIMENSIONS),
-            "java.lang.Object",
+            JAVA_OBJECT,
             path,
             T::decode,
         )
@@ -432,7 +433,7 @@ fn geometries(object: Object<'_>, path: &mut Path) -> Result<Option<Vec<Option<D
                         elements(
                             value,
                             Array::Geometries,
-                            "java.lang.Object",
+                            JAVA_OBJECT,
                             path,
                             geometry_element,
                         )

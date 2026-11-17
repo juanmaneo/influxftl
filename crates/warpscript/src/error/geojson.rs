@@ -5,6 +5,11 @@
 //! the Jackson databind that the GeoJSON binding of Warp 10 reads a text with: a script reads
 //! them in the cause chain of the failure of the function.
 
+use super::compat::{
+    GEOJSON_PACKAGE, GEOMETRY_ARRAY_DESCRIPTOR, GEOMETRY_CLASS, JAVA_LINKED_HASH_MAP,
+    JAVA_PROPERTIES_TYPE,
+};
+
 /// `at [Source: UNKNOWN; byte offset: #UNKNOWN]`, the location Jackson gives to a failure of
 /// a tree it read (the text is gone by then).
 const SOURCE: &str = "at [Source: UNKNOWN; byte offset: #UNKNOWN]";
@@ -45,8 +50,8 @@ impl Chain {
             .iter()
             .enumerate()
             .map(|(position, step)| match step {
-                Step::Class(name) if position == 0 => format!("org.wololo.geojson.{name}"),
-                Step::Class(name) => format!("->org.wololo.geojson.{name}"),
+                Step::Class(name) if position == 0 => format!("{GEOJSON_PACKAGE}.{name}"),
+                Step::Class(name) => format!("->{GEOJSON_PACKAGE}.{name}"),
                 Step::Field(name) => format!("[\"{name}\"]"),
                 Step::Element { array, index } => format!("->{array}[][{index}]"),
             });
@@ -112,13 +117,8 @@ impl std::fmt::Display for Target {
         match self {
             Target::Double => write!(f, "double"),
             Target::Doubles(dimensions) => write!(f, "{}D", "[".repeat(*dimensions)),
-            Target::Geometries => write!(f, "[Lorg.wololo.geojson.Geometry;"),
-            Target::Properties => {
-                write!(
-                    f,
-                    "java.util.LinkedHashMap<java.lang.String,java.lang.Object>"
-                )
-            }
+            Target::Geometries => f.write_str(GEOMETRY_ARRAY_DESCRIPTOR),
+            Target::Properties => f.write_str(JAVA_PROPERTIES_TYPE),
         }
     }
 }
@@ -139,8 +139,8 @@ impl StringTarget {
     fn class_name(self) -> String {
         match self {
             StringTarget::Doubles(dimensions) => format!("double{}", "[]".repeat(dimensions)),
-            StringTarget::Geometries => "org.wololo.geojson.Geometry[]".to_owned(),
-            StringTarget::Properties => "java.util.LinkedHashMap".to_owned(),
+            StringTarget::Geometries => format!("{GEOMETRY_CLASS}[]"),
+            StringTarget::Properties => JAVA_LINKED_HASH_MAP.to_owned(),
         }
     }
 
@@ -167,18 +167,18 @@ pub enum GeoJsonError {
     },
     /// A GeoJSON `type` that is not the name of a class of the binding
     /// (`ClassNotFoundException`).
-    #[error("org.wololo.geojson.{0}")]
+    #[error("{GEOJSON_PACKAGE}.{0}")]
     NoClass(String),
     /// The `type` of an abstract class of the binding (`InvalidDefinitionException`).
     #[error(
-        "Cannot construct instance of `org.wololo.geojson.GeoJSON` (no Creators, like default \
+        "Cannot construct instance of `{GEOJSON_PACKAGE}.GeoJSON` (no Creators, like default \
          constructor, exist): abstract types either need to be mapped to concrete types, have \
          custom deserializer, or contain additional type information  {SOURCE}"
     )]
     AbstractClass,
     /// A property that the class does not have (`UnrecognizedPropertyException`).
     #[error(
-        "Unrecognized field \"{field}\" (class org.wololo.geojson.{class}), not marked as \
+        "Unrecognized field \"{field}\" (class {GEOJSON_PACKAGE}.{class}), not marked as \
          ignorable ({} known properties: {}])  {SOURCE}{}",
         known.len(),
         known.iter().map(|name| format!("\"{name}\"")).collect::<Vec<_>>().join(", "),
@@ -239,7 +239,7 @@ pub enum GeoJsonError {
     /// A geometry of a type that is not one of the geometry classes
     /// (`InvalidTypeIdException`). Inside a collection, the path to the property.
     #[error(
-        "Could not resolve type id '{id}' as a subtype of `org.wololo.geojson.Geometry`: known \
+        "Could not resolve type id '{id}' as a subtype of `{GEOMETRY_CLASS}`: known \
          type ids = {KNOWN_TYPE_IDS}{}  {SOURCE}{}",
         if chain.is_some() { " (for POJO property 'geometries')" } else { "" },
         chain.as_ref().map(|chain| chain.through(None)).unwrap_or_default()
@@ -252,8 +252,8 @@ pub enum GeoJsonError {
     },
     /// A feature where a geometry is expected (`InvalidTypeIdException`).
     #[error(
-        "Could not resolve type id '{id}' as a subtype of `org.wololo.geojson.Geometry`: Class \
-         `org.wololo.geojson.{id}` not subtype of `org.wololo.geojson.Geometry`  {SOURCE}{}",
+        "Could not resolve type id '{id}' as a subtype of `{GEOMETRY_CLASS}`: Class \
+         `{GEOJSON_PACKAGE}.{id}` not subtype of `{GEOMETRY_CLASS}`  {SOURCE}{}",
         chain.through(None)
     )]
     NotSubtype {
@@ -264,7 +264,7 @@ pub enum GeoJsonError {
     },
     /// A geometry in a collection that has no type (`InvalidTypeIdException`).
     #[error(
-        "Could not resolve subtype of [simple type, class org.wololo.geojson.Geometry]: missing \
+        "Could not resolve subtype of [simple type, class {GEOMETRY_CLASS}]: missing \
          type id property 'type' (for POJO property 'geometries')  {SOURCE}{}",
         chain.through(None)
     )]
@@ -273,41 +273,6 @@ pub enum GeoJsonError {
         chain: Chain,
     },
     /// The geometry of a feature that is a feature (`ClassCastException`).
-    #[error("org.wololo.geojson.{0} cannot be cast to org.wololo.geojson.Geometry")]
+    #[error("{GEOJSON_PACKAGE}.{0} cannot be cast to {GEOMETRY_CLASS}")]
     NotAGeometry(&'static str),
-}
-
-impl GeoJsonError {
-    /// The Java class of the exception.
-    pub fn exception_class(&self) -> &'static str {
-        match self {
-            GeoJsonError::Syntax {
-                end_of_input: true, ..
-            } => "com.fasterxml.jackson.core.io.JsonEOFException",
-            GeoJsonError::Syntax { .. } => "com.fasterxml.jackson.core.JsonParseException",
-            GeoJsonError::NoClass(_) => "java.lang.ClassNotFoundException",
-            GeoJsonError::AbstractClass
-            | GeoJsonError::NoStringConstructor {
-                target: StringTarget::Doubles(_) | StringTarget::Geometries,
-                ..
-            } => "com.fasterxml.jackson.databind.exc.InvalidDefinitionException",
-            GeoJsonError::UnknownProperty { .. } => {
-                "com.fasterxml.jackson.databind.exc.UnrecognizedPropertyException"
-            }
-            GeoJsonError::Mismatch { .. }
-            | GeoJsonError::NoStringConstructor {
-                target: StringTarget::Properties,
-                ..
-            } => "com.fasterxml.jackson.databind.exc.MismatchedInputException",
-            GeoJsonError::NotANumber { .. } => {
-                "com.fasterxml.jackson.databind.exc.InvalidFormatException"
-            }
-            GeoJsonError::UnknownTypeId { .. }
-            | GeoJsonError::NotSubtype { .. }
-            | GeoJsonError::MissingTypeId { .. } => {
-                "com.fasterxml.jackson.databind.exc.InvalidTypeIdException"
-            }
-            GeoJsonError::NotAGeometry(_) => "java.lang.ClassCastException",
-        }
-    }
 }

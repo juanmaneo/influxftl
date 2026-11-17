@@ -28,6 +28,7 @@ use super::Entry;
 use super::args::{fail_with_cause, pop_string};
 use super::misc::ATTRIBUTE_JSON_STRICT;
 use crate::encoder::GtsEncoder;
+use crate::error::compat::JAVA_OBJECT;
 use crate::error::fault::ResourceError;
 use crate::error::text::TextError;
 use crate::error::{Error, Result};
@@ -1114,7 +1115,7 @@ impl Parser<'_> {
         self.error(
             start,
             format!(
-                "Trailing token (of type {token_type}) found after value (bound as `java.lang.Object`): not allowed as per `DeserializationFeature.FAIL_ON_TRAILING_TOKENS`"
+                "Trailing token (of type {token_type}) found after value (bound as `{JAVA_OBJECT}`): not allowed as per `DeserializationFeature.FAIL_ON_TRAILING_TOKENS`"
             ),
         )
     }

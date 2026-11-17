@@ -16,9 +16,14 @@ use num_bigint::{BigInt, Sign};
 use num_traits::Zero;
 
 use crate::bigdecimal::BigDecimal;
+use crate::error::Result;
+use crate::error::compat::{
+    self, JAVA_CLASS_CAST_EXCEPTION, JAVA_ILLEGAL_ARGUMENT_EXCEPTION,
+    JAVA_INVOCATION_TARGET_EXCEPTION, JAVA_IO_EXCEPTION, JAVA_NO_SUCH_METHOD_EXCEPTION,
+    JAVA_NULL_POINTER_EXCEPTION, JAVA_OBJECT, JAVA_STRING, JAVA_UNSUPPORTED_ENCODING_EXCEPTION,
+};
 use crate::error::fault::BoundsError;
 use crate::error::fault::NumberFormatError;
-use crate::error::{Result, compat};
 use crate::geoxp::from_geoxp_point;
 use crate::gts::{GeoTimeSerie, NO_LOCATION};
 use crate::hash_order_map::HashOrderMap;
@@ -62,10 +67,10 @@ mod op {
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum PickleError {
     /// The input ends in the middle of an opcode (an `IOException`).
-    #[error("java.io.IOException: premature end of file")]
+    #[error("{JAVA_IO_EXCEPTION}: premature end of file")]
     PrematureEof,
     /// The input ends in the middle of an operand (an `IOException`).
-    #[error("java.io.IOException: expected more bytes in input stream")]
+    #[error("{JAVA_IO_EXCEPTION}: expected more bytes in input stream")]
     ExpectedMoreBytes,
     /// A self-containing structure was hashed (a `StackOverflowError`).
     #[error("StackOverflowError")]
@@ -133,12 +138,12 @@ pub enum PickleError {
     },
     /// A constructor given a null argument.
     #[error(
-        "problem construction object: java.lang.NullPointerException: Cannot invoke \"Object.getClass()\" because \"args[i]\" is null"
+        "problem construction object: {JAVA_NULL_POINTER_EXCEPTION}: Cannot invoke \"Object.getClass()\" because \"args[i]\" is null"
     )]
     NullConstructorArgument,
     /// A constructor given arguments of types it does not take.
     #[error(
-        "problem construction object: java.lang.NoSuchMethodException: {}.<init>({})",
+        "problem construction object: {JAVA_NO_SUCH_METHOD_EXCEPTION}: {}.<init>({})",
         compat::py_class(*class),
         compat::py_classes(arguments)
     )]
@@ -153,19 +158,19 @@ pub enum PickleError {
     ClassDictArguments(String),
     /// An exception constructor given a message that is not a string.
     #[error(
-        "problem construction object: java.lang.ClassCastException: class {} cannot be cast to class java.lang.String",
+        "problem construction object: {JAVA_CLASS_CAST_EXCEPTION}: class {} cannot be cast to class {JAVA_STRING}",
         compat::py_class(*.0)
     )]
     ExceptionMessageNotString(PyKind),
     /// A `BigDecimal` constructor that refused its argument.
-    #[error("problem construction object: java.lang.reflect.InvocationTargetException")]
+    #[error("problem construction object: {JAVA_INVOCATION_TARGET_EXCEPTION}")]
     ConstructionFailed(#[source] NumberFormatError),
     /// A `copy_reg._reconstructor` not given three arguments.
     #[error("invalid pickle data; expecting 3 args to copy_reg reconstructor but recieved {0}")]
     ReconstructorArity(usize),
     /// A `copy_reg._reconstructor` that cannot rebuild its class.
     #[error(
-        "failed to reconstruct() ({}.reconstruct(java.lang.Object, java.lang.Object))",
+        "failed to reconstruct() ({}.reconstruct({JAVA_OBJECT}, {JAVA_OBJECT}))",
         compat::py_class(*.0)
     )]
     Reconstruct(PyKind),
@@ -182,7 +187,7 @@ pub enum PickleError {
     #[error("expected exactly one Calendar argument for construction of Calendar with timezone")]
     CalendarArgument,
     /// A bytearray in a character set the decoder does not know.
-    #[error("error creating bytearray: java.io.UnsupportedEncodingException: {0}")]
+    #[error("error creating bytearray: {JAVA_UNSUPPORTED_ENCODING_EXCEPTION}: {0}")]
     UnsupportedEncoding(String),
     /// A constructor given the wrong number of arguments.
     #[error("invalid pickle data for {what}; expected {expected}, got {got}")]
@@ -246,7 +251,7 @@ pub enum PickleError {
     },
     /// A matrix, vector or bit set, which Pyrolite introspects as a bean and fails on.
     #[error(
-        "couldn't introspect javabean: java.lang.IllegalArgumentException: wrong number of arguments: 0 expected: {expected}"
+        "couldn't introspect javabean: {JAVA_ILLEGAL_ARGUMENT_EXCEPTION}: wrong number of arguments: 0 expected: {expected}"
     )]
     BeanIntrospection {
         /// The number of arguments of the constructor Pyrolite looks for.
