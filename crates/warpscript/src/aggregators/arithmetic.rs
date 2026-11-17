@@ -426,7 +426,7 @@ fn parse_exponent(text: &str) -> i64 {
     let value = if negative {
         0i64.checked_sub_unsigned(magnitude)
     } else {
-        i64::try_from(magnitude).ok()
+        0i64.checked_add_unsigned(magnitude)
     };
     value.map_or(0, |v| i64::from(v as i32))
 }
