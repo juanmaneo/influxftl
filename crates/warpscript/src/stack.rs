@@ -842,7 +842,10 @@ impl Stack {
                     break;
                 }
                 Err(err) => {
-                    result = Err(Error::with_cause(format!("Line #{}", idx + 1), err));
+                    result = Err(Error::Line {
+                        line: idx + 1,
+                        source: Box::new(err),
+                    });
                     break;
                 }
             }

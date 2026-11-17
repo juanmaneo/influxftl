@@ -153,6 +153,15 @@ pub enum Error {
         #[source]
         source: Box<Error>,
     },
+    /// A failure on the line `line` of a script (the `Line #N` of the interpreter).
+    #[error("Line #{line} ({source})")]
+    Line {
+        /// The line, counted from 1.
+        line: usize,
+        /// The failure on the line.
+        #[source]
+        source: Box<Error>,
+    },
     /// A `pop` or `peek` on an empty stack.
     #[error("Empty stack.")]
     EmptyStack,
@@ -365,6 +374,7 @@ impl Error {
             | Error::Continue
             | Error::Guarded(_)
             | Error::Context { .. }
+            | Error::Line { .. }
             | Error::Usage { .. }
             | Error::Stack(_)
             | Error::Time(_)
@@ -387,6 +397,7 @@ impl Error {
     pub fn message(&self) -> String {
         match self {
             Error::Context { context, .. } => context.clone(),
+            Error::Line { line, .. } => format!("Line #{line}"),
             Error::Wrapped { source } => {
                 format!("{}: {}", compat::exception_class(source), source.message())
             }
@@ -397,7 +408,9 @@ impl Error {
     /// The failure this one reports with more context.
     pub fn cause(&self) -> Option<&Error> {
         match self {
-            Error::Context { source, .. } | Error::Wrapped { source } => Some(source),
+            Error::Context { source, .. }
+            | Error::Line { source, .. }
+            | Error::Wrapped { source } => Some(source),
             _ => None,
         }
     }

@@ -92,6 +92,7 @@ pub fn exception_class(err: &Error) -> &'static str {
         Error::Aggregator(AggregatorError::NotNumeric(_))
         | Error::Geo(GeoError::InvalidGeoHash { .. }) => "java.lang.RuntimeException",
         Error::Context { .. }
+        | Error::Line { .. }
         | Error::Usage { .. }
         | Error::Stack(_)
         | Error::Time(_)

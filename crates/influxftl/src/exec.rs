@@ -39,11 +39,8 @@ impl ScriptError {
     /// The line and the message of a failure of the interpreter.
     fn of(err: &Error) -> ScriptError {
         match err {
-            Error::Context { context, source } => ScriptError {
-                // A context that is not a line marker has no line.
-                line: context
-                    .strip_prefix("Line #")
-                    .and_then(|line| line.parse().ok()),
+            Error::Line { line, source } => ScriptError {
+                line: Some(*line),
                 message: source.to_string(),
             },
             other => ScriptError {

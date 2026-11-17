@@ -44,7 +44,7 @@ fn error(template: &str) -> String {
     let mut err = fail(&format!("'{}' {BASE} TEMPLATE", encode(template)));
     for _ in 0..2 {
         err = match err {
-            Error::Context { source, .. } => *source,
+            Error::Line { source, .. } | Error::Context { source, .. } => *source,
             other => panic!("unexpected error {other}"),
         };
     }
