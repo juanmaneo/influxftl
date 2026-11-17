@@ -11,6 +11,7 @@ use super::args::fail;
 use super::collections::{flatten_value, nested_get};
 use crate::error::fault::{BoundsError, IllegalArgumentError};
 use crate::error::{Error, Result};
+use crate::position::position;
 use crate::stack::Stack;
 use crate::value::{List, Value};
 
@@ -272,7 +273,7 @@ fn permute(stack: &mut Stack) -> Result<()> {
     for &axis in &axes {
         // `intValue()`.
         let axis = axis as i32;
-        let Some(&dim) = usize::try_from(axis).ok().and_then(|a| shape.get(a)) else {
+        let Some(&dim) = position(i64::from(axis), shape.len()).and_then(|a| shape.get(a)) else {
             return Err(list_index_error(i64::from(axis), shape.len()));
         };
         new_shape.push(dim);

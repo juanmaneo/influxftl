@@ -17,6 +17,7 @@ use crate::error::series::SeriesError;
 use crate::error::{Error, Result};
 use crate::gts::{GeoTimeSerie, Type, Values, binary_search_range};
 use crate::lowess::{Grid, Lowess, Samples, pointwise_lowess, smooth};
+use crate::position::position;
 
 /// Java's `int` division: truncated, and a failure on a zero divisor.
 pub(crate) fn int_div(dividend: i32, divisor: i32) -> Result<i32> {
@@ -208,7 +209,7 @@ impl Track {
         }
         self.sort();
         let found = binary_search_range(&self.ticks, 0, self.size as i64, tick);
-        usize::try_from(found).ok().map(|idx| self.values[idx])
+        position(found, self.size).map(|idx| self.values[idx])
     }
 
     /// `GTSHelper.setValue` with `overwrite`: the value of a tick, which is added when the
@@ -718,7 +719,7 @@ impl Stl {
                         idx_s =
                             binary_search_range(&seasonal.ticks, idx_s, seasonal.size as i64, tick);
                         // The trend is assumed to hold its datapoints at the same indexes.
-                        usize::try_from(idx_s).ok().map(|found| {
+                        position(idx_s, seasonal.size).map(|found| {
                             (value - seasonal.values[found] - trend.values[found]).abs()
                         })
                     })

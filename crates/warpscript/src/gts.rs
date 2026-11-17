@@ -15,6 +15,7 @@ use indexmap::IndexMap;
 use crate::encoder::Decimal;
 use crate::format::{double_to_text, url_encode};
 use crate::geoxp;
+use crate::position::position;
 use crate::value::Value;
 
 /// The elevation of a datapoint without elevation (`GeoTimeSerie.NO_ELEVATION`).
@@ -1085,7 +1086,10 @@ impl GeoTimeSerie {
 /// `Arrays.binarySearch`: the index of `key` in the sorted `ticks` (whichever of equal ticks
 /// Java's loop lands on), `None` when absent.
 pub fn binary_search(ticks: &[i64], key: i64) -> Option<usize> {
-    usize::try_from(binary_search_range(ticks, 0, ticks.len() as i64, key)).ok()
+    position(
+        binary_search_range(ticks, 0, ticks.len() as i64, key),
+        ticks.len(),
+    )
 }
 
 /// `Arrays.binarySearch(ticks, from, to, key)`: the index of `key` in `ticks[from..to]`, or

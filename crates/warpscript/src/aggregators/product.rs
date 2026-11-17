@@ -13,6 +13,7 @@ use crate::format::double_to_text;
 use crate::functions::Entry;
 use crate::gts::{NO_ELEVATION, NO_LOCATION};
 use crate::jmath;
+use crate::position::position;
 use crate::stack::Stack;
 use crate::value::{Value, ValueKind};
 
@@ -62,9 +63,7 @@ fn tick_index(args: &AggregatorArgs, default: Option<i64>) -> Result<usize> {
         (None, Some(index)) => index,
         (None, None) => return Err(Error::index_out_of_bounds(7, 7)),
     };
-    usize::try_from(index)
-        .ok()
-        .filter(|i| *i < args.locations.len())
+    position(index, args.locations.len())
         .ok_or_else(|| Error::index_out_of_bounds(index, args.locations.len()))
 }
 

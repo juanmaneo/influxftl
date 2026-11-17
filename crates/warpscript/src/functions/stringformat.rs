@@ -19,6 +19,7 @@ use crate::error::format::FormatError;
 use crate::error::{Error, Result};
 use crate::format::decimal_value;
 use crate::format::double_to_text;
+use crate::position::position;
 use crate::stack::Stack;
 use crate::value::Value;
 
@@ -722,8 +723,7 @@ impl Decimal {
     /// The digit at decimal position `p` (`0` is the units digit, `-1` the tenths), zero
     /// beyond the stored digits.
     fn digit_at(&self, p: i32) -> char {
-        let digit = usize::try_from(self.exponent - p)
-            .ok()
+        let digit = position(i64::from(self.exponent - p), self.digits.len())
             .and_then(|i| self.digits.get(i))
             .copied()
             .unwrap_or(0);

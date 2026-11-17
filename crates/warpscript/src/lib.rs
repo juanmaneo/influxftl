@@ -71,6 +71,7 @@ pub mod microsphere;
 #[cfg(test)]
 mod microsphere_tests;
 pub mod pickle;
+pub mod position;
 pub mod rsa;
 pub mod sax;
 pub mod selector;
@@ -127,6 +128,8 @@ mod jmath_tests;
 mod lcg48_tests;
 #[cfg(test)]
 mod macros_tests;
+#[cfg(test)]
+mod position_tests;
 #[cfg(test)]
 mod rsa_tests;
 #[cfg(test)]

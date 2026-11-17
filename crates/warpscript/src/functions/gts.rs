@@ -18,6 +18,7 @@ use crate::error::series::SeriesError;
 use crate::error::{Class, Error, Result};
 use crate::geoxp;
 use crate::gts::{GeoTimeSerie, Gts, Metadata, NO_ELEVATION, NO_LOCATION};
+use crate::position::position;
 use crate::stack::Stack;
 use crate::thrift::serialize_wrapper;
 use crate::value::Value;
@@ -798,7 +799,7 @@ fn atindex(stack: &mut Stack) -> Result<()> {
         Value::Gts(gts) => {
             let gts = gts.borrow();
             let index = compute_and_check_index(idx, gts.size() as i32)?;
-            Ok(tuple_at_index(&gts, usize::try_from(index).ok()))
+            Ok(tuple_at_index(&gts, position(i64::from(index), gts.size())))
         }
         _ => Err(fail(
             NAME,

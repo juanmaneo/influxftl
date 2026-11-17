@@ -147,10 +147,12 @@ impl Aggregator for Argminmax {
 
     fn apply(&self, args: &AggregatorArgs) -> Result<Aggregated> {
         let found = self.extrema(args)?;
-        let limit = usize::try_from(self.count)
-            .ok()
-            .filter(|&count| count > 0)
-            .unwrap_or(usize::MAX);
+        // Every extremum is reported when `count` is not positive.
+        let limit = if self.count > 0 {
+            self.count as usize
+        } else {
+            usize::MAX
+        };
         let reported: Vec<String> = found
             .iter()
             .take(limit)

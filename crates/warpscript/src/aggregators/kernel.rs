@@ -14,6 +14,7 @@ use crate::functions::Entry;
 use crate::geoxp;
 use crate::gts::{NO_ELEVATION, NO_LOCATION};
 use crate::jmath;
+use crate::position::position;
 use crate::stack::Stack;
 use crate::value::{Value, double_to_long};
 
@@ -157,9 +158,8 @@ impl Aggregator for Smoother {
             if index >= self.weights.len() as i64 {
                 continue;
             }
-            let weight = usize::try_from(index)
-                .ok()
-                .map(|index| self.weights[index])
+            let weight = position(index, self.weights.len())
+                .and_then(|i| self.weights.get(i).copied())
                 .ok_or_else(|| Error::index_out_of_bounds(index, self.weights.len()))?;
             value += weight * number;
             value_weight += weight;

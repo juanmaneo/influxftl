@@ -17,6 +17,7 @@ use crate::error::{Class, Error, Result};
 use crate::geoxp;
 use crate::gts::{GeoTimeSerie, Gts, NO_ELEVATION, NO_LOCATION};
 use crate::macros::Macro;
+use crate::position::position;
 use crate::stack::Stack;
 use crate::value::{Value, ValueKind};
 
@@ -461,10 +462,7 @@ impl Cursor {
     /// The tick at `index` when it is a valid index, `None` otherwise (`i64` arithmetic like
     /// Java's `idx + prewindow < ticks.length` tests).
     fn at(&self, index: i64) -> Option<i64> {
-        usize::try_from(index)
-            .ok()
-            .and_then(|i| self.ticks.get(i))
-            .copied()
+        position(index, self.ticks.len()).and_then(|i| self.ticks.get(i).copied())
     }
 }
 
