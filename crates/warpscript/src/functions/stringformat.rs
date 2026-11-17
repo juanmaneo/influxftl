@@ -335,7 +335,17 @@ fn parse_spec(format: &str, start: usize) -> Result<(Spec, usize)> {
         while bytes.get(*pos).is_some_and(u8::is_ascii_digit) {
             *pos += 1;
         }
-        format[begin..*pos].parse().ok()
+        if begin == *pos {
+            return None;
+        }
+        // Java reads an index, a width or a precision as an `int`: a number that does not fit
+        // one is no number at all, which the formatter then ignores.
+        format[begin..*pos]
+            .bytes()
+            .try_fold(0i32, |acc, b| {
+                acc.checked_mul(10)?.checked_add(i32::from(b - b'0'))
+            })
+            .map(|n| n as usize)
     };
     let mut pos = start;
     // An argument index is a number followed by `$`.
@@ -361,7 +371,12 @@ fn parse_spec(format: &str, start: usize) -> Result<(Spec, usize)> {
     let mut precision = None;
     if bytes.get(pos) == Some(&b'.') {
         pos += 1;
-        precision = Some(number(&mut pos).ok_or_else(|| unknown(first))?);
+        let begin = pos;
+        precision = number(&mut pos);
+        // A point without digits is malformed; digits that overflow are read and ignored.
+        if pos == begin {
+            return Err(unknown(first));
+        }
     }
     let Some(c) = format[pos..].chars().next() else {
         return Err(unknown(first));

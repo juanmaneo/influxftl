@@ -552,3 +552,14 @@ fn stringformat_function() {
     assert_fails("[ 1 ] STRINGFORMAT", "Empty stack.");
     assert_fails("'fr' STRINGFORMAT", "Empty stack.");
 }
+
+#[test]
+fn widths_and_precisions_are_java_ints() {
+    // A width or a precision that does not fit an `int` is ignored, as the formatter ignores it.
+    assert_eq!(fmt("%2147483648d", &longs(&[1])), "1");
+    assert_eq!(fmt("%9999999999d", &longs(&[1])), "1");
+    assert_eq!(fmt("%.2147483648f", &doubles(&[1.5])), "1.500000");
+    assert_eq!(fmt("%.99999999999999999999f", &doubles(&[1.5])), "1.500000");
+    assert_eq!(fmt("%5d", &longs(&[1])), "    1");
+    assert_eq!(err("%.f", &doubles(&[1.5])), "Conversion = '.'");
+}
