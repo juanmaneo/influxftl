@@ -235,7 +235,9 @@ impl Recording {
             },
             Kind::Lines => Outline {
                 stroke: points
-                    .chunks_exact(2)
+                    .as_chunks::<2>()
+                    .0
+                    .iter()
                     .map(|pair| Subpath {
                         points: pair.to_vec(),
                         closed: false,
@@ -243,10 +245,24 @@ impl Recording {
                     .collect(),
                 ..Outline::default()
             },
-            Kind::Triangles => polygons(points.chunks_exact(3).map(<[_]>::to_vec).collect()),
+            Kind::Triangles => polygons(
+                points
+                    .as_chunks::<3>()
+                    .0
+                    .iter()
+                    .map(|t| t.to_vec())
+                    .collect(),
+            ),
             Kind::TriangleStrip => polygons(points.windows(3).map(<[_]>::to_vec).collect()),
             Kind::TriangleFan => polygons(fan(points)),
-            Kind::Quads => polygons(points.chunks_exact(4).map(<[_]>::to_vec).collect()),
+            Kind::Quads => polygons(
+                points
+                    .as_chunks::<4>()
+                    .0
+                    .iter()
+                    .map(|q| q.to_vec())
+                    .collect(),
+            ),
             Kind::QuadStrip => polygons(quad_strip(points)),
         }
     }

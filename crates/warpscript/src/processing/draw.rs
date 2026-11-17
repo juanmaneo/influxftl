@@ -57,9 +57,10 @@ fn snap(coordinate: f32, odd: bool) -> Result<f32> {
     finite(if odd { nearest + 0.5 } else { nearest })
 }
 
-/// The pixel a point falls in, as a square ring.
+/// The pixel a point of a stroke weight of at most 1 lights: the one whose centre is nearest,
+/// halves up, as a stroke of odd width is normalised onto the pixel grid.
 fn pixel_ring(x: f32, y: f32) -> Result<Ring> {
-    let (x, y) = (finite(x.floor())?, finite(y.floor())?);
+    let (x, y) = (finite((x + 0.5).floor())?, finite((y + 0.5).floor())?);
     Ok(vec![[x, y], [x + 1.0, y], [x + 1.0, y + 1.0], [x, y + 1.0]])
 }
 

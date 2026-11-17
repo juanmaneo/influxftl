@@ -7,8 +7,22 @@
 //! Each result is checked with [`finite`]: a curve built from finite points can only go
 //! non-finite through an overflow, which is refused rather than drawn.
 
+// The four control values of a curve are named `a`, `b`, `c` and `d` after the Bézier and
+// Catmull-Rom formulas, as the references name them.
+#![allow(clippy::many_single_char_names)]
+
 use super::finite;
 use crate::error::Result;
+
+/// The largest number of steps a curve is flattened in. Java2D flattens curves by itself, so
+/// Processing's detail does not change a 2D curve; here it only sets the resolution, within this
+/// bound, which keeps a huge detail from allocating a huge polygon.
+pub const MAX_STEPS: i32 = 1000;
+
+/// The number of steps for a detail the script set, kept between 1 and [`MAX_STEPS`].
+pub fn steps(detail: i32) -> usize {
+    detail.clamp(1, MAX_STEPS) as usize
+}
 
 /// A point of a Bézier curve at `t`, for one coordinate (`bezierPoint`).
 pub fn bezier_point(a: f32, b: f32, c: f32, d: f32, t: f32) -> Result<f32> {

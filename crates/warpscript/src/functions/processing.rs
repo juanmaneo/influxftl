@@ -18,6 +18,7 @@ use crate::error::fault::{BoundsError, NumberFormatError};
 use crate::error::processing::ProcessingError;
 use crate::error::{Class, Error, Result};
 use crate::finite::ensure_finite;
+use crate::processing::draw::Outline;
 use crate::processing::paint::Clip;
 use crate::processing::{Blend, Graphics, finite};
 use crate::stack::Stack;
@@ -164,6 +165,23 @@ impl Params {
         self.floats_after(0)
     }
 
+    /// The `N` values from the `skip`-th one on, as `float`s. Unlike [`Params::floats_after`], the
+    /// values after those `N` are not read, as Warp 10 reads only the ones a shape uses.
+    pub fn floats_window<const N: usize>(&self, skip: usize) -> Result<[f32; N]> {
+        let window = self.args.get(skip..skip + N).ok_or_else(|| self.arity())?;
+        let mut out = [0.0; N];
+        for (slot, value) in out.iter_mut().zip(window) {
+            *slot = float_of(value)?;
+        }
+        Ok(out)
+    }
+
+    /// Every value above the graphics, as `float`s: each one is cast, as Warp 10 casts each value
+    /// a shape is given.
+    pub fn float_list(&self) -> Result<Vec<f32>> {
+        self.args.iter().map(float_of).collect()
+    }
+
     /// The `N` values above the graphics, as `int`s.
     pub fn ints<const N: usize>(&self) -> Result<[i32; N]> {
         let values = self.values::<N>(0)?;
@@ -207,12 +225,30 @@ pub fn mode_of<T: Copy>(
     message: &'static str,
     modes: &[(&str, T)],
 ) -> Result<T> {
-    let keyword = params.keyword(0)?;
+    mode_at(params, 0, function, message, modes)
+}
+
+/// [`mode_of`] for the keyword at `index` rather than the first value.
+pub fn mode_at<T: Copy>(
+    params: &Params,
+    index: usize,
+    function: &'static str,
+    message: &'static str,
+    modes: &[(&str, T)],
+) -> Result<T> {
+    let keyword = params.keyword(index)?;
     modes
         .iter()
         .find(|(name, _)| Some(*name) == keyword)
         .map(|(_, mode)| *mode)
         .ok_or_else(|| ProcessingError::Refused { function, message }.into())
+}
+
+/// Draw `outline` on the graphics of `params`, then push the graphics back.
+pub fn draw_and_return(stack: &mut Stack, params: Params, outline: &Outline) -> Result<()> {
+    params.graphics.borrow_mut().draw(outline)?;
+    give_back(stack, params.graphics);
+    Ok(())
 }
 
 /// Push the graphics back, then the result above it.
@@ -403,7 +439,7 @@ fn pconstrain(stack: &mut Stack) -> Result<()> {
 
 /// A `float` result as a `DOUBLE`, refused when it is not finite (a division by zero, an
 /// overflow).
-fn double_of(result: f32) -> Result<Value> {
+pub fn double_of(result: f32) -> Result<Value> {
     Ok(Value::Double(f64::from(finite(result)?)))
 }
 

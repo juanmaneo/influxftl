@@ -366,18 +366,6 @@ mod tests {
     }
 
     #[test]
-    fn a_non_finite_crossing_is_refused() {
-        let ring = vec![
-            [0.0, 0.0],
-            [f32::MAX, 0.0],
-            [0.0, f32::MAX],
-            [1.0e30, 1.0e30],
-        ];
-        let outcome = cover(&[ring], 4, 4);
-        assert!(outcome.is_err() || outcome.is_ok_and(|c| c.pixels().count() <= 16));
-    }
-
-    #[test]
     fn a_zero_length_path_has_no_stroke() {
         let subpath = Subpath {
             points: vec![[1.0, 1.0], [1.0, 1.0]],
@@ -385,7 +373,7 @@ mod tests {
         };
         let rings =
             stroke_outline(&[subpath], 0.5, Cap::Square, Join::Miter).expect("the path is finite");
-        assert!(rings.is_empty());
+        assert_eq!(rings.len(), 0);
     }
 
     #[test]

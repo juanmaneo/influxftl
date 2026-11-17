@@ -57,9 +57,12 @@ pub mod polyfunc;
 pub mod processing;
 pub mod processing_codec;
 pub mod processing_color;
+pub mod processing_curve;
 pub mod processing_image;
+pub mod processing_primitive;
 pub mod processing_style;
 pub mod processing_transform;
+pub mod processing_vertex;
 pub mod quaternions;
 pub mod rsa;
 pub mod runtime;
@@ -153,6 +156,9 @@ const TABLES: &[&[(&str, Entry)]] = &[
     processing_transform::FUNCTIONS,
     processing_image::FUNCTIONS,
     processing_codec::FUNCTIONS,
+    processing_primitive::FUNCTIONS,
+    processing_vertex::FUNCTIONS,
+    processing_curve::FUNCTIONS,
     mv::FUNCTIONS,
     geo::FUNCTIONS,
     geoimport::FUNCTIONS,
@@ -409,15 +415,21 @@ mod processing_codec_tests;
 #[cfg(test)]
 mod processing_color_tests;
 #[cfg(test)]
+mod processing_curve_tests;
+#[cfg(test)]
 mod processing_image_tests;
 #[cfg(test)]
 mod processing_manual_tests;
+#[cfg(test)]
+mod processing_primitive_tests;
 #[cfg(test)]
 mod processing_style_tests;
 #[cfg(test)]
 mod processing_tests;
 #[cfg(test)]
 mod processing_transform_tests;
+#[cfg(test)]
+mod processing_vertex_tests;
 #[cfg(test)]
 mod quaternions_tests;
 #[cfg(test)]

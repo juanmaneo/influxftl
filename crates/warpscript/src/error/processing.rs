@@ -212,7 +212,6 @@ impl ProcessingError {
             | ProcessingError::ChunkFields { .. }
             | ProcessingError::UnknownChunk
             | ProcessingError::QualityType => false,
-            ProcessingError::ShapeState { .. } => true,
             ProcessingError::EmptyImage { .. }
             | ProcessingError::StyleUnderflow
             | ProcessingError::MatrixUnderflow
@@ -224,7 +223,8 @@ impl ProcessingError {
             | ProcessingError::PosterizeNeedsLevels
             | ProcessingError::PosterizeLevels
             | ProcessingError::NegativeRegion
-            | ProcessingError::QualityOutOfBounds => true,
+            | ProcessingError::QualityOutOfBounds
+            | ProcessingError::ShapeState { .. } => true,
         }
     }
 }
