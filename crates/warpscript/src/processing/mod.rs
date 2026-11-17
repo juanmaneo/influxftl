@@ -23,6 +23,7 @@ pub mod primitive;
 pub mod raster;
 pub mod recording;
 pub mod shape;
+pub mod svg;
 
 use std::rc::Rc;
 

@@ -59,7 +59,7 @@ pub struct Recording {
 
 /// Two thirds of the way from `from` to `control`: the cubic control point that a quadratic one
 /// becomes.
-fn two_thirds_toward(from: [f32; 2], control: [f32; 2]) -> Result<[f32; 2]> {
+pub(crate) fn two_thirds_toward(from: [f32; 2], control: [f32; 2]) -> Result<[f32; 2]> {
     Ok([
         finite(from[0] + 2.0 / 3.0 * (control[0] - from[0]))?,
         finite(from[1] + 2.0 / 3.0 * (control[1] - from[1]))?,

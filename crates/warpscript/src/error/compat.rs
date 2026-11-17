@@ -170,10 +170,14 @@ fn processing_class(err: &ProcessingError) -> &'static str {
         | ProcessingError::PosterizeLevels
         | ProcessingError::QualityOutOfBounds => JAVA_ILLEGAL_ARGUMENT_EXCEPTION,
         ProcessingError::NegativeRegion => "java.lang.NegativeArraySizeException",
+        ProcessingError::Svg(crate::processing::svg::SvgError::Xml { .. }) => {
+            "org.xml.sax.SAXParseException"
+        }
         ProcessingError::StyleUnderflow
         | ProcessingError::MatrixUnderflow
         | ProcessingError::MatrixOverflow
-        | ProcessingError::ShapeState { .. } => "java.lang.RuntimeException",
+        | ProcessingError::ShapeState { .. }
+        | ProcessingError::Svg(_) => "java.lang.RuntimeException",
         ProcessingError::OutOfMemory { .. } => "java.lang.OutOfMemoryError",
     }
 }

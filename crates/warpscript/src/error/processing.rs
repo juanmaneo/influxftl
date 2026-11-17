@@ -191,6 +191,9 @@ pub enum ProcessingError {
         /// The message, as Processing words it.
         message: &'static str,
     },
+    /// An SVG document that `loadShape` cannot read.
+    #[error(transparent)]
+    Svg(#[from] crate::processing::svg::SvgError),
 }
 
 impl ProcessingError {
@@ -206,6 +209,7 @@ impl ProcessingError {
             | ProcessingError::NonPositiveMaximum
             | ProcessingError::Decode(_)
             | ProcessingError::Encode(_)
+            | ProcessingError::Svg(_)
             | ProcessingError::UnsupportedFormat
             | ProcessingError::ChunkNotList
             | ProcessingError::ChunkNotMap { .. }

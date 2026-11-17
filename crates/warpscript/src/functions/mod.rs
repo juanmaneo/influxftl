@@ -60,6 +60,7 @@ pub mod processing_color;
 pub mod processing_curve;
 pub mod processing_image;
 pub mod processing_primitive;
+pub mod processing_shape;
 pub mod processing_style;
 pub mod processing_transform;
 pub mod processing_vertex;
@@ -159,6 +160,7 @@ const TABLES: &[&[(&str, Entry)]] = &[
     processing_primitive::FUNCTIONS,
     processing_vertex::FUNCTIONS,
     processing_curve::FUNCTIONS,
+    processing_shape::FUNCTIONS,
     mv::FUNCTIONS,
     geo::FUNCTIONS,
     geoimport::FUNCTIONS,
@@ -422,6 +424,8 @@ mod processing_image_tests;
 mod processing_manual_tests;
 #[cfg(test)]
 mod processing_primitive_tests;
+#[cfg(test)]
+mod processing_shape_tests;
 #[cfg(test)]
 mod processing_style_tests;
 #[cfg(test)]
