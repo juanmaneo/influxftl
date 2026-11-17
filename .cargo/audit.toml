@@ -1,0 +1,6 @@
+# cargo-audit policy (read by `cargo audit`; `cargo xtask security-audit` denies warnings).
+# The two advisories are "unmaintained" notices about chrono and chrono-tz, with no safe upgrade.
+# They are accepted here and explained in deny.toml, which carries the same exceptions.
+
+[advisories]
+ignore = ["RUSTSEC-2026-0543", "RUSTSEC-2026-0555"]
