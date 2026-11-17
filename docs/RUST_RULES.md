@@ -141,3 +141,29 @@ that they are not forgotten (`grep -rnF` the pattern to list them):
 - **Documented Warp 10 tolerances**, matched explicitly with a comment: a series of `LONG` that
   stores `0` for an unparsable string, `->JSON` of an encoder that stops at a corrupt datapoint,
   `CHECKMACRO` answering `false` for a macro that cannot be loaded.
+
+### Open bugs found by the review
+
+- **Silent `0.0` for a non-numeric value** (wrong answers, not a documented tolerance). Warp 10
+  reads these values with `((Number) valueAtIndex(gts, i)).doubleValue()` (`FFT`, `CORRELATE`,
+  `INTERPOLATE`…), so a `STRING`, `BOOLEAN` or `BINARY` series fails with a `ClassCastException`.
+  The ports use `as_f64().unwrap_or_default()` instead: `patterns::number_at` (PATTERNS, ZPATTERNS,
+  DISCORDS), `gts_smoothing::number_at` (LTTB, TLTTB, the exponential smoothings) and
+  `fillers::numeric` (the fill functions) to check. Every series has a single type (`set_value`
+  fixes it with the first value), so a per-read `?` cannot be covered by tests: the first read
+  fails and the later ones never run their error branch. The fix is to check the type once before
+  the first read and then read through a typed view, with a test per function.
+
+### Clones (559 in non-test code)
+
+`clippy::redundant_clone` reports none of them. Most are copies of `Rc`/`Arc` handles, which give
+the Java reference semantics, or snapshots such as `list.borrow().clone()`, taken so that no
+`RefCell` borrow is held while user code runs (a macro, a filter, a mapper). `GeoTimeSerie` owns
+its metadata and buffers, so copying them is needed: sharing them through `Rc` would change the
+aliasing that Java has, which is a design decision and not a cleanup.
+
+### `unwrap_or_default()` (112 in non-test code)
+
+The ones listed above are the candidates that can hide a failure. The others are documented in this
+section (proven indexes, parses of text just written, Java casts such as `(int)` of a `double`, where
+`NaN` becomes `0` as in Java).

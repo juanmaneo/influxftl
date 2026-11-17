@@ -253,6 +253,9 @@ Stages:
 
 Verified here with Podman 6.1.3 on x86_64 (Manjaro): the default build produces
 `localhost/influxftl:test`, which runs as a non-root user and evaluates `[ 1 2 3 ] 2 GET 40 2 +`.
+`podman run --rm localhost/influxftl-dev:test` (the `dev` target) runs the complete `cargo xtask dev-check`
+to the end inside the container: cargo-deny, cargo-audit, check, fmt, clippy, 1246 tests, the 100%
+coverage gate and 12 Kani harnesses, all passing.
 
 Build arguments: `RUST_VERSION` (default from `rust-toolchain.toml`), `DEBIAN_VERSION`.
 
