@@ -319,7 +319,7 @@ obligations of its section 4:
 | [Apache Commons Math 3.6.1](https://commons.apache.org/math/) (ASF) | Apache-2.0 | numerical routines of `cmath.rs`, interpolators of `interpolation.rs`, Levenberg-Marquardt polynomial fitting of `curvefit.rs` |
 | [Bouncy Castle](https://www.bouncycastle.org) (Legion of the Bouncy Castle) | MIT-style | Argon2 engine of `ARGON2` |
 | [fdlibm](https://www.netlib.org/fdlibm/) (Sun Microsystems) | permissive Sun notice | `IEEEREMAINDER` algorithm |
-| [Processing](https://github.com/processing/processing4) core library (Processing Foundation) | LGPL-2.1 | **Not used.** The `P*` graphics functions are not ported yet; their code will not be copied, and the licensing decision is open (`docs/PORTING.md` §9) |
+| [Processing](https://github.com/processing/processing4) core library (Processing Foundation) | LGPL-2.1 | **Not used as a dependency.** The ported `P*` functions follow the observation-only rule of `docs/PORTING.md` §9; the Processing typography functions are not ported yet, and the licensing decision for them is open (`docs/PORTING.md` §9) |
 
 Java behaviour that scripts can observe (`java.lang.Math`, `java.util.Random`,
 `java.util.Formatter`, `Double.toString`, Joda-Time, Jackson, Guava…) is **re-implemented

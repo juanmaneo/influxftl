@@ -30,7 +30,7 @@ and for coding agents alike: follow it literally and `cargo xtask dev-check` sta
 - When a whole-script result is needed (the interplay of several functions, a stack state
   after an error, the exact JSON of a `FETCH`…), a real Warp 10 can serve as the oracle: the
   official image `warp10io/warp10:3.5.0-alpine` (there is no `latest` tag) runs under
-  `podman run -d --name w10 -p 18080:8080 docker.io/warp10io/warp10:3.5.0-alpine` (about 40 s
+  `docker run -d --name w10 -p 18080:8080 docker.io/warp10io/warp10:3.5.0-alpine` (about 40 s
   to start) and answers `curl --data-binary 'script' http://127.0.0.1:18080/api/v0/exec`: the
   response is the stack as a JSON array, **top of the stack first**; errors come in the
   `X-Warp10-Error-Message` header. `port_helpers/w10.sh 'script'` (recreate it under the
@@ -39,7 +39,7 @@ and for coding agents alike: follow it literally and `cargo xtask dev-check` sta
   settle a doubt, then embed the observed values in the tests as literals. Since `BUCKETIZE`
   is available on both sides, bucketized series can be built on the oracle with
   `[ gts bucketizer.sum 100 10 0 ] BUCKETIZE 0 GET` and in Rust tests with
-  `GeoTimeSerie::with_buckets`. The image's fat jar (`podman cp
+  `GeoTimeSerie::with_buckets`. The image's fat jar (`docker cp
   w10:/opt/warp10/bin/warp10-3.5.0.jar port_helpers/ref/`) also runs Warp 10's own classes on the
   local JDK (a scratch `main` calling e.g. `DTW.compute` or `PolynomialCurveFitter`): use it
   when the JDK 8 answer of the oracle differs from JDK 11+ (`Math.toRadians`, exception
@@ -160,10 +160,12 @@ The oracle wrapper `port_helpers/w10.sh` is a four-liner: `curl -s -D - --data-b
 http://127.0.0.1:18080/api/v0/exec`, printing the `X-Warp10-Error-Message` header when
 present and the body (the JSON stack) otherwise.
 
-Start the oracle containers with `systemd-run --user --unit=influxftl-oracle --remain-after-exit -p
-KillMode=none podman start w10 idb3`, not from a `bgjob` run: the job's cgroup is killed when the job
-ends, which takes the container's `conmon` and its port forwarding down with it. Warp 10 can take up
-to 3 minutes to answer after a start; poll `curl -s -o /dev/null -w '%{http_code}'
+Start the oracle container with `systemd-run --user --unit=influxftl-oracle --remain-after-exit -p
+KillMode=none docker start w10`, not from a `bgjob` run: the job's cgroup is killed when the job
+ends, which, with Podman, takes the container's `conmon` and its port forwarding down with it. The
+InfluxDB container is started the same way with `podman start idb3` in its own unit. (The cgroup
+reason is Podman's; it is not verified for Docker, so check that `w10` still answers after a job ends.)
+Warp 10 can take up to 3 minutes to answer after a start; poll `curl -s -o /dev/null -w '%{http_code}'
 http://127.0.0.1:18080/api/v0/plasma` until it prints `200`.
 
 A coverage gap finder, once `cargo llvm-cov report --text -- --show-regions=true > /tmp/cov.txt`
@@ -225,7 +227,7 @@ The `influxftl` binary runs scripts (`eval`, `run`) and serves `POST /api/v0/exe
 reads, line protocol for writes; DIVERGENCES §34) or on a datastore in memory
 (`INFLUXFTL_DATASTORE=memory`). It was checked on InfluxDB 3 Core 3.12.
 
-2077 / 2193 functions are ported (`docs/FUNCTIONS.md`; the inventory includes the names
+2168 / 2193 functions are ported, 98.9 % (`docs/FUNCTIONS.md`; the inventory includes the names
 Warp 10 registers through `Builder`s and constants). The Geo Time Series model, the
 `GTSHelper` transforms (time, datapoints, statistics), `BUCKETIZE` and `MAP` with the
 shared aggregators (`sum`, `mean`, `min`, `max`, `first`, `last`, `count`, `and`, `or`,
@@ -378,9 +380,12 @@ the order that unlocks the most:
    forms, `->WKT`, `->WKB`, `->GEOJSON`) are in: `jts/` (the geometry model, WKT, WKB, GeoJSON,
    the cover and the outline of a geometry) and `functions/geoimport.rs`, checked against the
    oracle (DIVERGENCES §37).
-6. **What is left** (116 of 2193): `GEO.BUFFER` (the JTS buffer); `GEO.GML`, `GEO.KML`, `->GML`
-   and `->KML` (J2: the `<` texts, which Warp 10 parses with XML handlers); PGP (8 functions,
-   BouncyCastle's OpenPGP); and 101 Processing `P*` functions. Processing's core
-   library is LGPL-2.1 (upstream README, "License & Copyright", checked on 16 Nov 2026; §8): its functions can
-   only be ported from observation, and its rendering is not reproduced bit for bit. The datastore functions on InfluxDB 3 are done (DIVERGENCES §34), and `METASET` seals the sets
+6. **What is left** (25 of 2193): `GEO.BUFFER` (the JTS buffer); `GEO.GML`, `GEO.GML.UNIFORM`,
+   `GEO.KML`, `GEO.KML.UNIFORM`, `->GML` and `->KML` (J2: the `<` texts, which Warp 10 parses with
+   XML handlers); PGP (8 functions, BouncyCastle's OpenPGP); and 10 Processing typography functions
+   (`PcreateFont`, `Ptext`, `PtextAlign`, `PtextAscent`, `PtextDescent`, `PtextFont`,
+   `PtextLeading`, `PtextMode`, `PtextSize`, `PtextWidth`). The other Processing `P*` functions are
+   ported. Processing's core library is LGPL-2.1 (upstream README, "License & Copyright", checked
+   on 16 Nov 2026; §8): the typography functions can only be ported from observation, and their
+   rendering is not reproduced bit for bit. The datastore functions on InfluxDB 3 are done (DIVERGENCES §34), and `METASET` seals the sets
       of Warp 10 (§39; the binary has no key configured yet).

@@ -49,7 +49,8 @@ silently misbehaving:
 
 - `JAVA`, the Py4J bridge, and class-loader based extension/plugin loading (`EXT`…);
 - `COMPILE` / `COMPILED` (JVM bytecode compilation of macros) — raise `Not supported.`;
-- Processing/graphics functions that depend on the Java `Processing` library (`P*`);
+- Processing typography (`PcreateFont`, `Ptext*`), which depends on the Java `Processing` library's
+  fonts and text rendering (`docs/PORTING.md` §9);
 - JVM-specific introspection whose output is an implementation detail (stack traces in
   `ERROR` carry the WarpScript message but an empty Java stack trace list).
 
@@ -1169,7 +1170,7 @@ blocks of an encryption in both directions, and what it says of every argument. 
 - **Signatures and encryptions.** PSS salts and the 8 bytes of nonce an encryption starts with
   are random (from the operating system), so those are different each time; PKCS#1 signatures
   are deterministic and equal to Warp 10's.
-- **PGP.** The `PGP*` functions are not part of this port (`docs/PORTING.md`).
+- **PGP.** The `PGP*` functions are not ported yet (`docs/PORTING.md` §9).
 
 ## 37. Geometry readers and writers (JTS, GeoJSON)
 
