@@ -51,6 +51,7 @@ pub mod operators;
 pub mod outliers;
 pub mod pack;
 pub mod patterns;
+pub mod pgp;
 pub mod pickle;
 pub mod platform;
 pub mod polyfunc;
@@ -137,6 +138,7 @@ const TABLES: &[&[(&str, Entry)]] = &[
     spectral::FUNCTIONS,
     ec::FUNCTIONS,
     rsa::FUNCTIONS,
+    pgp::FUNCTIONS,
     ssss::FUNCTIONS,
     datastore::FUNCTIONS,
     seasonal::FUNCTIONS,
@@ -405,6 +407,8 @@ mod pack_tests;
 #[cfg(test)]
 mod patterns_tests;
 #[cfg(test)]
+mod pgp_tests;
+#[cfg(test)]
 mod pickle_tests;
 #[cfg(test)]
 mod pivot_tests;
@@ -436,6 +440,9 @@ mod processing_transform_tests;
 mod processing_vertex_tests;
 #[cfg(test)]
 mod quaternions_tests;
+#[cfg(test)]
+#[rustfmt::skip]
+pub(crate) mod pgp_tables_tests;
 #[cfg(test)]
 #[rustfmt::skip]
 pub(crate) mod rsa_tables_tests;

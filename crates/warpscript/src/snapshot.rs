@@ -15,6 +15,7 @@ use crate::error::Result;
 use crate::error::platform::PlatformError;
 use crate::format::{double_to_text, snapshot_encode_readable, url_encode};
 use crate::macros::{Macro, Statement};
+use crate::openpgp::key::key_id_hex;
 use crate::rsa::RsaKey;
 use crate::thrift::serialize_wrapper;
 use crate::value::Value;
@@ -243,6 +244,20 @@ fn append(out: &mut String, value: &Value, depth: usize, readable: bool) -> Resu
             out.push('\'');
             out.push_str(&shape.pack());
             out.push_str("' GEOUNPACK ");
+        }
+        // `'…' OPB64-> PGPRING 0 GET`: the ring of its encoded packets.
+        Value::PgpRing(ring) => {
+            out.push('\'');
+            out.push_str(&opb64_encode(&ring.encode()));
+            out.push_str("' OPB64-> PGPRING 0 GET ");
+        }
+        // `'…' OPB64-> PGPPUBLIC '<KEYID>' GET 'key' GET`: the armored key of its packets.
+        Value::PgpKey(key) => {
+            out.push('\'');
+            out.push_str(&opb64_encode(&key.encode()));
+            out.push_str("' OPB64-> PGPPUBLIC '");
+            out.push_str(&key_id_hex(key.public.key_id));
+            out.push_str("' GET 'key' GET ");
         }
         // The parameter maps `ECPRIVATE` and `ECPUBLIC` read.
         Value::Key(key) => match key.as_ref() {

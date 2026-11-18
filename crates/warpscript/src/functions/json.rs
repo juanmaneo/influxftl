@@ -239,6 +239,8 @@ impl Serializer {
             | Value::Context(_)
             | Value::GeoShape(_)
             | Value::Key(_)
+            | Value::PgpRing(_)
+            | Value::PgpKey(_)
             | Value::Graphics(_)
             | Value::Image(_)
             | Value::Shape(_)

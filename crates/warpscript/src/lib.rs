@@ -70,6 +70,7 @@ pub mod macros;
 pub mod microsphere;
 #[cfg(test)]
 mod microsphere_tests;
+pub mod openpgp;
 pub mod pickle;
 pub mod position;
 pub mod processing;

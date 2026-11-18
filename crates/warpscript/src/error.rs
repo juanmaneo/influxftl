@@ -22,6 +22,7 @@ pub mod geo;
 pub mod geojson;
 pub mod geometry;
 pub mod math;
+pub mod pgp;
 pub mod platform;
 pub mod processing;
 pub mod series;
@@ -44,6 +45,7 @@ use self::geo::GeoError;
 use self::geojson::GeoJsonError;
 use self::geometry::GeometryError;
 use self::math::MathError;
+use self::pgp::PgpError;
 use self::platform::PlatformError;
 use self::processing::ProcessingError;
 use self::series::SeriesError;
@@ -290,6 +292,9 @@ pub enum Error {
     /// A failure of a Processing function.
     #[error(transparent)]
     Processing(#[from] ProcessingError),
+    /// A failure of an OpenPGP function or of the decoding under it.
+    #[error(transparent)]
+    Pgp(#[from] PgpError),
     /// A failure of the pickle encoder or decoder.
     #[error(transparent)]
     Pickle(#[from] PickleError),
@@ -395,6 +400,7 @@ impl Error {
             | Error::Series(_)
             | Error::Collection(_)
             | Error::Crypto(_)
+            | Error::Pgp(_)
             | Error::Platform(_)
             | Error::Datastore(_)
             | Error::TimeRange(_)

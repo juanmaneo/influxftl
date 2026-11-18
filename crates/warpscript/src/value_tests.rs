@@ -247,6 +247,51 @@ fn display_propagates_writer_failures() {
     }
 }
 
+fn pgp_ring_and_key() -> (
+    Rc<crate::openpgp::ring::Ring>,
+    Rc<crate::openpgp::ring::Key>,
+) {
+    // A v4 RSA public key packet (tag 6) with a 16-bit modulus and exponent 3.
+    let packet = [0x98, 13, 4, 0, 0, 0, 1, 1, 0, 16, 0xAB, 0xCD, 0, 2, 3];
+    let Ok(mut rings) = crate::openpgp::ring::read_rings(&packet) else {
+        panic!("the key packet must parse");
+    };
+    let Some(ring) = rings.pop() else {
+        panic!("one ring is expected");
+    };
+    let Some(key) = ring.keys.first().cloned() else {
+        panic!("the ring has a primary key");
+    };
+    (Rc::new(ring), Rc::new(key))
+}
+
+#[test]
+fn pgp_values_are_reference_identities() {
+    let (ring, key) = pgp_ring_and_key();
+    let ring_value = Value::PgpRing(ring.clone());
+    let key_value = Value::PgpKey(key.clone());
+    assert_eq!(ring_value, Value::PgpRing(ring.clone()));
+    assert_eq!(key_value, Value::PgpKey(key.clone()));
+    assert_eq!(ring_value, ring_value.clone());
+    assert!(ring_value.same_object(&ring_value.clone()));
+    assert!(key_value.same_object(&key_value.clone()));
+    assert_ne!(ring_value, Value::PgpRing(Rc::new((*ring).clone())));
+    assert_ne!(key_value, Value::PgpKey(Rc::new((*key).clone())));
+    assert_ne!(ring_value, key_value);
+    assert_eq!(ring_value.type_name(), "KEYRING");
+    assert_eq!(key_value.type_name(), "KEY");
+    assert_eq!(
+        ring_value.to_string(),
+        "org.bouncycastle.openpgp.PGPPublicKeyRing@0"
+    );
+    assert_eq!(
+        key_value.to_string(),
+        "org.bouncycastle.openpgp.PGPPublicKey@0"
+    );
+    assert_eq!(hash_of(&ring_value), hash_of(&ring_value.clone()));
+    assert_eq!(hash_of(&key_value), hash_of(&key_value.clone()));
+}
+
 #[test]
 fn debug_is_type_tagged() {
     assert_eq!(format!("{:?}", Value::from("a")), "STRING(\"a\")");

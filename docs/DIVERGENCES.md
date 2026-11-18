@@ -1170,7 +1170,7 @@ blocks of an encryption in both directions, and what it says of every argument. 
 - **Signatures and encryptions.** PSS salts and the 8 bytes of nonce an encryption starts with
   are random (from the operating system), so those are different each time; PKCS#1 signatures
   are deterministic and equal to Warp 10's.
-- **PGP.** The `PGP*` functions are not ported yet (`docs/PORTING.md` §9).
+
 
 ## 37. Geometry readers and writers (JTS, GeoJSON)
 
@@ -1252,3 +1252,32 @@ The divergences:
   so there `METASET` is disabled, as Warp 10 is without a key.
 - The series limit that Warp 10 applies to the series of `FIND` and `METASET` is not applied,
   as for `FIND`.
+
+## 40. OpenPGP key rings (`PGPRING`, `PGPINFO`, `PGPPUBLIC`, `PGPPRIVATE`)
+
+The four functions that read and write key rings are checked against Warp 10 3.5.0 (BouncyCastle
+`PGPPublicKeyRing`, `PGPSecretKeyRing` and `PGPPublicKey`) on the oracle: 216 generated cases
+(`functions/pgp_tables_tests.rs`, from fixtures of RSA, DSA, ElGamal, the nine curves, expiring
+and v3 keys, and secret rings), with the errors of each function. The packet layer is the
+port's own (`openpgp/`): the `pgp` crate (rPGP) fails `cargo deny` (RUSTSEC-2023-0071,
+RUSTSEC-2026-0387) and no advisory is ignored for it. The BouncyCastle code it follows is MIT
+licensed and attributed in `NOTICE`. The signing, encryption and decryption functions (`PGPSIGN`,
+`PGPVERIFY`, `PGPENCRYPT`, `PGPDECRYPT`) are not ported yet (`docs/PORTING.md` §9). What differs:
+
+- **Algorithms and versions.** The algorithms 25 to 28 are refused with `UnsupportedAlgorithm`.
+  A key of a version other than 2, 3 or 4 is refused with `UnsupportedVersion`, once its material
+  is read.
+- **Attributes.** The user attributes of a key (photo IDs and the like) are given as the raw
+  bytes of their packet bodies.
+- **User IDs.** A user ID that is not UTF-8 is decoded with `from_utf8_lossy`. The replacement
+  of its invalid bytes was not compared with Java's decoder.
+- **Armor.** The block type comes from the tag of the first packet: `PUBLIC KEY BLOCK` for a
+  public key, `PRIVATE KEY BLOCK` for a secret key, `SIGNATURE` for a signature, and `MESSAGE`
+  for anything else, so a subkey is armored as a `MESSAGE`.
+- **Errors.** Packets are read in order and the first malformed one gives the error. Where
+  BouncyCastle stops on a malformed ring can differ, and so can the message, which is the typed
+  error of the packet that failed.
+- **Identity.** Keys and rings are reference values like Warp 10's objects, but their identity
+  hash is not shown (`@0`), as for `KEY` values, since they hold secret material.
+- **`PGPPUBLIC` with a key ID.** `ring LONG PGPPUBLIC` pops both arguments and pushes nothing
+  when the key is found. Warp 10 does the same (checked on the oracle), and the port keeps it.

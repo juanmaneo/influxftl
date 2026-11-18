@@ -393,6 +393,8 @@ fn hash_code(value: &Value, visiting: &mut Vec<usize>) -> Result<i32> {
         Value::Encoder(e) => identity(e),
         Value::GeoShape(s) => identity(s),
         Value::Key(k) => identity(k),
+        Value::PgpRing(r) => identity(r),
+        Value::PgpKey(k) => identity(k),
         Value::Graphics(g) => identity(g),
         Value::Image(i) => identity(i),
         Value::Shape(s) => identity(s),

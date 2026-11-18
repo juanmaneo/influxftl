@@ -124,6 +124,10 @@ pub enum Value {
     GeoShape(Rc<GeoShape>),
     /// An elliptic curve key (`ECPRIVATE`, `ECPUBLIC`: a `java.security.Key` in Warp 10).
     Key(Rc<crate::ec::Key>),
+    /// An OpenPGP key ring: a `PGPSecretKeyRing` or a `PGPPublicKeyRing`, by its `secret` flag.
+    PgpRing(Rc<crate::openpgp::ring::Ring>),
+    /// An OpenPGP key: a `PGPPublicKey`.
+    PgpKey(Rc<crate::openpgp::ring::Key>),
     /// `PGRAPHICS`: a Processing graphics context, drawn on and shared like the Java object.
     Graphics(Rc<RefCell<crate::processing::Graphics>>),
     /// `PIMAGE`: a Processing image, an ARGB pixel buffer.
@@ -182,6 +186,12 @@ pub enum ValueKind {
     GeoShape,
     /// An elliptic curve key.
     Key,
+    /// An OpenPGP secret key ring.
+    PgpSecretRing,
+    /// An OpenPGP public key ring.
+    PgpPublicRing,
+    /// An OpenPGP key.
+    PgpKey,
     /// `PGRAPHICS`.
     Graphics,
     /// `PIMAGE`.
@@ -245,7 +255,9 @@ impl Value {
             Value::Gts(_) => "GTS",
             Value::Encoder(_) => "GTSENCODER",
             Value::GeoShape(_) => "GEOSHAPE",
-            Value::Key(_) => "KEY",
+            Value::Key(_) | Value::PgpKey(_) => "KEY",
+            Value::PgpRing(ring) if ring.secret => "KEY",
+            Value::PgpRing(_) => "KEYRING",
             Value::Graphics(_) => "PGRAPHICS",
             Value::Image(_) => "PIMAGE",
             Value::Shape(_) => "PSHAPE",
@@ -278,6 +290,9 @@ impl Value {
             Value::Encoder(_) => ValueKind::Encoder,
             Value::GeoShape(_) => ValueKind::GeoShape,
             Value::Key(_) => ValueKind::Key,
+            Value::PgpRing(ring) if ring.secret => ValueKind::PgpSecretRing,
+            Value::PgpRing(_) => ValueKind::PgpPublicRing,
+            Value::PgpKey(_) => ValueKind::PgpKey,
             Value::Graphics(_) => ValueKind::Graphics,
             Value::Image(_) => ValueKind::Image,
             Value::Shape(_) => ValueKind::Shape,
@@ -350,6 +365,8 @@ impl Value {
             (Value::Encoder(a), Value::Encoder(b)) => Rc::ptr_eq(a, b),
             (Value::GeoShape(a), Value::GeoShape(b)) => Rc::ptr_eq(a, b),
             (Value::Key(a), Value::Key(b)) => Rc::ptr_eq(a, b),
+            (Value::PgpRing(a), Value::PgpRing(b)) => Rc::ptr_eq(a, b),
+            (Value::PgpKey(a), Value::PgpKey(b)) => Rc::ptr_eq(a, b),
             (Value::Graphics(a), Value::Graphics(b)) => Rc::ptr_eq(a, b),
             (Value::Image(a), Value::Image(b)) => Rc::ptr_eq(a, b),
             (Value::Shape(a), Value::Shape(b)) => Rc::ptr_eq(a, b),
@@ -440,6 +457,8 @@ impl PartialEq for Value {
             | (Value::Gts(_), Value::Gts(_))
             | (Value::Encoder(_), Value::Encoder(_))
             | (Value::Key(_), Value::Key(_))
+            | (Value::PgpRing(_), Value::PgpRing(_))
+            | (Value::PgpKey(_), Value::PgpKey(_))
             | (Value::Graphics(_), Value::Graphics(_))
             | (Value::Image(_), Value::Image(_))
             | (Value::Shape(_), Value::Shape(_))
@@ -500,6 +519,8 @@ impl Hash for Value {
             // hashes them by identity (DIVERGENCES.md, section 38).
             Value::GeoShape(s) => s.hash(state),
             Value::Key(k) => (Rc::as_ptr(k) as usize).hash(state),
+            Value::PgpRing(r) => (Rc::as_ptr(r) as usize).hash(state),
+            Value::PgpKey(k) => (Rc::as_ptr(k) as usize).hash(state),
             Value::Graphics(g) => (Rc::as_ptr(g) as usize).hash(state),
             Value::Image(i) => (Rc::as_ptr(i) as usize).hash(state),
             Value::Shape(s) => (Rc::as_ptr(s) as usize).hash(state),
@@ -573,6 +594,9 @@ impl fmt::Display for Value {
             ),
             // The identity hash is not shown: the object holds a secret.
             Value::Key(_) => write!(f, "{}@0", crate::error::compat::value_class(ValueKind::Key)),
+            Value::PgpRing(_) | Value::PgpKey(_) => {
+                write!(f, "{}@0", crate::error::compat::value_class(self.kind()))
+            }
             Value::Graphics(_) => write!(
                 f,
                 "{}@0",
