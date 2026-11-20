@@ -8,7 +8,7 @@ use super::pgp_sign::FUNCTIONS;
 use crate::encoding::hex_decode;
 use crate::openpgp::armor;
 use crate::openpgp::pgp_fixtures::{ALICE_PUBLIC, ALICE_SECRET, HELLO_DETACHED, HELLO_INLINE};
-use crate::tests::{assert_fails, exec, run, test_stack, top};
+use crate::tests::{assert_fails, exec, fail_msg, run, test_stack, top};
 use crate::value::Value;
 
 /// The key ID of the alice fixture, as a hexadecimal string.
@@ -362,4 +362,30 @@ fn a_detached_string_that_is_not_armor_is_an_error() {
 fn exec_runs_the_signing_scripts() {
     let stack = exec(&format!("'hello' {} PGPSIGN", sign_map("'armor' false")));
     assert!(matches!(stack.elements().last(), Some(Value::Bytes(_))));
+}
+
+#[test]
+fn each_missing_operand_of_pgpsign_and_pgpverify_is_an_error() {
+    let public = public_ring();
+    let scripts = [
+        "PGPVERIFY".to_string(),
+        "true PGPVERIFY".to_string(),
+        "1 PGPVERIFY".to_string(),
+        format!("{public} {KEY_ID} true PGPVERIFY"),
+        format!("'{HELLO_DETACHED}' HEX-> {public} {KEY_ID} true PGPVERIFY"),
+        format!("{public} {KEY_ID} PGPVERIFY"),
+        format!("{} PGPSIGN", sign_map("'armor' false")),
+    ];
+    for script in scripts {
+        assert_ne!(fail_msg(&script), String::new(), "{script}");
+    }
+}
+
+#[test]
+fn an_armored_string_that_is_not_armor_is_an_error_for_both_verify_forms() {
+    let public = public_ring();
+    let detached = format!("'hello' 'not armor' {public} {KEY_ID} true PGPVERIFY");
+    let inline = format!("'not armor' {public} {KEY_ID} PGPVERIFY");
+    assert_ne!(fail_msg(&detached), String::new());
+    assert_ne!(fail_msg(&inline), String::new());
 }
