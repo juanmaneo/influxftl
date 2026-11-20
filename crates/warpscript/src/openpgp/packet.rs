@@ -145,9 +145,17 @@ pub fn write_packet(out: &mut Vec<u8>, tag: u8, body: &[u8]) {
             out.extend_from_slice(&(length as u32).to_be_bytes());
         }
     } else {
-        out.push(0xC0 | tag);
-        write_new_length(out, length);
+        write_new_packet(out, tag, body);
+        return;
     }
+    out.extend_from_slice(body);
+}
+
+/// Writes a packet with its body in the new format, whatever its tag (`writePacket` with
+/// `oldFormat` false).
+pub fn write_new_packet(out: &mut Vec<u8>, tag: u8, body: &[u8]) {
+    out.push(0xC0 | tag);
+    write_new_length(out, body.len());
     out.extend_from_slice(body);
 }
 

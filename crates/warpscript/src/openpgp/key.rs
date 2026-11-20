@@ -5,6 +5,7 @@
 //! fingerprint, key ID, strength and flags, as BouncyCastle's `PGPPublicKey` exposes them.
 
 use digest::Digest;
+use num_bigint::BigUint;
 
 use crate::error::pgp::PgpError;
 
@@ -53,6 +54,12 @@ impl PublicKey {
     /// The public part of the body of a key packet, and the length of that part, so that the
     /// secret part of a secret key packet can follow it (`PublicKeyPacket` reading).
     pub fn parse(body: &[u8]) -> Result<(Self, usize), PgpError> {
+        let (key, rest, _) = Self::parse_material(body)?;
+        Ok((key, body.len() - rest.len()))
+    }
+
+    /// `parse`, also giving the rest of the body after the public part and the key material.
+    fn parse_material(body: &[u8]) -> Result<(Self, &[u8], Material<'_>), PgpError> {
         let mut rest = body;
         let version = lenient_byte(&mut rest);
         let created = u32::from_be_bytes([
@@ -90,11 +97,31 @@ impl PublicKey {
             created,
             valid_days,
             algorithm,
-            bits: material.bits,
+            bits: material.bits(),
             fingerprint,
             key_id,
         };
-        Ok((key, consumed))
+        Ok((key, rest, material))
+    }
+
+    /// The modulus and the public exponent of an RSA key packet body of version 4, and the rest
+    /// of the body after the public part, where a secret part follows.
+    pub fn rsa_numbers(body: &[u8]) -> Result<(BigUint, BigUint, &[u8]), PgpError> {
+        let version = body.first().copied().ok_or(PgpError::PrematureEnd)?;
+        if version != 4 {
+            return Err(PgpError::UnsupportedVersion(version));
+        }
+        let (key, rest, material) = Self::parse_material(body)?;
+        match material {
+            Material::Rsa {
+                modulus, exponent, ..
+            } => Ok((
+                BigUint::from_bytes_be(modulus.bytes),
+                BigUint::from_bytes_be(exponent.bytes),
+                rest,
+            )),
+            Material::Other { .. } => Err(PgpError::UnsupportedAlgorithm(key.algorithm)),
+        }
     }
 
     /// The creation time, in milliseconds since the epoch (`getCreationTime`).
@@ -167,18 +194,37 @@ fn lenient_byte(rest: &mut &[u8]) -> u8 {
     }
 }
 
-/// The key material that follows the algorithm, and the strength it gives the key.
-struct Material<'a> {
-    bits: u32,
-    mpis: Vec<Mpi<'a>>,
+/// The key material that follows the algorithm: the two integers of an RSA key, or the integers
+/// of another algorithm, with the strength they give the key.
+enum Material<'a> {
+    Rsa {
+        bits: u32,
+        modulus: Mpi<'a>,
+        exponent: Mpi<'a>,
+    },
+    Other {
+        bits: u32,
+        mpis: Vec<Mpi<'a>>,
+    },
 }
 
 impl<'a> Material<'a> {
+    fn bits(&self) -> u32 {
+        match self {
+            Material::Rsa { bits, .. } | Material::Other { bits, .. } => *bits,
+        }
+    }
+
     /// The modulus and the exponent of an RSA key: the bytes of the integers.
     fn rsa_parts(&self) -> Result<(&'a [u8], &'a [u8]), PgpError> {
-        match self.mpis.as_slice() {
-            [modulus, exponent, ..] => Ok((modulus.bytes, exponent.bytes)),
-            _ => Err(PgpError::PrematureEnd),
+        match self {
+            Material::Rsa {
+                modulus, exponent, ..
+            } => Ok((modulus.bytes, exponent.bytes)),
+            Material::Other { mpis, .. } => match mpis.as_slice() {
+                [modulus, exponent, ..] => Ok((modulus.bytes, exponent.bytes)),
+                _ => Err(PgpError::PrematureEnd),
+            },
         }
     }
 }
@@ -187,10 +233,12 @@ impl<'a> Material<'a> {
 fn read_material<'a>(algorithm: u8, rest: &mut &'a [u8]) -> Result<Material<'a>, PgpError> {
     match algorithm {
         1..=3 => {
-            let mpis = vec![read_mpi(rest)?, read_mpi(rest)?];
-            Ok(Material {
-                bits: mpis[0].bits,
-                mpis,
+            let modulus = read_mpi(rest)?;
+            let exponent = read_mpi(rest)?;
+            Ok(Material::Rsa {
+                bits: modulus.bits,
+                modulus,
+                exponent,
             })
         }
         16 | 20 | 21 => read_discrete_log(3, rest),
@@ -201,7 +249,7 @@ fn read_material<'a>(algorithm: u8, rest: &mut &'a [u8]) -> Result<Material<'a>,
             if algorithm == 18 {
                 read_kdf_parameters(rest)?;
             }
-            Ok(Material { bits, mpis })
+            Ok(Material::Other { bits, mpis })
         }
         25..=28 => Err(PgpError::UnsupportedAlgorithm(algorithm)),
         _ => Err(PgpError::UnknownAlgorithm(algorithm as i8)),
@@ -216,7 +264,7 @@ fn read_discrete_log<'a>(count: usize, rest: &mut &'a [u8]) -> Result<Material<'
         mpis.push(read_mpi(rest)?);
     }
     let bits = mpis.first().map_or(0, |p| p.bits);
-    Ok(Material { bits, mpis })
+    Ok(Material::Other { bits, mpis })
 }
 
 /// The OID of an elliptic curve, and the bit strength of the curve.
@@ -255,8 +303,13 @@ fn read_mpi<'a>(rest: &mut &'a [u8]) -> Result<Mpi<'a>, PgpError> {
     Ok(Mpi { bits, bytes })
 }
 
-/// The low 64 bits of a big-endian number.
-fn low_u64(bytes: &[u8]) -> u64 {
+/// The next multi-precision integer of `rest`, as a number, which is consumed.
+pub(crate) fn read_big(rest: &mut &[u8]) -> Result<BigUint, PgpError> {
+    Ok(BigUint::from_bytes_be(read_mpi(rest)?.bytes))
+}
+
+/// The key ID of the low 64 bits of a big-endian number, as the last eight bytes of it.
+pub(crate) fn low_u64(bytes: &[u8]) -> u64 {
     bytes
         .iter()
         .rev()

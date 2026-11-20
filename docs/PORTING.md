@@ -381,9 +381,9 @@ the order that unlocks the most:
    OpenPGP key rings (`functions/pgp.rs`, `openpgp/`, `error/pgp.rs`): `PGPRING`, `PGPINFO`,
    `PGPPUBLIC` and `PGPPRIVATE`, on the port's own packet layer (the `pgp` crate fails
    `cargo deny`), checked against the oracle (DIVERGENCES §40; BouncyCastle attribution in NOTICE).
-6. **What is left** (21 of 2193): `GEO.BUFFER` (the JTS buffer); `GEO.GML`, `GEO.GML.UNIFORM`,
+6. **What is left** (19 of 2193): `GEO.BUFFER` (the JTS buffer); `GEO.GML`, `GEO.GML.UNIFORM`,
    `GEO.KML`, `GEO.KML.UNIFORM`, `->GML` and `->KML` (J2: the `<` texts, which Warp 10 parses with
-   XML handlers); PGP (4 functions: `PGPSIGN`, `PGPVERIFY`, `PGPENCRYPT`, `PGPDECRYPT`); and 10 Processing typography functions
+   XML handlers); PGP (2 functions: `PGPENCRYPT`, `PGPDECRYPT`); and 10 Processing typography functions
    (`PcreateFont`, `Ptext`, `PtextAlign`, `PtextAscent`, `PtextDescent`, `PtextFont`,
    `PtextLeading`, `PtextMode`, `PtextSize`, `PtextWidth`). The other Processing `P*` functions are
    ported. Processing's core library is LGPL-2.1 (upstream README, "License & Copyright", checked

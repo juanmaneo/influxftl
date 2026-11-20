@@ -146,7 +146,7 @@ pub(crate) fn ecgen_with(stack: &mut Stack, random: Random<'_>) -> Result<()> {
 
 /// The hexadecimal text `Hex.decode` of BouncyCastle reads: pairs of digits, with the white
 /// space between them ignored.
-fn bc_hex_decode(text: &str) -> core::result::Result<Vec<u8>, CryptoError> {
+pub(crate) fn bc_hex_decode(text: &str) -> core::result::Result<Vec<u8>, CryptoError> {
     let mut digits = Vec::with_capacity(text.len());
     for c in text.chars() {
         if matches!(c, '\n' | '\r' | '\t' | ' ') {

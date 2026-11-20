@@ -5,6 +5,8 @@
 //! and of the decoding under them. Each message is the one BouncyCastle gives, because a
 //! script reads it through the cause of the function's own failure.
 
+use crate::error::crypto::RsaError;
+
 /// A failure of the ASCII armor, worded like the `IOException`s and `ArmoredInputException`s of
 /// BouncyCastle's `ArmoredInputStream`.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
@@ -69,4 +71,30 @@ pub enum PgpError {
         /// The Java class of the object that was read instead.
         found: &'static str,
     },
+    /// A failure of the RSA code under a signature or a secret key.
+    #[error(transparent)]
+    Rsa(#[from] RsaError),
+    /// A digest name that BouncyCastle gives no identifier for, in lower case.
+    #[error("unable to map {0} to a hash id")]
+    UnknownDigest(String),
+    /// A digest of OpenPGP that the port does not compute (SHA3-256 and the identifiers it does
+    /// not know).
+    #[error("unsupported digest algorithm: {0}")]
+    UnportedDigest(u8),
+    /// The protection of a secret key that the port does not read (only the usages 0 and 254).
+    #[error("unsupported secret key protection: {0}")]
+    UnportedProtection(u8),
+    /// The string-to-key specifier of a secret key that the port does not derive a key with.
+    #[error("unsupported S2K type: {0}")]
+    UnportedS2k(u8),
+    /// The symmetric cipher of a secret key that the port does not decrypt with.
+    #[error("unsupported symmetric algorithm: {0}")]
+    UnportedCipher(u8),
+    /// A secret key whose decrypted material does not match its checksum: the passphrase is wrong,
+    /// or the key is damaged.
+    #[error("checksum mismatch")]
+    ChecksumMismatch,
+    /// A packet that a signature or a signed message does not have in its place.
+    #[error("unexpected packet: {0}")]
+    UnexpectedPacket(u8),
 }

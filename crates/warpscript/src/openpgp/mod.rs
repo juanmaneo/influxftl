@@ -17,9 +17,17 @@ mod key_tests;
 pub mod packet;
 #[cfg(test)]
 mod packet_tests;
+#[cfg(test)]
+pub(crate) mod pgp_fixtures;
 pub mod ring;
 #[cfg(test)]
 mod ring_tests;
+pub mod secret;
+#[cfg(test)]
+mod secret_tests;
+pub mod sign;
+#[cfg(test)]
+mod sign_tests;
 pub mod signature;
 #[cfg(test)]
 mod signature_tests;

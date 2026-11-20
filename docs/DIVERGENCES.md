@@ -1281,3 +1281,43 @@ licensed and attributed in `NOTICE`. The signing, encryption and decryption func
   hash is not shown (`@0`), as for `KEY` values, since they hold secret material.
 - **`PGPPUBLIC` with a key ID.** `ring LONG PGPPUBLIC` pops both arguments and pushes nothing
   when the key is found. Warp 10 does the same (checked on the oracle), and the port keeps it.
+
+## 41. OpenPGP signatures (`PGPSIGN`, `PGPVERIFY`)
+
+Checked against Warp 10 3.5.0 (BouncyCastle `PGPSignatureGenerator`, `PGPSignature`,
+`PGPLiteralData` and `PGPOnePassSignature`) on the oracle, with RSA keys of 2048 bits. The
+signing and verification are the port's own (`openpgp/sign.rs`, `openpgp/secret.rs`) on the RSA
+code of `rsa.rs`. Both functions take `detached` and `armor` as true by default.
+
+- **Output.** `PGPSIGN` pushes BYTES, even when armored. A detached signature is one signature
+  packet. An inline signature is a one-pass packet, a literal packet (format `b`, file name
+  `_CONSOLE`, the `date` parameter, in Warp 10 time units and taken in seconds, 0 by default) and the signature
+  packet. The armor header is `PGP SIGNATURE` for a detached signature and `PGP MESSAGE` for an
+  inline one, with `Version: BCPG v@RELEASE_NAME@`, as Warp 10 writes it.
+- **Digests.** `MD2`, `MD5`, `SHA1`, `RIPEMD160`, `SHA224`, `SHA256`, `SHA384` and `SHA512`
+  (case-insensitive), as BouncyCastle names them. `SHA3-256` is refused as unported (the RSA
+  code has no SHA-3). The other names are refused with the message BouncyCastle gives, without
+  the `PGPSIGN` prefix, as on the oracle.
+- **Keys.** RSA (algorithms 1 and 3) of version 4 only. A secret key of version 4 is
+  unprotected or protected with the usage byte 254, the S2K type 3 (iterated and salted) and
+  AES-128, AES-192 or AES-256 in CFB mode. The other algorithms, S2K types, ciphers and usage
+  bytes are refused with typed errors. In particular EdDSA (algorithm 22) signs in Warp 10, but
+  it is not ported yet, and its signatures are refused here.
+- **Verification.** The key is a public key given directly, or a key ID and a ring. A secret ring
+  verifies too, with its public part. A wrong key with the right key ID gives `false`, not an
+  error. A key ID that is not in the ring gives `key with id 0x... not found.` The flag selects
+  detached (`true`) or inline (`false`) verification; without a flag it is inline.
+- **Armored BYTES.** `PGPVERIFY` does not parse armored BYTES, as on the oracle. Pass
+  `'armor' false` to `PGPSIGN` to verify its output directly.
+- **Errors.** The messages are Warp 10's, with the cause of a failed key decryption (a wrong
+  passphrase gives `unable to extract private key.`). The cases where Warp 10 fails with a Java
+  exception text (garbage bytes given as a signature, which gives a `NullPointerException`, or a
+  detached signature verified with the inline flag, which gives a `ClassCastException`) give
+  typed errors in the port instead. The Java text is not reproduced.
+- **Not checked against the oracle yet.** The text of the `PGPSIGN` failure when signing fails
+  (`exception creating signature.`), and the text for a digest that is neither a name nor a
+  number (`unable to map  to a hash id`, with an empty name) are the port's, not verified.
+- **Creation time.** A signature carries the current time as its creation time, so it is not
+  byte-identical to the oracle's; verification of both is checked instead.
+- **Scope.** EdDSA (algorithm 22) and version 3 signatures are refused (`UnsupportedAlgorithm`
+  and `UnsupportedVersion`), and SHA3-256 is refused as unported (`UnportedDigest(12)`).

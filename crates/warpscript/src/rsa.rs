@@ -105,7 +105,7 @@ impl Hash {
     }
 
     /// The digest of some data.
-    fn digest(self, data: &[u8]) -> Vec<u8> {
+    pub fn digest(self, data: &[u8]) -> Vec<u8> {
         match self {
             Hash::Md2 => md2::Md2::digest(data).to_vec(),
             Hash::Md4 => md4::Md4::digest(data).to_vec(),
