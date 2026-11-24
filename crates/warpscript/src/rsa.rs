@@ -429,6 +429,15 @@ impl Exponentiation {
         Ok(Signer { key: self, scheme })
     }
 
+    /// The signer or the verifier of a PKCS#1 digest. Unlike `signer`, it cannot fail: only PSS
+    /// needs a key large enough for its salt.
+    pub fn pkcs1(&self, hash: Hash) -> Signer<'_> {
+        Signer {
+            key: self,
+            scheme: Scheme::Pkcs1(hash),
+        }
+    }
+
     /// The size of a PSS block, in bytes.
     fn pss_block(&self) -> usize {
         (self.bits - 1).div_ceil(8) as usize

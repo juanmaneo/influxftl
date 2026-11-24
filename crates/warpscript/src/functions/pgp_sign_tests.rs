@@ -421,12 +421,26 @@ fn ring_of(packets: &[u8]) -> String {
     format!("'{}' HEX-> PGPRING 0 GET", hex_encode(packets))
 }
 
-/// A `PGPSIGN` parameter map of the tiny secret key, with `extra` parameters after its key.
-fn tiny_map(extra: &str) -> String {
+/// A version 4 secret RSA key of a 128-bit modulus: its block is 16 bytes, too short for the 83
+/// bytes of the SHA-512 digest of a signature.
+fn short_block_secret() -> Vec<u8> {
+    let mut modulus = vec![0x80];
+    modulus.extend([0; 14]);
+    modulus.push(1);
+    [
+        &[4, 0, 0, 0, 0, 1, 0, 128][..],
+        &modulus,
+        &[0, 8, 3, 0, 0, 8, 3],
+    ]
+    .concat()
+}
+
+/// A `PGPSIGN` parameter map of a secret key body, with `extra` parameters after its key.
+fn secret_map(body: &[u8], extra: &str) -> String {
     format!(
         "{{ 'passphrase' 'secret' 'keyring' {} 'keyid' '{}' {extra} }}",
-        ring_of(&packet(5, TINY_SECRET)),
-        key_id_of(TINY_SECRET)
+        ring_of(&packet(5, body)),
+        key_id_of(body)
     )
 }
 
@@ -465,18 +479,15 @@ fn fail_with_values(values: Vec<Value>, script: &str) -> String {
 }
 
 #[test]
-fn a_key_too_small_to_sign_is_a_failed_signature() {
-    assert_fails(
-        &format!("'hello' {} PGPSIGN", tiny_map("'armor' false")),
-        "exception creating signature.",
-    );
-    assert_fails(
-        &format!(
-            "'hello' {} PGPSIGN",
-            tiny_map("'detached' false 'armor' false")
-        ),
-        "exception creating signature.",
-    );
+fn a_key_that_cannot_sign_is_a_failed_signature() {
+    for body in [TINY_SECRET.to_vec(), short_block_secret()] {
+        for extra in ["'armor' false", "'detached' false 'armor' false"] {
+            assert_fails(
+                &format!("'hello' {} PGPSIGN", secret_map(&body, extra)),
+                "exception creating signature.",
+            );
+        }
+    }
 }
 
 #[test]

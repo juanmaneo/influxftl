@@ -12,7 +12,7 @@ use crate::error::pgp::PgpError;
 use crate::openpgp::key::{PublicKey, read_big};
 use crate::openpgp::packet::{PacketReader, write_new_packet, write_packet};
 use crate::openpgp::secret::{take_array, take_byte, take_slice};
-use crate::rsa::{Exponentiation, Hash, RsaKey, Scheme};
+use crate::rsa::{Exponentiation, Hash, RsaKey};
 
 /// The digests of the signatures, by name, with their identifiers in OpenPGP.
 const DIGESTS: &[(&str, u8, Hash)] = &[
@@ -154,7 +154,7 @@ pub fn verify(key: &RsaKey, body: &[u8], data: &[u8]) -> Result<bool, PgpError> 
     }
     let public = Exponentiation::new(key)?;
     let verdict = public
-        .signer(Scheme::Pkcs1(signed.hash))?
+        .pkcs1(signed.hash)
         .verify(&message, &signed.signature.to_bytes_be());
     Ok(verdict.is_ok())
 }
@@ -199,9 +199,7 @@ fn signature_body(params: &SigningParams<'_>, data: &[u8]) -> Result<Vec<u8>, Pg
     let header = header(params);
     let message = message(data, &header);
     let key = Exponentiation::new(params.key)?;
-    let signature = key
-        .signer(Scheme::Pkcs1(params.hash))?
-        .sign(&message, &mut system_random)?;
+    let signature = key.pkcs1(params.hash).sign(&message, &mut system_random)?;
     let mut body = header;
     body.extend([0, 10, 9, ISSUER_KEY_ID]);
     body.extend(params.key_id.to_be_bytes());
