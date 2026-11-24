@@ -58,6 +58,9 @@ idea = "0.6"
 twofish = "0.8"
 # `GZIP` / `UNGZIP` / `DEFLATE` / `INFLATE` (pure Rust `miniz_oxide` backend).
 flate2 = { version = "1", default-features = false, features = ["rust_backend"] }
+# The bzip2 decompression of the compressed messages of OpenPGP, in pure Rust (MIT or Apache-2.0):
+# the C `bzip2` of `libbz2-rs-sys` is under a license the project does not allow.
+bzip2-rs = "0.1.2"
 # The raw deflate of the wrappers (`GZIPOutputStream` of a `Vec`, which cannot fail).
 miniz_oxide = { version = "0.9", default-features = false }
 # Calendar computations and the IANA time zone database (Joda-Time in Warp 10) for

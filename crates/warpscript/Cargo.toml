@@ -17,6 +17,7 @@ path = "src/lib.rs"
 aes = { workspace = true }
 base64 = { workspace = true }
 blowfish = { workspace = true }
+bzip2-rs = { workspace = true }
 camellia = { workspace = true }
 cast5 = { workspace = true }
 chrono = { workspace = true }

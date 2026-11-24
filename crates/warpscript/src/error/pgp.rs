@@ -111,4 +111,28 @@ pub enum PgpError {
     /// A packet that a signature or a signed message does not have in its place.
     #[error("unexpected packet: {0}")]
     UnexpectedPacket(u8),
+    /// A message that ends after its session key packets, before its encrypted data.
+    #[error("unexpected packet in stream: null")]
+    UnexpectedNull,
+    /// A message whose encrypted data holds no literal packet, directly or in its compressed data.
+    #[error("no encrypted content found")]
+    NoEncryptedContent,
+    /// A message with no session key packet of version 3 for RSA, the only kind the port reads.
+    #[error("no encrypted session key found")]
+    NoSessionKey,
+    /// A session key packet whose RSA decryption fails, with the cause.
+    #[error("exception decrypting session info: {0}")]
+    SessionInfo(RsaError),
+    /// A session info whose checksum does not match its session key.
+    #[error("key checksum failed")]
+    SessionChecksum,
+    /// A packet that a message holds where the port reads only the encrypted data.
+    #[error("unsupported packet: {0}")]
+    UnsupportedPacket(u8),
+    /// A compression algorithm that is not one of OpenPGP's.
+    #[error("can't recognise compression algorithm: {0}")]
+    UnknownCompression(u8),
+    /// Compressed data that the decompression of its algorithm cannot read, with the cause.
+    #[error("unable to decompress data: {0}")]
+    Decompression(String),
 }
