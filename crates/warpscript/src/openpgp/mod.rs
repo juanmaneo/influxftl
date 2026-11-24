@@ -11,6 +11,9 @@
 pub mod armor;
 #[cfg(test)]
 mod armor_tests;
+pub mod decrypt;
+#[cfg(test)]
+mod decrypt_tests;
 pub mod encrypt;
 #[cfg(test)]
 mod encrypt_tests;

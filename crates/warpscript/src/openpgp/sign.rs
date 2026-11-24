@@ -227,7 +227,7 @@ pub(crate) fn literal(date: u32, data: &[u8]) -> Vec<u8> {
 }
 
 /// The data of a literal packet: after its format and its file name, and its date.
-fn literal_content(body: &[u8]) -> Result<Vec<u8>, PgpError> {
+pub(crate) fn literal_content(body: &[u8]) -> Result<Vec<u8>, PgpError> {
     let mut rest = body;
     take_byte(&mut rest)?;
     let name_length = take_byte(&mut rest)?;
