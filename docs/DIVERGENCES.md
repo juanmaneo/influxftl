@@ -1327,3 +1327,101 @@ code of `rsa.rs`. Both functions take `detached` and `armor` as true by default.
   `encountered an error while verifying signature.`; a key too small for its signature block
   makes the signing fail with `exception creating signature.`. Neither is checked against the
   oracle yet.
+
+## 42. Symmetric encryption (`PGPENCRYPT`, `PGPDECRYPT`)
+
+Checked against Warp 10 3.5.0 (BouncyCastle `PGPEncryptedDataGenerator`, `PGPEncryptedDataList`
+and `PGPPublicKeyEncryptedData`) on the oracle, with the ALICE key of the fixtures. The port's
+own packet code is `openpgp/symmetric.rs` (the ciphers), `openpgp/encrypt.rs` and
+`openpgp/decrypt.rs`, on the RSA code of `rsa.rs`. Both functions take a map, and the flags
+they read follow the rule of `PGPSIGN`: a flag that is absent is true (`armor`, `throw_keyid`),
+a flag that is not a BOOLEAN is false.
+
+- **Output.** `PGPENCRYPT` pushes a STRING armored as `PGP MESSAGE` with `Version: BCPG
+  v@RELEASE_NAME@`, unless `armor` is false: then BYTES. A non-BOOLEAN `armor` (`'yes'`, `1`,
+  `NULL`) gives BYTES. The message is one PKESK (version 3, tag 1), one SEIPD (version 1, tag
+  18) and nothing else. The SEIPD holds a random prefix of a block and 2 bytes, a literal packet
+  (format `b`, name `_CONSOLE`, the date), then the MDC (`d3 14` and its SHA-1). The session key
+  and the prefix are random. The format is checked on the oracle's bytes, not on the random
+  values.
+- **`throw_keyid`.** Absent or true: the PKESK key ID is eight zero bytes. False (or not a
+  BOOLEAN): the key ID of the key. Checked on the oracle.
+- **`date`.** Warp 10 time units in micros, taken in seconds for the literal (`date`
+  `1500000000000000` writes `59682f00`, which is 1 500 000 000, checked on the oracle). A
+  `date` that is not a LONG is 0.
+- **Recipient.** A key ID of a key of the `keyring`: a LONG, or a hexadecimal STRING without a
+  `0x` prefix (with one, the hexadecimal decoding fails), or a `PGPPublicKey` value, which needs
+  no keyring. The
+  master key and an encryption subkey both work (checked with the subkey `7BDFE3E20D4709CD`).
+  A keyring may be a public or a secret ring.
+- **Algorithms.** The default is `AES_256`. The names Warp 10 reads: `IDEA`, `TRIPLE_DES` (and
+  `3DES`), `CAST5`, `BLOWFISH`, `DES`, `AES_128`, `AES_192`, `AES_256`, `TWOFISH`,
+  `CAMELLIA_128`, `CAMELLIA_192` and `CAMELLIA_256`. A name that is not one of them (`AES128`,
+  `aes_256`, `NULL`, `NOPE`, a number) gives `Invalid encryption algorithm '…'.`. `SAFER` is a
+  name of Warp 10 with no cipher behind it: `cannot recognise cipher`. Session key lengths, which
+  are the ones written in the PKESK: 16 for `IDEA`, `CAST5`, `BLOWFISH`, `AES_128` and
+  `CAMELLIA_128`; 24 for `TRIPLE_DES`, `AES_192` and `CAMELLIA_192`; 32 for `AES_256`, `TWOFISH`
+  and `CAMELLIA_256`; 8 for `DES`. The block sizes are 8 bytes for `IDEA`, `TRIPLE_DES`,
+  `CAST5`, `BLOWFISH` and `DES` (so `'hello'` gives 327 bytes) and 16 for the others (335
+  bytes). Each cipher is run in CFB mode with a zero IV, as RFC 4880 §13.9 gives for SEIPD.
+- **Session key.** PKCS#1 v1.5 block type 2 with random non-zero padding, as BouncyCastle's
+  `PKCS1Encoding` writes it. The session info is the algorithm byte, the key and a two-byte
+  checksum (the sum of the key bytes modulo 65536). The port writes the block with its own
+  random source, so the padding is not the oracle's bytes.
+- **Errors of `PGPENCRYPT`.** The checks run in this order, and the first one wins: the map
+  (`PGPENCRYPT expected a parameter MAP.`), the recipient (`missing recipient PGP public key or
+  key ring and key id.`), the keyring (`missing PGP secret key ring.` when there is none and the
+  recipient is an ID), the key (`key with id 0x… not found.`), the data (`PGPENCRYPT expects
+  data to encrypt to be either STRING or BYTES.`), the algorithm, then the encryption (`PGPENCRYPT
+  error while encrypting data.` with the cause). A hexadecimal key ID that does not decode gives
+  `exception decoding Hex string: invalid characters encountered in Hex string`, with the text
+  repeated in brackets, as the other functions do. A `PGPPublicKey` recipient is used even when
+  the keyring is not a ring.
+- **Input of `PGPDECRYPT`.** The stack is `content keyring keyid passphrase`. A STRING is read
+  as armor and a BYTES as the binary message: the armor of a BYTES is not read, as with
+  `PGPVERIFY`. The checks run in this order: the passphrase (`missing passphrase.`), the key ID
+  (`missing PGP secret key id.`), the keyring (`missing PGP secret key ring.`, which a public ring
+  gives), the key (`key with id 0x… not found.`), the key unlock (`unable to extract private key.`,
+  with the cause, so a wrong passphrase is seen here), then the content (`expected encrypted
+  content as STRING or BYTES.`). The key ID of the PKESK is not compared with the key used:
+  a PKESK that names another key ID decrypts with the key that the script gives, as on the
+  oracle.
+- **The output of `PGPDECRYPT`** is the BYTES of the literal data. Its format, name and date are
+  not returned. A literal that is compressed is inflated first: ZIP (raw DEFLATE, 1), ZLIB (2) and
+  BZIP2 (3). One level of compression only: a compressed packet inside a compressed one is
+  `no encrypted content found`, as Warp 10 gives for any packet that is not a literal.
+- **The MDC is not verified.** Warp 10 decrypts a message whose MDC is wrong and returns its data:
+  BouncyCastle's `PGPEncryptedData.verify` is guarded by `if (true || …)`. The port does the
+  same, to match the oracle. This is a security decision for the user (a modified message
+  decrypts), and it is not a choice the port makes alone: see the note under PORTING §9.
+- **Packets that Warp 10 refuses or ignores.** A PKESK of version 2 or 4 is ignored, as if it
+  were absent: a message with no usable PKESK gives Java's `Index: 0, Size: 0`. The port refuses
+  it as `no encrypted session key found` (the Java text is not reproduced). An ElGamal session
+  key (algorithm 16) against an RSA key gives a Java `ClassCastException`; the port refuses it
+  as an unported algorithm (ElGamal is not ported). A SEIPD follows the PKESKs; a PKESK with
+  nothing after it gives `unexpected packet in stream: null`, and an empty input gives a Java
+  `NullPointerException`: the port gives `unexpected packet in stream: null` for both. A packet
+  other than a SEIPD after the PKESKs (a signature, a marker, a compressed packet) gives `no
+  encrypted content found`. A legacy SED (tag 9) is not probed on the oracle and is refused
+  as an unsupported packet: the port does not decrypt it. A PKESK of an algorithm the port
+  does not know gives `cannot recognise cipher`.
+- **Decryption failures.** A session key whose checksum does not match gives `key checksum
+  failed`. A RSA block that does not decode gives `exception decrypting session info:` and the
+  block error. The port's block messages are its own (`block truncated`, `no data in block`…);
+  BouncyCastle's `block incorrect` is not reproduced. A wrong session key that passes the
+  checksum fails in the parse: the port gives `premature end of stream in PartialInputStream`,
+  the text Warp 10 gives, or the parse error that the garbage gives (`invalid header
+  encountered`). The prefix is not checked first, as on the oracle.
+- **Session key length.** BouncyCastle does not check the length of the session key against
+  its cipher: an AES_256 message with a 16-byte key decrypts with that key and fails in the
+  parse. The port refuses a session key whose length is not the cipher's, with a typed error
+  before it decrypts. This is a divergence, and it changes no answer that Warp 10 gives
+  without an error.
+- **Input.** A STRING that is not valid armor gives a Java `NullPointerException` on the oracle;
+  the port gives the armor error (`unable to decode base64 data…`, or `invalid armor`). An
+  empty BYTES gives the same `NullPointerException`; the port gives `unexpected packet in stream:
+  null`.
+- **Not checked on the oracle.** The text of `PGPENCRYPT` with an ElGamal or DSA recipient (the
+  port refuses them as unported algorithms), an RSA key that cannot hold a session key (the port
+  gives `input data too large`), and the bzip2 decompression, which is checked against the
+  reference decoder of the `bz2` module of Python rather than against the oracle.
