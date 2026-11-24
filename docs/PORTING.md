@@ -225,7 +225,7 @@ The `influxftl` binary runs scripts (`eval`, `run`) and serves `POST /api/v0/exe
 reads, line protocol for writes; DIVERGENCES §34) or on a datastore in memory
 (`INFLUXFTL_DATASTORE=memory`). It was checked on InfluxDB 3 Core 3.12.
 
-2168 / 2193 functions are ported, 98.9 % (`docs/FUNCTIONS.md`; the inventory includes the names
+2182 / 2193 functions are ported, 99.5 % (`docs/FUNCTIONS.md`; the inventory includes the names
 Warp 10 registers through `Builder`s and constants). The Geo Time Series model, the
 `GTSHelper` transforms (time, datapoints, statistics), `BUCKETIZE` and `MAP` with the
 shared aggregators (`sum`, `mean`, `min`, `max`, `first`, `last`, `count`, `and`, `or`,
@@ -383,9 +383,11 @@ the order that unlocks the most:
    `cargo deny`), checked against the oracle (DIVERGENCES §40; BouncyCastle attribution in NOTICE).
    OpenPGP signatures for RSA keys (`PGPSIGN`, `PGPVERIFY`: `functions/pgp_sign.rs`,
    `openpgp/sign.rs`), checked against the oracle (DIVERGENCES §41).
-6. **What is left** (19 of 2193): `GEO.BUFFER` (the JTS buffer); `GEO.GML`, `GEO.GML.UNIFORM`,
-   `GEO.KML`, `GEO.KML.UNIFORM`, `->GML` and `->KML` (J2: the `<` texts, which Warp 10 parses with
-   XML handlers); PGP (2 functions: `PGPENCRYPT`, `PGPDECRYPT`); and 10 Processing typography functions
+   OpenPGP encryption and decryption (`PGPENCRYPT`, `PGPDECRYPT`: `functions/pgp_crypt.rs`,
+   `openpgp/encrypt.rs`, `openpgp/decrypt.rs`, `openpgp/symmetric.rs`), checked against the
+   oracle (DIVERGENCES §42).
+6. **What is left** (11 of 2193): `GEO.BUFFER` (the JTS buffer); and 10 Processing typography
+   functions
    (`PcreateFont`, `Ptext`, `PtextAlign`, `PtextAscent`, `PtextDescent`, `PtextFont`,
    `PtextLeading`, `PtextMode`, `PtextSize`, `PtextWidth`). The other Processing `P*` functions are
    ported. Processing's core library is LGPL-2.1 (upstream README, "License & Copyright", checked

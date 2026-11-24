@@ -1172,10 +1172,10 @@ blocks of an encryption in both directions, and what it says of every argument. 
   are deterministic and equal to Warp 10's.
 
 
-## 37. Geometry readers and writers (JTS, GeoJSON)
+## 37. Geometry readers and writers (JTS, GeoJSON, GML, KML)
 
-`GEO.WKT`, `GEO.WKB`, `GEO.JSON` (and their `.UNIFORM` forms), `->WKT`, `->WKB` and `->GEOJSON`
-follow Warp 10 3.5.0: the oracle tables in `functions/geoimport_tables_tests.rs` are its answers
+`GEO.WKT`, `GEO.WKB`, `GEO.JSON`, `GEO.GML`, `GEO.KML` (and their `.UNIFORM` forms), `->WKT`,
+`->WKB`, `->GEOJSON`, `->GML` and `->KML` follow Warp 10 3.5.0: the oracle tables in `functions/geoimport_tables_tests.rs` are its answers
 to the scripts, and the `jts` tests cover what the tables cannot reach. JTS 1.13 (LGPL/EPL),
 Jackson and the GeoJSON binding of Warp 10 are not copied (`docs/PORTING.md` §8): their
 behaviour is reproduced from observation, and their messages where the oracle shows them. What
@@ -1197,10 +1197,31 @@ differs:
   the JVM's limit depends on its heap. Collections nested past 512 levels fail with
   `StackOverflowError`, where the JVM's depth depends on its stack. WKT has the same 512-level
   limit; GeoJSON has serde_json's limit of 128 levels.
-- **GML and KML.** A text beginning with `<` is refused by `->WKB`, `->WKT` and `->GEOJSON`
-  with `UnsupportedOperationException`. Warp 10 parses it with an XML handler: `'<kml/>' ->WKB`
-  is a `NullPointerException` there, and `'<' ->WKB` is the XML parser's error. GML and KML
-  come with the GML and KML functions (`docs/PORTING.md` §9, step 6).
+- **GML and KML.** The XML reader (`jts/xml.rs`) is a pull tokenizer written for the
+  geometries, not Xerces. It uses the messages the oracle shows, and Xerces's wording for the
+  other failures where the port knows it. What differs:
+  - **DTDs.** A `DOCTYPE` is skipped, not read. Its internal subset declares nothing, so only
+    the predefined entities (`&lt;`, `&gt;`, `&amp;`, `&quot;`, `&apos;`) and the character
+    references are known. An entity declared in a DTD is refused as not declared.
+  - **Malformed DTDs and declarations.** A `DOCTYPE` that breaks inside its internal subset
+    fails with the structure error (Xerces words it as a markup declaration error). A
+    `<!DOCTYPE` inside an element, and an XML declaration with a bad pseudo-attribute, fail
+    with the port's markup or structure error, not with Xerces's wording. The class is the
+    same in each case.
+  - **Separators.** The `ts` and `cs` attributes of `coordinates` are split as literal strings.
+    Warp 10 takes them as regular expressions, so a separator with a meaning in a regular
+    expression reads differently. The defaults (white space and the comma) agree.
+  - **Depth.** An element nested past 512 levels fails with `StackOverflowError`. The depth at
+    which the JVM fails was not measured.
+  - **Non-finite ordinates.** `NaN` and `Infinity` are refused as in WKT and WKB. So is an
+    ordinate that a token lacks where the sequence has more: `1,2 3` (`3` has no `y`) and
+    `1,2,3 4,5` (no `z`) are `NaN` in Warp 10, which writes the `NaN` or drops the `z`; here
+    they are refused as `NotFinite`.
+  - **JVM-dependent messages.** The message of a `ClassCastException` or an
+    `ArrayStoreException` depends on whether the JVM of the oracle had warmed the throwing
+    code (`OmitStackTraceInFastThrow`): a cold JVM gives `X cannot be cast to Y`, a warm one
+    gives the class name alone. The port gives the cold form; the tables do not assert the
+    warm one.
 - **Decimals.** `Double.toString` is the shortest decimal that reads back, the closest one
   when several have that length (`format.rs`). For a power of two whose closest decimal does
   not read back, Warp 10's JDK 8 writes more digits: `TOSTRING` of `5.9604644775390625E-8`
