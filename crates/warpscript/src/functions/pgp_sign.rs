@@ -42,12 +42,21 @@ const VERIFY_FAILED: &str = "encountered an error while verifying signature.";
 const SIGN_FAILED: &str = "exception creating signature.";
 
 /// A parameter of the map of `PGPSIGN`, by its name.
-fn parameter<'a>(params: &'a IndexMap<Value, Value>, name: &str) -> Option<&'a Value> {
+pub(super) fn parameter<'a>(params: &'a IndexMap<Value, Value>, name: &str) -> Option<&'a Value> {
     params.get(&Value::string(name))
 }
 
+/// The date of a literal packet, in seconds, from the `date` of a map in micros: 0 when the date
+/// is absent or is not a LONG.
+pub(super) fn literal_date(params: &IndexMap<Value, Value>) -> u32 {
+    match parameter(params, "date") {
+        Some(Value::Long(micros)) => (micros / 1_000_000) as u32,
+        _ => 0,
+    }
+}
+
 /// A boolean parameter: true when it is absent, and false when it is not a boolean.
-fn flag(params: &IndexMap<Value, Value>, name: &str) -> bool {
+pub(super) fn flag(params: &IndexMap<Value, Value>, name: &str) -> bool {
     match parameter(params, name) {
         None => true,
         Some(Value::Boolean(flag)) => *flag,
@@ -56,12 +65,12 @@ fn flag(params: &IndexMap<Value, Value>, name: &str) -> bool {
 }
 
 /// The body of the packet of a key that holds its public or secret part.
-fn key_body(key: &Key) -> &[u8] {
+pub(super) fn key_body(key: &Key) -> &[u8] {
     key.packets.first().map_or(&[][..], |packet| &packet.body)
 }
 
 /// The bytes of a `STRING` (read as armor) or of `BYTES`, or `None` for another value.
-fn input_bytes(value: &Value) -> Option<std::result::Result<Vec<u8>, PgpError>> {
+pub(super) fn input_bytes(value: &Value) -> Option<std::result::Result<Vec<u8>, PgpError>> {
     match value {
         Value::String(text) => Some(armor::decode(text.as_bytes()).map_err(PgpError::from)),
         Value::Bytes(bytes) => Some(Ok(bytes.to_vec())),
@@ -70,7 +79,7 @@ fn input_bytes(value: &Value) -> Option<std::result::Result<Vec<u8>, PgpError>> 
 }
 
 /// The bytes of a `STRING` or of `BYTES`, as they are, or `None` for another value.
-fn raw_bytes(value: &Value) -> Option<Vec<u8>> {
+pub(super) fn raw_bytes(value: &Value) -> Option<Vec<u8>> {
     match value {
         Value::String(text) => Some(text.as_bytes().to_vec()),
         Value::Bytes(bytes) => Some(bytes.to_vec()),
@@ -107,10 +116,7 @@ fn pgpsign(stack: &mut Stack) -> Result<()> {
         Some(Value::Long(id)) => id.to_string(),
         Some(_) => String::new(),
     };
-    let date = match parameter(&params, "date") {
-        Some(Value::Long(micros)) => (micros / 1_000_000) as u32,
-        _ => 0,
-    };
+    let date = literal_date(&params);
     let key = ring
         .keys
         .iter()

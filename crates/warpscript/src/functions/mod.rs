@@ -52,6 +52,7 @@ pub mod outliers;
 pub mod pack;
 pub mod patterns;
 pub mod pgp;
+pub mod pgp_crypt;
 pub mod pgp_sign;
 pub mod pickle;
 pub mod platform;
@@ -140,6 +141,7 @@ const TABLES: &[&[(&str, Entry)]] = &[
     ec::FUNCTIONS,
     rsa::FUNCTIONS,
     pgp::FUNCTIONS,
+    pgp_crypt::FUNCTIONS,
     pgp_sign::FUNCTIONS,
     ssss::FUNCTIONS,
     datastore::FUNCTIONS,
@@ -408,6 +410,8 @@ mod outliers_tests;
 mod pack_tests;
 #[cfg(test)]
 mod patterns_tests;
+#[cfg(test)]
+mod pgp_crypt_tests;
 #[cfg(test)]
 mod pgp_sign_tests;
 #[cfg(test)]

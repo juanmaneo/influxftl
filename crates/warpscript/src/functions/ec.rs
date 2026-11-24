@@ -59,7 +59,7 @@ fn curves() -> String {
 }
 
 /// `String.valueOf` of the value of a parameter.
-fn string_of(value: Option<&Value>) -> String {
+pub(super) fn string_of(value: Option<&Value>) -> String {
     match value {
         None | Some(Value::Null) => "null".to_owned(),
         Some(Value::String(text)) => text.to_string(),
