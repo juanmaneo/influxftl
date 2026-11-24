@@ -91,14 +91,21 @@ fn version_2_and_3_rsa_use_the_modulus() {
 }
 
 #[test]
-fn version_3_without_two_integers_has_no_rsa_parts() {
+fn version_2_and_3_of_another_algorithm_are_unsupported() {
     let curve = [
         vec![8],
         vec![0x2A, 0x86, 0x48, 0xCE, 0x3D, 0x03, 0x01, 0x07],
     ]
     .concat();
-    let body = v3(3, 0, 19, &[curve, mpi(256, &[1; 32])].concat());
-    assert_eq!(parse(&body), Err(PgpError::PrematureEnd));
+    let ecdsa = v3(3, 0, 19, &[curve, mpi(256, &[1; 32])].concat());
+    assert_eq!(parse(&ecdsa), Err(PgpError::UnsupportedAlgorithm(19)));
+    let elgamal = v3(
+        3,
+        0,
+        16,
+        &[mpi(16, &[0xAB, 0xCD]), mpi(2, &[0x03]), mpi(3, &[0x05])].concat(),
+    );
+    assert_eq!(parse(&elgamal), Err(PgpError::UnsupportedAlgorithm(16)));
 }
 
 #[test]

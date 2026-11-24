@@ -80,7 +80,7 @@ impl PublicKey {
         }
         let consumed = body.len() - rest.len();
         let (fingerprint, key_id) = if matches!(version, 2 | 3) {
-            let (modulus, exponent) = material.rsa_parts()?;
+            let (modulus, exponent) = material.rsa_parts(algorithm)?;
             let mut input = modulus.to_vec();
             input.extend_from_slice(exponent);
             (md5::Md5::digest(&input).to_vec(), low_u64(modulus))
@@ -194,8 +194,8 @@ fn lenient_byte(rest: &mut &[u8]) -> u8 {
     }
 }
 
-/// The key material that follows the algorithm: the two integers of an RSA key, or the integers
-/// of another algorithm, with the strength they give the key.
+/// The key material that follows the algorithm: the two integers of an RSA key, or the strength
+/// of a key of another algorithm (whose integers are read, and not kept).
 enum Material<'a> {
     Rsa {
         bits: u32,
@@ -204,7 +204,6 @@ enum Material<'a> {
     },
     Other {
         bits: u32,
-        mpis: Vec<Mpi<'a>>,
     },
 }
 
@@ -215,16 +214,15 @@ impl<'a> Material<'a> {
         }
     }
 
-    /// The modulus and the exponent of an RSA key: the bytes of the integers.
-    fn rsa_parts(&self) -> Result<(&'a [u8], &'a [u8]), PgpError> {
+    /// The modulus and the exponent of an RSA key: the bytes of the integers. A version 2 or 3
+    /// key of another algorithm is refused, as Warp 10 refuses it (`PGPPublicKeyRing` casts its
+    /// key to an RSA key to compute the key ID).
+    fn rsa_parts(&self, algorithm: u8) -> Result<(&'a [u8], &'a [u8]), PgpError> {
         match self {
             Material::Rsa {
                 modulus, exponent, ..
             } => Ok((modulus.bytes, exponent.bytes)),
-            Material::Other { mpis, .. } => match mpis.as_slice() {
-                [modulus, exponent, ..] => Ok((modulus.bytes, exponent.bytes)),
-                _ => Err(PgpError::PrematureEnd),
-            },
+            Material::Other { .. } => Err(PgpError::UnsupportedAlgorithm(algorithm)),
         }
     }
 }
@@ -245,11 +243,11 @@ fn read_material<'a>(algorithm: u8, rest: &mut &'a [u8]) -> Result<Material<'a>,
         17 => read_discrete_log(4, rest),
         18 | 19 | 22 => {
             let bits = read_curve(rest)?;
-            let mpis = vec![read_mpi(rest)?];
+            read_mpi(rest)?;
             if algorithm == 18 {
                 read_kdf_parameters(rest)?;
             }
-            Ok(Material::Other { bits, mpis })
+            Ok(Material::Other { bits })
         }
         25..=28 => Err(PgpError::UnsupportedAlgorithm(algorithm)),
         _ => Err(PgpError::UnknownAlgorithm(algorithm as i8)),
@@ -259,12 +257,14 @@ fn read_material<'a>(algorithm: u8, rest: &mut &'a [u8]) -> Result<Material<'a>,
 /// The integers of a discrete logarithm key (`count` of them: `p`, `g`, `y`, and `q` for DSA),
 /// the strength being the bit length of `p`.
 fn read_discrete_log<'a>(count: usize, rest: &mut &'a [u8]) -> Result<Material<'a>, PgpError> {
-    let mut mpis = Vec::with_capacity(count);
-    for _ in 0..count {
-        mpis.push(read_mpi(rest)?);
+    let mut bits = 0;
+    for index in 0..count {
+        let mpi = read_mpi(rest)?;
+        if index == 0 {
+            bits = mpi.bits;
+        }
     }
-    let bits = mpis.first().map_or(0, |p| p.bits);
-    Ok(Material::Other { bits, mpis })
+    Ok(Material::Other { bits })
 }
 
 /// The OID of an elliptic curve, and the bit strength of the curve.

@@ -1266,7 +1266,9 @@ licensed and attributed in `NOTICE`. The signing, encryption and decryption func
 
 - **Algorithms and versions.** The algorithms 25 to 28 are refused with `UnsupportedAlgorithm`.
   A key of a version other than 2, 3 or 4 is refused with `UnsupportedVersion`, once its material
-  is read.
+  is read. A version 2 or 3 key of an algorithm other than RSA is refused with
+  `UnsupportedAlgorithm`, where Warp 10 fails with a `ClassCastException` (checked on the oracle
+  with a version 3 ElGamal key; the Java text is not reproduced).
 - **Attributes.** The user attributes of a key (photo IDs and the like) are given as the raw
   bytes of their packet bodies.
 - **User IDs.** A user ID that is not UTF-8 is decoded with `from_utf8_lossy`. The replacement
