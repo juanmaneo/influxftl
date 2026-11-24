@@ -399,6 +399,27 @@ impl Exponentiation {
         ciphertext
     }
 
+    /// The ciphertext of a payload that fits one block, as a block of type 2 whose padding is
+    /// random and never zero (`PKCS1Encoding` in encryption mode, with a public key).
+    ///
+    /// # Errors
+    ///
+    /// A payload larger than the capacity of a block, or no entropy for the padding.
+    pub fn encrypt_random(&self, data: &[u8], random: Random<'_>) -> Result<Vec<u8>, RsaError> {
+        if data.len() > self.capacity {
+            return Err(RsaError::DataTooLarge);
+        }
+        let size = self.block - 1;
+        let mut block = Vec::with_capacity(size);
+        block.push(2);
+        for _ in 0..size - data.len() - 2 {
+            block.push(nonzero_byte(random)?);
+        }
+        block.push(0);
+        block.extend_from_slice(data);
+        Ok(left_pad(self.power_below(&block), self.block))
+    }
+
     /// The data of a ciphertext (`CryptoHelper.decryptRSA`), a block at a time.
     ///
     /// # Errors
@@ -454,6 +475,17 @@ fn left_pad(bytes: Vec<u8>, size: usize) -> Vec<u8> {
     let mut padded = vec![0; size.saturating_sub(bytes.len())];
     padded.extend(bytes);
     padded
+}
+
+/// A byte of random data that is not zero: the zeros are drawn again.
+fn nonzero_byte(random: Random<'_>) -> Result<u8, RsaError> {
+    let mut byte = [0];
+    loop {
+        random(&mut byte)?;
+        if byte[0] != 0 {
+            return Ok(byte[0]);
+        }
+    }
 }
 
 /// A key that signs and verifies with a scheme.

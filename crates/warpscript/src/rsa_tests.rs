@@ -326,6 +326,61 @@ fn a_ciphertext_is_the_power_of_the_block_of_type_1() {
     assert_eq!(ciphertext, expected);
 }
 
+#[test]
+fn a_random_ciphertext_is_a_block_of_type_2_with_nonzero_padding() {
+    let (private, public) = keys("1024");
+    let key = Exponentiation::new(&public).expect("a key");
+    // The first draw is a zero, which is drawn again: the padding is 1 to 122.
+    let mut bytes = vec![0, 0, 0];
+    bytes.extend(1..=200u8);
+    let ciphertext = key
+        .encrypt_random(b"abc", &mut scripted(bytes))
+        .expect("a ciphertext");
+    let mut expected = vec![0, 2];
+    expected.extend(1..=122u8);
+    expected.push(0);
+    expected.extend_from_slice(b"abc");
+    assert_eq!(power(&private, &ciphertext), expected);
+    assert_eq!(
+        Exponentiation::new(&private)
+            .expect("a key")
+            .decrypt(&ciphertext),
+        Ok(b"abc".to_vec())
+    );
+}
+
+#[test]
+fn a_random_ciphertext_holds_a_payload_of_the_capacity_of_its_block() {
+    for bits in ["512", "1024", "1025", "1100"] {
+        let (private, public) = keys(bits);
+        let size = usize::try_from(private.modulus.bits().div_ceil(8)).expect("a size");
+        let capacity = size - 11;
+        let with_public = Exponentiation::new(&public).expect("a key");
+        let with_private = Exponentiation::new(&private).expect("a key");
+        let data: Vec<u8> = (0..capacity).map(|i| (i % 251) as u8).collect();
+        let ciphertext = with_public
+            .encrypt_random(&data, &mut scripted(vec![7; 2 * size]))
+            .expect("a ciphertext");
+        assert_eq!(ciphertext.len(), size, "{bits}");
+        assert_eq!(with_private.decrypt(&ciphertext), Ok(data), "{bits}");
+        assert_eq!(
+            with_public.encrypt_random(&vec![0; capacity + 1], &mut scripted(Vec::new())),
+            Err(RsaError::DataTooLarge),
+            "{bits}"
+        );
+    }
+}
+
+#[test]
+fn a_random_ciphertext_needs_entropy_for_its_padding() {
+    let (_, public) = keys("1024");
+    let key = Exponentiation::new(&public).expect("a key");
+    assert_eq!(
+        key.encrypt_random(b"abc", &mut scripted(vec![1; 10])),
+        Err(RsaError::Random(getrandom::Error::UNSUPPORTED))
+    );
+}
+
 /// The keys of a size and the signer of a scheme on it.
 fn sign_and_verify(bits: &str, scheme: Scheme, salt: Vec<u8>) -> (Vec<u8>, Vec<u8>) {
     let (private, public) = keys(bits);
