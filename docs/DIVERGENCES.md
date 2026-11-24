@@ -1319,5 +1319,9 @@ code of `rsa.rs`. Both functions take `detached` and `armor` as true by default.
   number (`unable to map  to a hash id`, with an empty name) are the port's, not verified.
 - **Creation time.** A signature carries the current time as its creation time, so it is not
   byte-identical to the oracle's; verification of both is checked instead.
-- **Scope.** EdDSA (algorithm 22) and version 3 signatures are refused (`UnsupportedAlgorithm`
-  and `UnsupportedVersion`), and SHA3-256 is refused as unported (`UnportedDigest(12)`).
+- **Scope.** EdDSA (algorithm 22), version 3 keys and version 3 signatures are refused
+  (`UnsupportedAlgorithm` and `UnsupportedVersion`), and SHA3-256 is refused as unported
+  (`UnportedDigest(12)`). A version 3 key or signature makes the verification fail with
+  `encountered an error while verifying signature.`; a key too small for its signature block
+  makes the signing fail with `exception creating signature.`. Neither is checked against the
+  oracle yet.

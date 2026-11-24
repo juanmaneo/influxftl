@@ -5,8 +5,9 @@
 //! messages of the failures that Warp 10 gives under the same inputs.
 
 use super::pgp_sign::FUNCTIONS;
-use crate::encoding::hex_decode;
+use crate::encoding::{hex_decode, hex_encode};
 use crate::openpgp::armor;
+use crate::openpgp::key::{PublicKey, key_id_hex};
 use crate::openpgp::pgp_fixtures::{ALICE_PUBLIC, ALICE_SECRET, HELLO_DETACHED, HELLO_INLINE};
 use crate::tests::{assert_fails, exec, fail_msg, run, test_stack, top};
 use crate::value::Value;
@@ -388,4 +389,138 @@ fn an_armored_string_that_is_not_armor_is_an_error_for_both_verify_forms() {
     let inline = format!("'not armor' {public} {KEY_ID} PGPVERIFY");
     assert_ne!(fail_msg(&detached), String::new());
     assert_ne!(fail_msg(&inline), String::new());
+}
+
+/// The body of a version 4 secret RSA key whose modulus has one bit: its private exponent reads,
+/// but the modulus cannot hold the block of a signature.
+const TINY_SECRET: &[u8] = &[4, 0, 0, 0, 0, 1, 0, 1, 1, 0, 8, 3, 0, 0, 8, 3];
+
+/// The body of a version 3 RSA public key.
+const V3_PUBLIC: &[u8] = &[3, 0, 0, 0, 0, 0, 0, 1, 0, 1, 1, 0, 8, 3];
+
+/// Armor that does not decode: a line of the body that starts with a dash is not armor.
+const BAD_ARMOR: &str = "-----BEGIN PGP SIGNATURE-----\n-\n";
+
+/// A packet with a one-octet length, in the new format, for the tests that craft keys.
+fn packet(tag: u8, body: &[u8]) -> Vec<u8> {
+    let mut out = vec![0xC0 | tag, body.len() as u8];
+    out.extend_from_slice(body);
+    out
+}
+
+/// The hexadecimal key ID of a key body.
+fn key_id_of(body: &[u8]) -> String {
+    match PublicKey::parse(body) {
+        Ok((key, _)) => key_id_hex(key.key_id),
+        Err(error) => panic!("the key parses: {error}"),
+    }
+}
+
+/// The ring of some packets, on the stack.
+fn ring_of(packets: &[u8]) -> String {
+    format!("'{}' HEX-> PGPRING 0 GET", hex_encode(packets))
+}
+
+/// A `PGPSIGN` parameter map of the tiny secret key, with `extra` parameters after its key.
+fn tiny_map(extra: &str) -> String {
+    format!(
+        "{{ 'passphrase' 'secret' 'keyring' {} 'keyid' '{}' {extra} }}",
+        ring_of(&packet(5, TINY_SECRET)),
+        key_id_of(TINY_SECRET)
+    )
+}
+
+/// The bytes of a hexadecimal fixture, or a panic.
+fn fixture_bytes(hex: &str) -> Vec<u8> {
+    match hex_decode(hex) {
+        Ok(bytes) => bytes,
+        Err(error) => panic!("the fixture is hexadecimal: {error}"),
+    }
+}
+
+/// The hexadecimal of a fixture whose signature packet has the version 3.
+fn with_version_3_signature(hex: &str) -> String {
+    let header = [0x89, 0x01, 0x1c, 0x04];
+    let mut bytes = fixture_bytes(hex);
+    let Some(at) = bytes
+        .windows(header.len())
+        .position(|window| window == header)
+    else {
+        panic!("the fixture has a signature packet of version 4");
+    };
+    bytes[at + 3] = 3;
+    hex_encode(&bytes)
+}
+
+/// The message of the failure of a script that starts with `values` on its stack.
+fn fail_with_values(values: Vec<Value>, script: &str) -> String {
+    let mut stack = test_stack();
+    for value in values {
+        stack.push(value);
+    }
+    match stack.exec_checked(script) {
+        Ok(()) => panic!("script did not fail:\n{script}"),
+        Err(error) => error.to_string(),
+    }
+}
+
+#[test]
+fn a_key_too_small_to_sign_is_a_failed_signature() {
+    assert_fails(
+        &format!("'hello' {} PGPSIGN", tiny_map("'armor' false")),
+        "exception creating signature.",
+    );
+    assert_fails(
+        &format!(
+            "'hello' {} PGPSIGN",
+            tiny_map("'detached' false 'armor' false")
+        ),
+        "exception creating signature.",
+    );
+}
+
+#[test]
+fn a_version_3_key_cannot_verify() {
+    assert_fails(
+        &format!(
+            "'hello' 'x' {} '{}' true PGPVERIFY",
+            ring_of(&packet(6, V3_PUBLIC)),
+            key_id_of(V3_PUBLIC)
+        ),
+        "encountered an error while verifying signature.",
+    );
+}
+
+#[test]
+fn armor_that_does_not_decode_fails_the_verification() {
+    let public = public_ring();
+    let detached = fail_with_values(
+        vec![Value::string("hello"), Value::string(BAD_ARMOR)],
+        &format!("{public} {KEY_ID} true PGPVERIFY"),
+    );
+    assert!(detached.contains("encountered an error while verifying signature."));
+    let inline = fail_with_values(
+        vec![Value::string(BAD_ARMOR)],
+        &format!("{public} {KEY_ID} PGPVERIFY"),
+    );
+    assert!(inline.contains("encountered an error while verifying signature."));
+}
+
+#[test]
+fn a_signature_of_version_3_fails_the_verification() {
+    let public = public_ring();
+    assert_fails(
+        &format!(
+            "'hello' '{}' HEX-> {public} {KEY_ID} true PGPVERIFY",
+            with_version_3_signature(HELLO_DETACHED)
+        ),
+        "encountered an error while verifying signature.",
+    );
+    assert_fails(
+        &format!(
+            "'{}' HEX-> {public} {KEY_ID} PGPVERIFY",
+            with_version_3_signature(HELLO_INLINE)
+        ),
+        "encountered an error while verifying signature.",
+    );
 }
