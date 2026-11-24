@@ -127,6 +127,11 @@ opt-level = 3
 [profile.dev.package.crypto-primes]
 opt-level = 3
 
+# rstar 0.12.2 with heapless 0.9 (vendor/rstar/VENDORED.md). geo 0.33.1, the newest release,
+# requires rstar ^0.12, which requires heapless ^0.8, so no registry version can take the fix.
+[patch.crates-io]
+rstar = { path = "vendor/rstar" }
+
 [profile.release]
 lto = "thin"
 codegen-units = 1
