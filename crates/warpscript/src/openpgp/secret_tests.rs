@@ -12,7 +12,8 @@ use num_bigint::BigUint;
 use super::key::{PublicKey, key_id_hex};
 use super::pgp_fixtures::{ALICE_PUBLIC, ALICE_SECRET};
 use super::ring::read_rings;
-use super::secret::{cfb, rsa_private_key, s2k_key};
+use super::secret::{rsa_private_key, s2k_key};
+use super::symmetric::cfb;
 use crate::encoding::hex_decode;
 use crate::error::pgp::PgpError;
 use crate::rsa::RsaKey;
@@ -90,19 +91,19 @@ fn protected(public: &[u8], cipher: u8, hash_id: u8, count: u8, material: &[u8])
     let encrypted = match cipher {
         7 => cfb(
             &Aes128::new(&s2k_key::<16>(hash, salt, count, PASSPHRASE).into()),
-            iv,
+            &iv,
             &plain,
             true,
         ),
         8 => cfb(
             &Aes192::new(&s2k_key::<24>(hash, salt, count, PASSPHRASE).into()),
-            iv,
+            &iv,
             &plain,
             true,
         ),
         9 => cfb(
             &Aes256::new(&s2k_key::<32>(hash, salt, count, PASSPHRASE).into()),
-            iv,
+            &iv,
             &plain,
             true,
         ),
@@ -248,8 +249,8 @@ fn a_cfb_round_trip_keeps_partial_blocks() {
     let iv = [3u8; 16];
     for length in [0usize, 5, 16, 37] {
         let plain: Vec<u8> = (0..length).map(|i| i as u8).collect();
-        let encrypted = cfb(&cipher, iv, &plain, true);
-        assert_eq!(cfb(&cipher, iv, &encrypted, false), plain);
+        let encrypted = cfb(&cipher, &iv, &plain, true);
+        assert_eq!(cfb(&cipher, &iv, &encrypted, false), plain);
     }
 }
 

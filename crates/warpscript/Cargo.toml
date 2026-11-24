@@ -16,10 +16,14 @@ path = "src/lib.rs"
 [dependencies]
 aes = { workspace = true }
 base64 = { workspace = true }
+blowfish = { workspace = true }
+camellia = { workspace = true }
+cast5 = { workspace = true }
 chrono = { workspace = true }
 chrono-tz = { workspace = true }
 crypto-bigint = { workspace = true }
 crypto-primes = { workspace = true }
+des = { workspace = true }
 geo = { workspace = true }
 image = { workspace = true }
 digest = { workspace = true }
@@ -29,6 +33,7 @@ flate2 = { workspace = true }
 miniz_oxide = { workspace = true }
 getrandom = { workspace = true }
 gost94 = { workspace = true }
+idea = { workspace = true }
 indexmap = { workspace = true }
 k256 = { workspace = true }
 keccak = { workspace = true }
@@ -49,6 +54,7 @@ sha1 = { workspace = true }
 sha2 = { workspace = true }
 tiger = { workspace = true }
 thiserror = { workspace = true }
+twofish = { workspace = true }
 whirlpool = { workspace = true }
 
 [lints]

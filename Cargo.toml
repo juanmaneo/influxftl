@@ -45,8 +45,17 @@ gost94 = "0.11"
 # Keccak-f[1600] permutation: the SHA-3 / Keccak sponges are built on it (Keccak-128 and
 # Keccak-288 have no ready-made implementation).
 keccak = "0.2"
-# AES block cipher for the RFC 3394 key wrap of `AESWRAP` / `AESUNWRAP`.
+# AES block cipher for the RFC 3394 key wrap of `AESWRAP` / `AESUNWRAP`, and the AES of the
+# secret keys and the symmetric messages of OpenPGP.
 aes = "0.9"
+# The other block ciphers of OpenPGP's symmetric algorithms, on the same `cipher` 0.5 traits as
+# `aes`: IDEA, Triple DES, CAST5, Blowfish, DES, Twofish and Camellia.
+blowfish = "0.10"
+camellia = "0.2"
+cast5 = "0.12"
+des = "0.9"
+idea = "0.6"
+twofish = "0.8"
 # `GZIP` / `UNGZIP` / `DEFLATE` / `INFLATE` (pure Rust `miniz_oxide` backend).
 flate2 = { version = "1", default-features = false, features = ["rust_backend"] }
 # The raw deflate of the wrappers (`GZIPOutputStream` of a `Vec`, which cannot fail).

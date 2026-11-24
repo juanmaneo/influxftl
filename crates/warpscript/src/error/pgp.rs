@@ -90,6 +90,20 @@ pub enum PgpError {
     /// The symmetric cipher of a secret key that the port does not decrypt with.
     #[error("unsupported symmetric algorithm: {0}")]
     UnportedCipher(u8),
+    /// A cipher name of `PGPENCRYPT` that BouncyCastle does not know.
+    #[error("Invalid encryption algorithm '{0}'.")]
+    InvalidCipherName(String),
+    /// A cipher identifier that the port does not run: SAFER, and the identifiers of no cipher.
+    #[error("cannot recognise cipher")]
+    UnrecognisedCipher,
+    /// A session key whose length is not the one its cipher takes.
+    #[error("session key of {length} bytes where the cipher takes {expected}")]
+    SessionKeyLength {
+        /// The length of the session key.
+        length: usize,
+        /// The length the cipher takes.
+        expected: usize,
+    },
     /// A secret key whose decrypted material does not match its checksum: the passphrase is wrong,
     /// or the key is damaged.
     #[error("checksum mismatch")]

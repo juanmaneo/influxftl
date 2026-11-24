@@ -92,6 +92,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "blowfish"
+version = "0.10.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "62ce3946557b35e71d1bbe07ec385073ce9eda05043f95de134eb578fcf1a298"
+dependencies = [
+ "byteorder",
+ "cipher",
+]
+
+[[package]]
 name = "bytemuck"
 version = "1.25.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -108,6 +118,24 @@ name = "byteorder-lite"
 version = "0.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8f1fe948ff07f4bd06c30984e69f5b4899c516a3ef74f34df92a2df2ab535495"
+
+[[package]]
+name = "camellia"
+version = "0.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d3ed33f9863ee76491bbe0d7e16a225c694d8525287e320dc7fbe71ee212254c"
+dependencies = [
+ "cipher",
+]
+
+[[package]]
+name = "cast5"
+version = "0.12.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1ed80521f830bbce4d3a4857d6f2b91a8339bf0b65711fe189ab6f8d7a2f629e"
+dependencies = [
+ "cipher",
+]
 
 [[package]]
 name = "cfg-if"
@@ -240,6 +268,15 @@ checksum = "6a996a108feb8b427a6e12fcf6af4aa83409b79d72c15337d7741368131ee004"
 dependencies = [
  "const-oid",
  "zeroize",
+]
+
+[[package]]
+name = "des"
+version = "0.9.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "916a94e407b54f9034d71dd748234cd1e516ced6284009906ae246f177eafe5a"
+dependencies = [
+ "cipher",
 ]
 
 [[package]]
@@ -490,6 +527,15 @@ name = "i_tree"
 version = "0.18.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4804bdc1dc124eb7e1aa9e144ecc04096bcf787a10a15fa44af682b51f0f6cce"
+
+[[package]]
+name = "idea"
+version = "0.6.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "00a418f3a2a1cb2065869bf620a2fab8d8a9d931ce7c06003e1faf0f2e4f0227"
+dependencies = [
+ "cipher",
+]
 
 [[package]]
 name = "image"
@@ -1031,6 +1077,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "twofish"
+version = "0.8.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0218ef702a91e18ba84dd516edf8df33a9f9fb4431d6ada13e6f9502c3bcb6fc"
+dependencies = [
+ "cipher",
+]
+
+[[package]]
 name = "typenum"
 version = "1.20.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1048,10 +1103,14 @@ version = "0.1.0"
 dependencies = [
  "aes",
  "base64",
+ "blowfish",
+ "camellia",
+ "cast5",
  "chrono",
  "chrono-tz",
  "crypto-bigint",
  "crypto-primes",
+ "des",
  "digest",
  "elliptic-curve",
  "fancy-regex",
@@ -1059,6 +1118,7 @@ dependencies = [
  "geo",
  "getrandom",
  "gost94",
+ "idea",
  "image",
  "indexmap",
  "k256",
@@ -1081,6 +1141,7 @@ dependencies = [
  "sha2",
  "thiserror",
  "tiger",
+ "twofish",
  "whirlpool",
 ]
 

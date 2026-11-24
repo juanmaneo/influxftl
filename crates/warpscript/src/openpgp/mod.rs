@@ -31,3 +31,6 @@ mod sign_tests;
 pub mod signature;
 #[cfg(test)]
 mod signature_tests;
+pub mod symmetric;
+#[cfg(test)]
+mod symmetric_tests;

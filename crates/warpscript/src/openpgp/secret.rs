@@ -6,8 +6,7 @@
 //! (a cipher, a string-to-key of type 3 and a SHA-1 checksum); the ciphers are AES of 128, 192
 //! and 256 bits in CFB mode.
 
-use aes::cipher::consts::U16;
-use aes::cipher::{BlockCipherEncrypt, KeyInit};
+use aes::cipher::KeyInit;
 use aes::{Aes128, Aes192, Aes256};
 use digest::Digest;
 use num_bigint::{BigInt, BigUint};
@@ -15,6 +14,7 @@ use num_bigint::{BigInt, BigUint};
 use crate::error::pgp::PgpError;
 use crate::openpgp::key::{PublicKey, read_big};
 use crate::openpgp::sign::hash_of_id;
+use crate::openpgp::symmetric::cfb;
 use crate::rsa::{Hash, RsaKey};
 
 /// The usage of a secret key that leaves its material in the clear.
@@ -102,19 +102,19 @@ fn decrypt(cipher: u8, unlock: &Unlock<'_>, data: &[u8]) -> Result<Vec<u8>, PgpE
     Ok(match cipher {
         7 => cfb(
             &Aes128::new(&s2k_key::<16>(hash, salt, count, passphrase).into()),
-            iv,
+            &iv,
             data,
             false,
         ),
         8 => cfb(
             &Aes192::new(&s2k_key::<24>(hash, salt, count, passphrase).into()),
-            iv,
+            &iv,
             data,
             false,
         ),
         9 => cfb(
             &Aes256::new(&s2k_key::<32>(hash, salt, count, passphrase).into()),
-            iv,
+            &iv,
             data,
             false,
         ),
@@ -151,34 +151,6 @@ pub(crate) fn s2k_key<const N: usize>(
 /// The number of bytes that a count of the packet stands for (`S2K.getIterationCount`).
 fn s2k_octets(count: u8) -> usize {
     (16 + usize::from(count & 15)) << (usize::from(count >> 4) + 6)
-}
-
-/// The data of a block cipher in CFB mode with full blocks (RFC 4880 §13.9): the keystream of
-/// each block is the cipher of the previous ciphertext block, and the first is that of the
-/// initialisation vector. Encryption is the same with the feedback of the output.
-pub(crate) fn cfb<C: BlockCipherEncrypt<BlockSize = U16>>(
-    cipher: &C,
-    iv: [u8; 16],
-    input: &[u8],
-    encrypt: bool,
-) -> Vec<u8> {
-    let mut register = iv;
-    let mut out = Vec::with_capacity(input.len());
-    for chunk in input.chunks(16) {
-        let mut keystream = register;
-        cipher.encrypt_block((&mut keystream).into());
-        let produced: Vec<u8> = chunk
-            .iter()
-            .zip(keystream)
-            .map(|(byte, key)| byte ^ key)
-            .collect();
-        let feedback: &[u8] = if encrypt { &produced } else { chunk };
-        for (slot, byte) in register.iter_mut().zip(feedback) {
-            *slot = *byte;
-        }
-        out.extend(produced);
-    }
-    out
 }
 
 /// The next byte of `rest`, which is consumed.
