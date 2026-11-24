@@ -51,7 +51,7 @@ const SIGNATURE: u8 = 2;
 const ONE_PASS: u8 = 4;
 
 /// The tag of a literal data packet.
-const LITERAL: u8 = 11;
+pub(crate) const LITERAL: u8 = 11;
 
 /// The format of a literal packet of binary data.
 const BINARY_FORMAT: u8 = b'b';
@@ -218,7 +218,7 @@ fn one_pass(params: &SigningParams<'_>) -> Vec<u8> {
 }
 
 /// The body of a literal packet of binary data named `_CONSOLE`.
-fn literal(date: u32, data: &[u8]) -> Vec<u8> {
+pub(crate) fn literal(date: u32, data: &[u8]) -> Vec<u8> {
     let mut body = vec![BINARY_FORMAT, LITERAL_NAME.len() as u8];
     body.extend(LITERAL_NAME);
     body.extend(date.to_be_bytes());
@@ -287,7 +287,7 @@ fn read_signature(body: &[u8]) -> Result<Signed, PgpError> {
 }
 
 /// The MPI of a number: its bit length, then its bytes.
-fn write_mpi(out: &mut Vec<u8>, number: &BigUint) {
+pub(crate) fn write_mpi(out: &mut Vec<u8>, number: &BigUint) {
     out.extend((number.bits() as u16).to_be_bytes());
     out.extend(number.to_bytes_be());
 }
