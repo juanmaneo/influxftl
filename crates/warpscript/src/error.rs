@@ -21,6 +21,7 @@ pub mod format;
 pub mod geo;
 pub mod geojson;
 pub mod geometry;
+pub mod gml;
 pub mod math;
 pub mod pgp;
 pub mod platform;
@@ -44,6 +45,7 @@ use self::format::FormatError;
 use self::geo::GeoError;
 use self::geojson::GeoJsonError;
 use self::geometry::GeometryError;
+use self::gml::GmlError;
 use self::math::MathError;
 use self::pgp::PgpError;
 use self::platform::PlatformError;
@@ -127,6 +129,34 @@ pub enum Class {
     Shape,
     /// A Processing font, as the type a cast asks for.
     Font,
+    /// A JTS coordinate.
+    Coordinate,
+    /// A JTS coordinate sequence, as the interface a cast asks for.
+    CoordinateSequence,
+    /// The JTS coordinate sequence a reader builds.
+    ArraySequence,
+    /// A JTS envelope.
+    Envelope,
+    /// A JTS geometry, as the abstract class a cast asks for.
+    Geometry,
+    /// A JTS point.
+    Point,
+    /// A JTS line string.
+    LineString,
+    /// A JTS linear ring.
+    LinearRing,
+    /// A JTS polygon.
+    Polygon,
+    /// A JTS multi point.
+    MultiPoint,
+    /// A JTS multi line string.
+    MultiLineString,
+    /// A JTS multi polygon.
+    MultiPolygon,
+    /// A JTS geometry collection.
+    GeometryCollection,
+    /// A `java.lang.Double`, the value of an ordinate.
+    Double,
 }
 
 impl From<ValueKind> for Class {
@@ -265,6 +295,9 @@ pub enum Error {
     /// A failure of the GeoJSON reader.
     #[error(transparent)]
     GeoJson(#[from] GeoJsonError),
+    /// A failure of the GML or KML reader.
+    #[error(transparent)]
+    Gml(#[from] GmlError),
     /// A failure of a platform function.
     #[error(transparent)]
     Platform(#[from] PlatformError),
@@ -372,6 +405,7 @@ impl Error {
             Error::Aggregator(err) => matches!(err, AggregatorError::NotNumeric(_)),
             Error::Geo(err) => matches!(err, GeoError::InvalidGeoHash { .. }),
             Error::Geometry(err) => err.is_runtime(),
+            Error::Gml(err) => err.is_runtime(),
             Error::Thrift(err) => !err.is_malformed_input(),
             Error::Encoder(err) => err.is_runtime(),
             Error::Pickle(err) => err.is_runtime(),
@@ -417,6 +451,7 @@ impl Error {
     pub fn message(&self) -> String {
         match self {
             Error::Context { context, .. } => context.clone(),
+            Error::Gml(GmlError::Sax { message, .. }) => message.clone(),
             Error::Line { line, .. } => format!("Line #{line}"),
             Error::Wrapped { source } => {
                 format!("{}: {}", compat::exception_class(source), source.message())
@@ -431,6 +466,7 @@ impl Error {
             Error::Context { source, .. }
             | Error::Line { source, .. }
             | Error::Wrapped { source } => Some(source),
+            Error::Gml(GmlError::Sax { cause, .. }) => cause.as_deref(),
             _ => None,
         }
     }

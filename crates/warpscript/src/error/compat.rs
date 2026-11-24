@@ -9,6 +9,7 @@ use super::fault::{BoundsError, ResourceError};
 use super::geo::GeoError;
 use super::geojson::{GeoJsonError, StringTarget};
 use super::geometry::GeometryError;
+use super::gml::GmlError;
 use super::math::MathError;
 use super::processing::ProcessingError;
 use super::text::ReplacementClass;
@@ -87,6 +88,18 @@ fn geojson_class(err: &GeoJsonError) -> &'static str {
     }
 }
 
+/// The Java class of a failure of the GML or KML reader: the SAX parser's, or the JTS builder's.
+fn gml_class(err: &GmlError) -> &'static str {
+    match err {
+        GmlError::Xml(_) => "org.xml.sax.SAXParseException",
+        GmlError::Sax { .. } => "org.xml.sax.SAXException",
+        GmlError::Illegal(_) => JAVA_ILLEGAL_ARGUMENT_EXCEPTION,
+        GmlError::Cast { .. } => JAVA_CLASS_CAST_EXCEPTION,
+        GmlError::Store(_) => "java.lang.ArrayStoreException",
+        GmlError::Assertion => "com.vividsolutions.jts.util.AssertionFailedException",
+    }
+}
+
 /// The Java class of the exception `err` stands for.
 pub fn exception_class(err: &Error) -> &'static str {
     match err {
@@ -111,6 +124,7 @@ pub fn exception_class(err: &Error) -> &'static str {
         Error::Processing(err) => processing_class(err),
         Error::Geometry(err) => geometry_class(err),
         Error::GeoJson(err) => geojson_class(err),
+        Error::Gml(err) => gml_class(err),
         Error::Thrift(err) => thrift_class(err),
         Error::Encoder(err) => encoder_class(err),
         Error::Math(err) => math_class(err),
@@ -239,6 +253,20 @@ pub fn class_name(class: Class) -> &'static str {
         Class::Image => "processing.core.PImage",
         Class::Shape => "processing.core.PShape",
         Class::Font => "processing.core.PFont",
+        Class::Coordinate => "com.vividsolutions.jts.geom.Coordinate",
+        Class::CoordinateSequence => "com.vividsolutions.jts.geom.CoordinateSequence",
+        Class::ArraySequence => "com.vividsolutions.jts.geom.impl.CoordinateArraySequence",
+        Class::Envelope => "com.vividsolutions.jts.geom.Envelope",
+        Class::Geometry => "com.vividsolutions.jts.geom.Geometry",
+        Class::Point => "com.vividsolutions.jts.geom.Point",
+        Class::LineString => "com.vividsolutions.jts.geom.LineString",
+        Class::LinearRing => "com.vividsolutions.jts.geom.LinearRing",
+        Class::Polygon => "com.vividsolutions.jts.geom.Polygon",
+        Class::MultiPoint => "com.vividsolutions.jts.geom.MultiPoint",
+        Class::MultiLineString => "com.vividsolutions.jts.geom.MultiLineString",
+        Class::MultiPolygon => "com.vividsolutions.jts.geom.MultiPolygon",
+        Class::GeometryCollection => "com.vividsolutions.jts.geom.GeometryCollection",
+        Class::Double => "java.lang.Double",
     }
 }
 

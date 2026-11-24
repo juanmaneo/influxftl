@@ -7778,6 +7778,36 @@ LINESTRING (1 2, 3 4)' ->GEOJSON",
             ),
         ),
         (
+            r"'<' ->WKT",
+            Err(
+                r"->WKT was given invalid input. (XML document structures must start and end within the same entity.)",
+            ),
+        ),
+        (
+            r"'<gml' ->WKT",
+            Err(
+                r"->WKT was given invalid input. (XML document structures must start and end within the same entity.)",
+            ),
+        ),
+        (
+            r"'<kml' ->WKB",
+            Err(
+                r"->WKB was given invalid input. (XML document structures must start and end within the same entity.)",
+            ),
+        ),
+        (
+            r#"'<gml:Point xmlns:gml="http://www.opengis.net/gml"><gml:coordinates>1,2</gml:coordinates></gml:Point>' ->WKT"#,
+            Ok(r#"["POINT (1 2)"]"#),
+        ),
+        (
+            r#"'<gml:Point xmlns:gml="http://www.opengis.net/gml"><gml:coordinates>1,2</gml:coordinates></gml:Point>' ->GEOJSON"#,
+            Ok(r#"["{\"type\":\"Point\",\"coordinates\":[1.0,2.0]}"]"#),
+        ),
+        (
+            r#"'<Point xmlns="http://www.opengis.net/kml/2.2"><coordinates>1,2</coordinates></Point>' ->WKT"#,
+            Ok(r#"["POINT (1 2)"]"#),
+        ),
+        (
             r"'POINT (1 2)' ->WKB HEX-> ->WKT",
             Err(r"HEX-> operates on a String."),
         ),

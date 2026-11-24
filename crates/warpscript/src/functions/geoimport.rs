@@ -1,9 +1,9 @@
 // Copyright 2026 The influxftl Authors. Licensed under the Apache License, Version 2.0.
 // Derived from Warp 10 (Copyright 2018-2026 SenX S.A.S., Apache-2.0), ported to Rust and modified.
 
-//! The geometry functions: `GEO.WKT`, `GEO.WKB`, `GEO.JSON` (and their `.UNIFORM` forms),
-//! which turn a geometry into a `GEOSHAPE`, and `->WKT`, `->WKB`, `->GEOJSON`, which turn a
-//! geometry, or a `GEOSHAPE`, into a text.
+//! The geometry functions: `GEO.WKT`, `GEO.WKB`, `GEO.JSON`, `GEO.GML`, `GEO.KML` (and their
+//! `.UNIFORM` forms), which turn a geometry into a `GEOSHAPE`, and `->WKT`, `->WKB`, `->GEOJSON`,
+//! `->GML`, `->KML`, which turn a geometry, or a `GEOSHAPE`, into a text.
 
 use std::rc::Rc;
 
@@ -14,6 +14,7 @@ use crate::error::{Error, Result};
 use crate::geoshape::GeoShape;
 use crate::jts::cover::{Precision, cover_cells};
 use crate::jts::geometry::Geometry;
+use crate::jts::gml::{self, Dialect};
 use crate::jts::outline::shape_to_geojson;
 use crate::jts::{geojson, wkb, wkt};
 use crate::stack::Stack;
@@ -45,9 +46,27 @@ pub const FUNCTIONS: &[(&str, Entry)] = &[
         "GEO.JSON.UNIFORM",
         Entry::Stack(|s| import(s, "GEO.JSON.UNIFORM", Format::GeoJson, true)),
     ),
+    (
+        "GEO.GML",
+        Entry::Stack(|s| import(s, "GEO.GML", Format::Gml, false)),
+    ),
+    (
+        "GEO.GML.UNIFORM",
+        Entry::Stack(|s| import(s, "GEO.GML.UNIFORM", Format::Gml, true)),
+    ),
+    (
+        "GEO.KML",
+        Entry::Stack(|s| import(s, "GEO.KML", Format::Kml, false)),
+    ),
+    (
+        "GEO.KML.UNIFORM",
+        Entry::Stack(|s| import(s, "GEO.KML.UNIFORM", Format::Kml, true)),
+    ),
     ("->WKT", Entry::Stack(towkt)),
     ("->WKB", Entry::Stack(towkb)),
     ("->GEOJSON", Entry::Stack(togeojson)),
+    ("->GML", Entry::Stack(togml)),
+    ("->KML", Entry::Stack(tokml)),
 ];
 
 /// A format a `GeoImporter` reads.
@@ -56,6 +75,8 @@ enum Format {
     Wkt,
     Wkb,
     GeoJson,
+    Gml,
+    Kml,
 }
 
 impl Format {
@@ -66,6 +87,8 @@ impl Format {
             Format::Wkt => "a WKT STRING",
             Format::Wkb => " GeoWKB BYTES",
             Format::GeoJson => "a GeoJSON STRING",
+            Format::Gml => "a GML STRING",
+            Format::Kml => "a KML STRING",
         }
     }
 
@@ -76,6 +99,8 @@ impl Format {
             (Format::Wkt, Value::String(text)) => Some(wkt::read(text)),
             (Format::Wkb, Value::Bytes(bytes)) => Some(wkb::read(bytes).map(Some)),
             (Format::GeoJson, Value::String(text)) => Some(geojson::read(text).map(Some)),
+            (Format::Gml, Value::String(text)) => Some(gml::read(text, Dialect::Gml).map(Some)),
+            (Format::Kml, Value::String(text)) => Some(gml::read(text, Dialect::Kml).map(Some)),
             _ => None,
         }
     }
@@ -151,9 +176,10 @@ fn to_geometry(object: &Value) -> Result<Option<Geometry>> {
             let text = text.trim_matches(|c| c <= ' ');
             if text.starts_with('{') {
                 geojson::read(text).map(Some)
+            } else if text.starts_with("<gml") {
+                gml::read(text, Dialect::Gml).map(Some)
             } else if text.starts_with('<') {
-                // GML (`<gml`) and KML: not read yet.
-                Err(GeometryError::Unsupported.into())
+                gml::read(text, Dialect::Kml).map(Some)
             } else {
                 wkt::read(text)
             }
@@ -238,6 +264,36 @@ fn towkb(stack: &mut Stack) -> Result<()> {
         |geometry| {
             let geometry = geometry.ok_or(GeometryError::UnknownGeometryType)?;
             Ok(Value::Bytes(Rc::from(wkb::write(&geometry)?)))
+        },
+    )
+}
+
+/// `->GML`: the GML of a `GEOSHAPE` or of a geometry.
+fn togml(stack: &mut Stack) -> Result<()> {
+    export(
+        stack,
+        "->GML",
+        "expects a GEOSHAPE, a WKT STRING, a GeoJSON STRING, a KML STRING or a GeoJSON STRING.",
+        |geometry| {
+            Ok(Value::from(gml::write(
+                &geometry.ok_or(Error::NullPointer)?,
+                Dialect::Gml,
+            )?))
+        },
+    )
+}
+
+/// `->KML`: the KML of a `GEOSHAPE` or of a geometry.
+fn tokml(stack: &mut Stack) -> Result<()> {
+    export(
+        stack,
+        "->KML",
+        "expects a GEOSHAPE, a WKT STRING, a GeoJSON STRING, a KML STRING or a GeoJSON STRING.",
+        |geometry| {
+            Ok(Value::from(gml::write(
+                &geometry.ok_or(Error::NullPointer)?,
+                Dialect::Kml,
+            )?))
         },
     )
 }

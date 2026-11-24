@@ -149,6 +149,12 @@ impl Polygon {
         Ok(Polygon { shell, holes })
     }
 
+    /// The polygon of a `shell` that has at least one point, and its `holes`. It cannot fail:
+    /// [`Polygon::new`] refuses only the holes of an empty shell.
+    pub fn with_shell(shell: Ring, holes: Vec<Ring>) -> Polygon {
+        Polygon { shell, holes }
+    }
+
     /// The exterior ring.
     pub fn shell(&self) -> &Ring {
         &self.shell
