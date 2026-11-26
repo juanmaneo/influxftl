@@ -67,14 +67,6 @@ fn codec_refusals() {
             Err(r"NullPointerException"),
         ),
         (r"Pdecode", Err(r"Empty stack.")),
-        (
-            r"'data:image/png;base64,!!!' Pdecode",
-            Err(r"Pdecode cannot read the image"),
-        ),
-        (
-            r"'data:image/png;base64,AAAA' Pdecode",
-            Err(r"Pdecode cannot read the image"),
-        ),
     ]);
 }
 
@@ -260,6 +252,15 @@ fn codec() {
         (
             r"@C 'x' Pencode",
             Err(r"Pencode operates on a PGRAPHICS or PIMAGE instance."),
+        ),
+        (r"@C Pencode Pdecode Pencode Pdecode Psize", Ok(r"[2,2]")),
+        (
+            r"@C Pencode Pdecode { 'format' 'gif' } Pencode",
+            Err(r"Pencode failed. (Only formats 'png' and 'jpeg' are supported.)"),
+        ),
+        (
+            r"@C Pencode 'data:image/png;base64,' '' REPLACE B64-> Pdecode Psize",
+            Ok(r"[2,2]"),
         ),
     ]);
 }

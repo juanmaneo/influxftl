@@ -48,7 +48,7 @@ fn ppoint(stack: &mut Stack) -> Result<()> {
         return Err(refused("Ppoint", " missing z-coordinate."));
     }
     let [x, y] = params.floats_window::<2>(0)?;
-    draw_and_return(stack, params, &primitive::point(x, y)?)
+    draw_and_return(stack, params, &primitive::point(x, y))
 }
 
 /// `Pline(x1, y1, x2, y2)` or `Pline(x1, y1, z1, x2, y2, z2)`: a straight stroke.
@@ -58,7 +58,7 @@ fn pline(stack: &mut Stack) -> Result<()> {
         return Err(refused("Pline", " missing z-coordinates."));
     }
     let [x1, y1, x2, y2] = params.floats_window::<4>(0)?;
-    draw_and_return(stack, params, &primitive::line([x1, y1], [x2, y2])?)
+    draw_and_return(stack, params, &primitive::line([x1, y1], [x2, y2]))
 }
 
 /// `Ptriangle(x1, y1, x2, y2, x3, y3)`.
@@ -68,7 +68,7 @@ fn ptriangle(stack: &mut Stack) -> Result<()> {
     draw_and_return(
         stack,
         params,
-        &primitive::triangle([[ax, ay], [bx, by], [cx, cy]])?,
+        &primitive::triangle([[ax, ay], [bx, by], [cx, cy]]),
     )
 }
 
@@ -79,7 +79,7 @@ fn pquad(stack: &mut Stack) -> Result<()> {
     draw_and_return(
         stack,
         params,
-        &primitive::quad([[ax, ay], [bx, by], [cx, cy], [dx, dy]])?,
+        &primitive::quad([[ax, ay], [bx, by], [cx, cy], [dx, dy]]),
     )
 }
 
@@ -88,14 +88,15 @@ fn pquad(stack: &mut Stack) -> Result<()> {
 fn prect(stack: &mut Stack) -> Result<()> {
     let params = parse_params(stack, &[4, 5, 8])?;
     let mode = params.graphics.borrow().style.rect_mode;
-    let values = params.float_list()?;
-    let (corners, radii) = match values[..] {
-        [a, b, c, d] => ([a, b, c, d], [0.0; 4]),
-        [a, b, c, d, radius] => ([a, b, c, d], [radius; 4]),
-        [a, b, c, d, tl, tr, br, bl] => ([a, b, c, d], [tl, tr, br, bl]),
-        _ => return Err(params.arity()),
+    let [ox, oy, ex, ey] = params.floats_window::<4>(0)?;
+    let radii = match params.len() {
+        4 => [0.0; 4],
+        5 => {
+            let [radius] = params.floats_after::<1>(4)?;
+            [radius; 4]
+        }
+        _ => params.floats_after::<4>(4)?,
     };
-    let [ox, oy, ex, ey] = corners;
     let (x, width) = place(mode, ox, ex)?;
     let (y, height) = place(mode, oy, ey)?;
     draw_and_return(stack, params, &primitive::rect(x, y, width, height, radii)?)

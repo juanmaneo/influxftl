@@ -1464,6 +1464,12 @@ fn processing_failures_have_the_wording_and_class_of_warp10() {
             true,
         ),
         (
+            ProcessingError::BackgroundWithoutPixels,
+            "background image must be the same size as your application",
+            "java.lang.RuntimeException",
+            true,
+        ),
+        (
             ProcessingError::FilterTakesNoParam { kind: "GRAY" },
             "Use filter(GRAY) instead of filter(GRAY, param)",
             "java.lang.IllegalArgumentException",

@@ -53,6 +53,7 @@ fn check(cases: &[(&str, Result<&str, &str>)]) {
 #[test]
 fn image() {
     check(&[
+        (r"PtoImage", Err(r"Empty stack.")),
         (
             r"@G @I 1 1 Pimage Ppixels",
             Ok(r"[[0,0,0,0,0,-1,-1,0,0,-1,-1,0,0,0,0,0],null]"),
@@ -199,12 +200,45 @@ fn size() {
             Err(r"Presize expects a PIMAGE or a PGRAPHICS instance."),
         ),
         (r"@G 2 2 Presize Ppixels", Ok(r"[[0,0,0,0],null]")),
+        (r"Psize", Err(r"Empty stack.")),
+        (r"Presize", Err(r"Empty stack.")),
+        (r"5 Presize", Err(r"Empty stack.")),
+        (r"4 5 Presize", Err(r"Empty stack.")),
+        (
+            r"@G 0 0 0 0 Pget 0 1 Presize",
+            Err(r"Width (0) and height (0) cannot be <= 0"),
+        ),
+        (
+            r"@G 0 0 0 0 Pget 2 0 Presize",
+            Err(r"Width (0) and height (0) cannot be <= 0"),
+        ),
+        (
+            r"@G 0 0 0 0 Pget 0 0 Presize",
+            Err(r"width or height must be > 0 for resize"),
+        ),
+        (
+            r"1 3 '2D' PGraphics 0 1 Presize",
+            Err(r"Width (0) and height (1) cannot be <= 0"),
+        ),
+        (
+            r"1 3 '2D' PGraphics PtoImage 0 1 Presize",
+            Err(r"Width (0) and height (1) cannot be <= 0"),
+        ),
+        (
+            r"3 1 '2D' PGraphics PtoImage 1 0 Presize",
+            Err(r"Width (1) and height (0) cannot be <= 0"),
+        ),
+        (
+            r"3 1 '2D' PGraphics 1 0 Presize",
+            Err(r"Width (1) and height (0) cannot be <= 0"),
+        ),
     ]);
 }
 
 #[test]
 fn mask() {
     check(&[
+        (r"Pmask", Err(r"Empty stack.")),
         (
             r"@I @M Pmask Ppixels",
             Ok(r"[[-2130706433,-2130706433,-2130706433,-2130706433]]"),
@@ -259,6 +293,7 @@ fn mask() {
 #[test]
 fn pixels() {
     check(&[
+        (r"Ppixels", Err(r"Empty stack.")),
         (
             r"@G Ppixels",
             Ok(r"[[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],null]"),
@@ -429,6 +464,12 @@ fn blend() {
             ),
         ),
         (
+            r"@G 16 Pbackground 0 0 2 2 2 2 2 2 NULL Pblend",
+            Err(
+                r"Pblend: invalid mode, should be 'BLEND', 'ADD', 'SUBTRACT', 'DARKEST', 'LIGHTEST', 'DIFFERENCE', 'EXCLUSION', 'MULTIPLY', 'SCREEN', 'OVERLAY', 'HARD_LIGHT', 'SOFT_LIGHT', 'DODGE' or 'BURN'.",
+            ),
+        ),
+        (
             r"@G 16 Pbackground 0 0 2 2 2 2 2 2 3 Pblend",
             Err(r"class java.lang.Long cannot be cast to class java.lang.String"),
         ),
@@ -475,6 +516,14 @@ fn blend() {
         (
             r"@G 16 Pbackground 0 0 2 2 2 'x' Pblend",
             Err(r"Invalid number of parameters, expected one of [9, 10] but found 6"),
+        ),
+        (
+            r"@G 'x' 0 1 1 0 0 1 1 'BLEND' Pblend",
+            Err(r"class java.lang.String cannot be cast to class java.lang.Number"),
+        ),
+        (
+            r"@G 2 2 '2D' PGraphics 255 Pbackground PtoImage 'x' 0 0 1 1 0 0 1 'BLEND' Pblend",
+            Err(r"class java.lang.String cannot be cast to class java.lang.Number"),
         ),
     ]);
 }
@@ -526,6 +575,14 @@ fn copy() {
             r"@G 1 2 3 4 5 6 7 8 9 Pcopy",
             Err(r"class java.lang.Long cannot be cast to class processing.core.PImage"),
         ),
+        (
+            r"@G 'x' 0 1 1 0 0 1 1 Pcopy",
+            Err(r"class java.lang.String cannot be cast to class java.lang.Number"),
+        ),
+        (
+            r"@G 2 2 '2D' PGraphics 255 Pbackground PtoImage 'x' 0 0 1 1 0 0 1 Pcopy",
+            Err(r"class java.lang.String cannot be cast to class java.lang.Number"),
+        ),
     ]);
 }
 
@@ -566,6 +623,10 @@ fn get() {
         ),
         (r"@G 1 NULL Pget", Err(r"NullPointerException")),
         (
+            r"@G 'x' 0 1 1 Pget",
+            Err(r"class java.lang.String cannot be cast to class java.lang.Number"),
+        ),
+        (
             r"@G 1 2 3 Pget",
             Err(r"Invalid number of parameters, expected one of [0, 2, 4] but found 3"),
         ),
@@ -590,6 +651,10 @@ fn set() {
             Err(r"class processing.core.PImage cannot be cast to class java.lang.Number"),
         ),
         (r"@G 1 1 1.5 Pset 1 1 Pget", Ok(r"[1,null]")),
+        (
+            r"@G 1 1 @I Pset Ppixels",
+            Ok(r"[[0,0,0,0,0,-1,-1,0,0,-1,-1,0,0,0,0,0],null]"),
+        ),
         (
             r"@G 1 1 'x' Pset",
             Err(r"class java.lang.String cannot be cast to class java.lang.Number"),
@@ -704,6 +769,14 @@ fn filter() {
             Ok(
                 r"[[-8355712,-8355712,-8355712,-8355712,-8355712,-8355712,-8355712,-8355712,-8355712,-8355712,-8355712,-8355712,-8355712,-8355712,-8355712,-8355712],null]",
             ),
+        ),
+        (
+            r"@G 255 Pbackground 'BLUR' Pfilter Ppixels",
+            Ok(r"[[-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1],null]"),
+        ),
+        (
+            r"@G 255 Pbackground 'BLUR' 1 Pfilter Ppixels",
+            Ok(r"[[-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1],null]"),
         ),
         (
             r"@G 128 Pbackground 'bogus' Pfilter",

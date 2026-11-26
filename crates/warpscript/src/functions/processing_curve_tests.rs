@@ -53,6 +53,14 @@ fn check(cases: &[(&str, Result<&str, &str>)]) {
 fn curve() {
     check(&[
         (
+            r"@P 1 2 3 4 5 6 7 Pcurve",
+            Err(r"Invalid number of parameters, expected one of [8, 12] but found 7"),
+        ),
+        (
+            r"@P 0 2.5 1 2.5 2 2.5 3 2.5 Pbezier 0 0 Pget",
+            Ok(r"[-16777216,null]"),
+        ),
+        (
             r"@P 1 2 3 4 5 6 7 Pbezier",
             Err(r"Invalid number of parameters, expected one of [8, 12] but found 7"),
         ),
@@ -101,6 +109,10 @@ fn curve() {
         ),
         (
             r"@G 0 10 10 'x' 0.5 PbezierPoint",
+            Err(r"class java.lang.String cannot be cast to class java.lang.Number"),
+        ),
+        (
+            r"@G 0 10 10 'x' 0.5 PbezierTangent",
             Err(r"class java.lang.String cannot be cast to class java.lang.Number"),
         ),
         (

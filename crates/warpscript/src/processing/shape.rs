@@ -119,3 +119,7 @@ impl Graphics {
         drawn
     }
 }
+
+#[cfg(test)]
+#[path = "shape_tests.rs"]
+mod shape_tests;

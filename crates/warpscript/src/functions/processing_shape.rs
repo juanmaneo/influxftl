@@ -61,9 +61,8 @@ fn pshape(stack: &mut Stack) -> Result<()> {
 
 /// The shape given first above the graphics.
 fn shape_arg(params: &Params) -> Result<Rc<Shape>> {
-    match params.args.first() {
-        Some(Value::Shape(shape)) => Ok(Rc::clone(shape)),
-        Some(other) => Err(Error::class_cast(other.kind(), Class::Shape)),
-        None => Err(params.arity()),
-    }
+    params.first().and_then(|value| match value {
+        Value::Shape(shape) => Ok(Rc::clone(shape)),
+        other => Err(Error::class_cast(other.kind(), Class::Shape)),
+    })
 }

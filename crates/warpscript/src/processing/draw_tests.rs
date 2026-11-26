@@ -58,21 +58,19 @@ fn a_thin_point_lights_the_one_pixel_it_falls_on() {
 #[test]
 fn a_thin_point_is_the_pixel_whose_centre_is_nearest_with_halves_up() {
     assert_eq!(
-        pixel_ring(2.3, 1.2).expect("finite"),
+        pixel_ring(2.3, 1.2),
         vec![[2.0, 1.0], [3.0, 1.0], [3.0, 2.0], [2.0, 2.0]]
     );
-    assert_eq!(pixel_ring(2.5, 0.0).expect("finite")[0], [3.0, 0.0]);
-    assert!(pixel_ring(f32::INFINITY, 0.0).is_err());
-    assert!(pixel_ring(0.0, f32::NAN).is_err());
+    assert_eq!(pixel_ring(2.5, 0.0)[0], [3.0, 0.0]);
+    assert_eq!(pixel_ring(f32::MAX, 0.0)[0], [f32::MAX, 0.0]);
 }
 
 #[test]
 fn a_stroke_coordinate_snaps_to_a_pixel_centre_when_odd_and_to_an_edge_when_even() {
-    assert_eq!(snap(2.4, true).expect("finite"), 2.5);
-    assert_eq!(snap(2.5, true).expect("finite"), 3.5);
-    assert_eq!(snap(2.5, false).expect("finite"), 3.0);
-    assert!(snap(f32::INFINITY, true).is_err());
-    assert!(snap(f32::INFINITY, false).is_err());
+    assert_eq!(snap(2.4, true), 2.5);
+    assert_eq!(snap(2.5, true), 3.5);
+    assert_eq!(snap(2.5, false), 3.0);
+    assert_eq!(snap(f32::MAX, true), f32::MAX);
 }
 
 #[test]

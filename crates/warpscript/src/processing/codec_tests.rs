@@ -5,10 +5,63 @@
 //! through a data URI, and the refusal of bytes that are not an image or not base64. The bytes of
 //! the encoders are not compared, only what they decode to.
 
+use std::io::{self, Write};
+
 use super::{Format, Options, TextChunk, base64_payload, decode, encode, png_bytes};
 use crate::error::Error;
 use crate::error::processing::ProcessingError;
 use crate::processing::image::Image;
+
+/// A writer that takes `budget` bytes and then fails, as a full disk would.
+struct FailAfter {
+    budget: usize,
+}
+
+impl Write for FailAfter {
+    fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
+        if self.budget == 0 {
+            return Err(io::Error::other("disk full"));
+        }
+        let taken = bytes.len().min(self.budget);
+        self.budget -= taken;
+        Ok(taken)
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        Ok(())
+    }
+}
+
+#[test]
+fn a_png_writer_that_fails_at_any_byte_reports_the_failure() {
+    let image = Image::from_pixels(
+        2,
+        2,
+        vec![0xff00_0000, 0xff11_1111, 0xff22_2222, 0xff33_3333],
+    );
+    let mut whole = Vec::new();
+    png_bytes(&mut whole, &image, &[]).expect("a small image encodes");
+    for budget in 0..whole.len() {
+        assert!(
+            matches!(
+                png_bytes(&mut FailAfter { budget }, &image, &[]),
+                Err(Error::Processing(ProcessingError::Encode(_)))
+            ),
+            "a writer that takes {budget} of {} bytes must fail",
+            whole.len()
+        );
+    }
+    assert!(
+        png_bytes(
+            &mut FailAfter {
+                budget: whole.len()
+            },
+            &image,
+            &[]
+        )
+        .is_ok()
+    );
+}
 
 #[test]
 fn an_image_with_no_width_or_no_height_is_refused_with_its_size() {
@@ -101,7 +154,7 @@ fn a_text_chunk_with_an_empty_keyword_is_refused_by_the_png_writer() {
 #[test]
 fn a_png_of_no_width_is_refused_by_the_writer() {
     assert!(matches!(
-        png_bytes(&Image::from_pixels(0, 1, Vec::new()), &[]),
+        png_bytes(&mut Vec::new(), &Image::from_pixels(0, 1, Vec::new()), &[]),
         Err(Error::Processing(ProcessingError::Encode(_)))
     ));
 }

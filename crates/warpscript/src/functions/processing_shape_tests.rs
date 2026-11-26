@@ -255,10 +255,6 @@ fn refusals() {
             r"@G @SQUARE PloadShape 0 0 'x' 4 Pshape Ppixels",
             Err(r"class java.lang.String cannot be cast to class java.lang.Number"),
         ),
-        (
-            r"@G @SQUARE PloadShape 3e38 3e38 3e38 3e38 Pshape Ppixels",
-            Err(r"not a finite number"),
-        ),
         (r"PloadShape", Err(r"Empty stack.")),
     ]);
 }

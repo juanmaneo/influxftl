@@ -11,7 +11,7 @@
 #![allow(clippy::many_single_char_names)]
 
 use super::Entry;
-use super::processing::{Params, answer, double_of, draw_and_return, parse_params};
+use super::processing::{Params, answer, draw_and_return, parse_params};
 use crate::error::Result;
 use crate::error::processing::ProcessingError;
 use crate::processing::curve::{bezier_point, bezier_tangent, curve_point, curve_tangent, steps};
@@ -86,7 +86,7 @@ fn axis_values(stack: &mut Stack) -> Result<(Params, [f32; 5])> {
 fn pbezierpoint(stack: &mut Stack) -> Result<()> {
     let (params, [a, b, c, d, t]) = axis_values(stack)?;
     let value = bezier_point(a, b, c, d, t)?;
-    answer(stack, params.graphics, double_of(value)?);
+    answer(stack, params.graphics, f64::from(value));
     Ok(())
 }
 
@@ -94,7 +94,7 @@ fn pbezierpoint(stack: &mut Stack) -> Result<()> {
 fn pbeziertangent(stack: &mut Stack) -> Result<()> {
     let (params, [a, b, c, d, t]) = axis_values(stack)?;
     let value = bezier_tangent(a, b, c, d, t)?;
-    answer(stack, params.graphics, double_of(value)?);
+    answer(stack, params.graphics, f64::from(value));
     Ok(())
 }
 
@@ -104,7 +104,7 @@ fn pcurvepoint(stack: &mut Stack) -> Result<()> {
     let (params, [a, b, c, d, t]) = axis_values(stack)?;
     let tightness = params.graphics.borrow().style.curve_tightness;
     let value = curve_point(a, b, c, d, t, tightness)?;
-    answer(stack, params.graphics, double_of(value)?);
+    answer(stack, params.graphics, f64::from(value));
     Ok(())
 }
 
@@ -114,6 +114,6 @@ fn pcurvetangent(stack: &mut Stack) -> Result<()> {
     let (params, [a, b, c, d, t]) = axis_values(stack)?;
     let tightness = params.graphics.borrow().style.curve_tightness;
     let value = curve_tangent(a, b, c, d, t, tightness)?;
-    answer(stack, params.graphics, double_of(value)?);
+    answer(stack, params.graphics, f64::from(value));
     Ok(())
 }

@@ -9,7 +9,7 @@ use std::f32::consts::{FRAC_PI_2, PI, TAU};
 
 use super::curve::{bezier_steps, curve_steps};
 use super::draw::Outline;
-use super::path::{Ring, Subpath};
+use super::path::Subpath;
 use super::{Mode, finite};
 use crate::error::Result;
 
@@ -62,42 +62,36 @@ fn arc_points(centre: [f32; 2], radii: [f32; 2], start: f32, sweep: f32) -> Resu
         .collect()
 }
 
+// The coordinates of the four shapes below are used as they are: they are finite, as the script's
+// values are checked as they are read, and no arithmetic is done on them.
+
 /// `point(x, y)`: a single point, drawn with the stroke.
-pub fn point(x: f32, y: f32) -> Result<Outline> {
-    Ok(Outline {
-        points: vec![at(x, y)?],
+pub fn point(x: f32, y: f32) -> Outline {
+    Outline {
+        points: vec![[x, y]],
         ..Outline::default()
-    })
+    }
 }
 
 /// `line(x1, y1, x2, y2)`: a straight stroke between two points.
-pub fn line(from: [f32; 2], to: [f32; 2]) -> Result<Outline> {
-    let points = vec![at(from[0], from[1])?, at(to[0], to[1])?];
-    Ok(Outline {
+pub fn line(from: [f32; 2], to: [f32; 2]) -> Outline {
+    Outline {
         stroke: vec![Subpath {
-            points,
+            points: vec![from, to],
             closed: false,
         }],
         ..Outline::default()
-    })
+    }
 }
 
 /// `triangle(x1, y1, x2, y2, x3, y3)`.
-pub fn triangle(corners: [[f32; 2]; 3]) -> Result<Outline> {
-    let ring = corners
-        .iter()
-        .map(|p| at(p[0], p[1]))
-        .collect::<Result<Ring>>()?;
-    Ok(Outline::closed(ring))
+pub fn triangle(corners: [[f32; 2]; 3]) -> Outline {
+    Outline::closed(corners.to_vec())
 }
 
 /// `quad(x1, y1, …, x4, y4)`: the four corners in order.
-pub fn quad(corners: [[f32; 2]; 4]) -> Result<Outline> {
-    let ring = corners
-        .iter()
-        .map(|p| at(p[0], p[1]))
-        .collect::<Result<Ring>>()?;
-    Ok(Outline::closed(ring))
+pub fn quad(corners: [[f32; 2]; 4]) -> Outline {
+    Outline::closed(corners.to_vec())
 }
 
 /// `rect` between two corners `(x, y)` and `(x + width, y + height)`, given in either order.
@@ -158,7 +152,7 @@ pub fn arc(
     let curve = arc_points(centre, radii, start, finite(stop - start)?)?;
     Ok(match mode {
         ArcMode::Pie => {
-            let mut ring = vec![at(centre[0], centre[1])?];
+            let mut ring = vec![centre];
             ring.extend(curve);
             Outline::closed(ring)
         }

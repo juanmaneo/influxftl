@@ -22,19 +22,15 @@ pub enum Space {
     Hsb,
 }
 
-/// The colour mode: the space, and the maximum of each of its four values.
+/// The colour mode: the space, and the maximum of each of its four values. The maxima are kept
+/// finite and positive, which is what lets the conversions below divide by them without a check.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct ColorMode {
-    /// The space.
-    pub space: Space,
-    /// The maximum of the first value (red or hue).
-    pub max1: f32,
-    /// The maximum of the second value (green or saturation).
-    pub max2: f32,
-    /// The maximum of the third value (blue or brightness).
-    pub max3: f32,
-    /// The maximum of the alpha value.
-    pub max_alpha: f32,
+    space: Space,
+    max1: f32,
+    max2: f32,
+    max3: f32,
+    max_alpha: f32,
 }
 
 impl Default for ColorMode {
@@ -138,70 +134,77 @@ impl ColorMode {
         })
     }
 
+    /// This mode in another space, with the same maxima.
+    #[must_use]
+    pub fn with_space(self, space: Space) -> Self {
+        ColorMode { space, ..self }
+    }
+
+    /// The maximum of the alpha value.
+    pub fn max_alpha(&self) -> f32 {
+        self.max_alpha
+    }
+
     /// Whether this is the mode of a new context: `RGB`, every maximum 255.
     fn is_default(&self) -> bool {
         *self == ColorMode::default()
     }
 
-    /// `value` clamped to `0..=max`, as a fraction of `max`. The quotient of two finite floats
-    /// can overflow, which is refused.
-    fn fraction(value: f32, max: f32) -> Result<f32> {
-        finite(value.clamp(0.0, max) / max)
+    /// `value` clamped to `0..=max`, as a fraction of `max`, which is in `0..=1`. The callers
+    /// pass a finite value (`float_of` refuses the rest) and this mode's maxima are positive.
+    fn fraction(value: f32, max: f32) -> f32 {
+        value.clamp(0.0, max) / max
     }
 
     /// The ARGB colour of four values in this mode (`color(v1, v2, v3, a)`): each value is
     /// clamped to its maximum, scaled to `0..=1`, converted to RGB when the space is `HSB`,
-    /// then cut to a byte.
-    pub fn calc(&self, v1: f32, v2: f32, v3: f32, alpha: f32) -> Result<u32> {
-        let x = Self::fraction(v1, self.max1)?;
-        let y = Self::fraction(v2, self.max2)?;
-        let z = Self::fraction(v3, self.max3)?;
-        let alpha = Self::fraction(alpha, self.max_alpha)?;
+    /// then cut to a byte. The values must be finite.
+    pub fn calc(&self, v1: f32, v2: f32, v3: f32, alpha: f32) -> u32 {
+        let x = Self::fraction(v1, self.max1);
+        let y = Self::fraction(v2, self.max2);
+        let z = Self::fraction(v3, self.max3);
+        let alpha = Self::fraction(alpha, self.max_alpha);
         let (red, green, blue) = match self.space {
             Space::Rgb => (x, y, z),
             Space::Hsb => hsb_to_unit_rgb(x, y, z),
         };
-        Ok(argb(
-            byte_of(alpha),
-            byte_of(red),
-            byte_of(green),
-            byte_of(blue),
-        ))
+        argb(byte_of(alpha), byte_of(red), byte_of(green), byte_of(blue))
     }
 
     /// The ARGB colour of a gray level and an alpha (`color(gray, alpha)`): the three channels
-    /// are the level over the first maximum, whatever the space.
-    pub fn gray(&self, gray: f32, alpha: f32) -> Result<u32> {
-        let level = byte_of(Self::fraction(gray, self.max1)?);
-        let alpha = byte_of(Self::fraction(alpha, self.max_alpha)?);
-        Ok(argb(alpha, level, level, level))
+    /// are the level over the first maximum, whatever the space. The values must be finite.
+    pub fn gray(&self, gray: f32, alpha: f32) -> u32 {
+        let level = byte_of(Self::fraction(gray, self.max1));
+        let alpha = byte_of(Self::fraction(alpha, self.max_alpha));
+        argb(alpha, level, level, level)
     }
 
     /// The colour an `int` stands for (`fill(int rgb)`, `color(int c)`): a gray level when it
     /// has no alpha byte and is not above the first maximum, the ARGB colour itself otherwise.
-    pub fn from_int(&self, color: i32) -> Result<u32> {
+    pub fn from_int(&self, color: i32) -> u32 {
         if is_gray_level(color, self.max1) {
             self.gray(color as f32, self.max_alpha)
         } else {
-            Ok(color as u32)
+            color as u32
         }
     }
 
     /// The colour an `int` and an alpha stand for (`color(int gray, float alpha)`): the `int` is
     /// a gray level, clamped to the first maximum even when its bits look like an ARGB colour
     /// (Warp 10 gives `color(0xff102030, 127)` the colour `0x7f000000`).
-    pub fn from_int_alpha(&self, gray: i32, alpha: f32) -> Result<u32> {
+    pub fn from_int_alpha(&self, gray: i32, alpha: f32) -> u32 {
         self.gray(gray as f32, alpha)
     }
 
-    /// One component of a colour (`red`, `hue`…), in this mode's range.
-    pub fn component(&self, color: u32, which: Component) -> Result<f32> {
+    /// One component of a colour (`red`, `hue`…), in this mode's range. A component of a colour
+    /// is at most its maximum, so the result is finite.
+    pub fn component(&self, color: u32, which: Component) -> f32 {
         let (alpha, red, green, blue) = channels(color);
         let scaled = |channel: u8, max: f32| {
             if self.is_default() {
-                Ok(f32::from(channel))
+                f32::from(channel)
             } else {
-                finite(f32::from(channel) / 255.0 * max)
+                f32::from(channel) / 255.0 * max
             }
         };
         match which {
@@ -209,39 +212,32 @@ impl ColorMode {
             Component::Green => scaled(green, self.max2),
             Component::Blue => scaled(blue, self.max3),
             Component::Alpha => scaled(alpha, self.max_alpha),
-            Component::Hue => finite(rgb_to_hsb(red, green, blue).0 * self.max1),
-            Component::Saturation => finite(rgb_to_hsb(red, green, blue).1 * self.max2),
-            Component::Brightness => finite(rgb_to_hsb(red, green, blue).2 * self.max3),
+            Component::Hue => rgb_to_hsb(red, green, blue).0 * self.max1,
+            Component::Saturation => rgb_to_hsb(red, green, blue).1 * self.max2,
+            Component::Brightness => rgb_to_hsb(red, green, blue).2 * self.max3,
         }
     }
 
     /// The interpolation of two colours by `amount` (`lerpColor`): each channel in `RGB`, hue,
     /// saturation and brightness in `HSB` (the hue is not wrapped, so red to blue goes through
-    /// green). The alpha is interpolated alike, and every result is rounded.
-    pub fn lerp(&self, from: u32, to: u32, amount: f32) -> Result<u32> {
+    /// green). The alpha is interpolated alike, and every result is rounded. The amount must be
+    /// finite.
+    pub fn lerp(&self, from: u32, to: u32, amount: f32) -> u32 {
         let amount = amount.clamp(0.0, 1.0);
         let (a1, r1, g1, b1) = channels(from);
         let (a2, r2, g2, b2) = channels(to);
-        let mix = |x: f32, y: f32| finite(x + (y - x) * amount);
-        let alpha = mix(f32::from(a1), f32::from(a2))?.round() as u8;
+        let mix = |x: f32, y: f32| x + (y - x) * amount;
+        let alpha = mix(f32::from(a1), f32::from(a2)).round() as u8;
         match self.space {
             Space::Rgb => {
-                let channel = |x: u8, y: u8| -> Result<u8> {
-                    Ok(mix(f32::from(x), f32::from(y))?.round() as u8)
-                };
-                Ok(argb(
-                    alpha,
-                    channel(r1, r2)?,
-                    channel(g1, g2)?,
-                    channel(b1, b2)?,
-                ))
+                let channel = |x: u8, y: u8| mix(f32::from(x), f32::from(y)).round() as u8;
+                argb(alpha, channel(r1, r2), channel(g1, g2), channel(b1, b2))
             }
             Space::Hsb => {
                 let (h1, s1, v1) = rgb_to_hsb(r1, g1, b1);
                 let (h2, s2, v2) = rgb_to_hsb(r2, g2, b2);
-                let (red, green, blue) =
-                    hsb_to_rgb_rounded(mix(h1, h2)?, mix(s1, s2)?, mix(v1, v2)?);
-                Ok(argb(alpha, red, green, blue))
+                let (red, green, blue) = hsb_to_rgb_rounded(mix(h1, h2), mix(s1, s2), mix(v1, v2));
+                argb(alpha, red, green, blue)
             }
         }
     }

@@ -52,16 +52,21 @@ impl Outline {
 /// A stroke coordinate moved onto the pixel grid, as Java2D's normalising stroke does: a stroke of
 /// odd width is centred on a pixel centre, one of even width lies on a pixel edge. Halves round
 /// up.
-fn snap(coordinate: f32, odd: bool) -> Result<f32> {
+/// A finite coordinate, as [`Graphics::device`] gives it, moved to a pixel centre (`odd`) or to
+/// an edge. The result stays finite: near the limit of an `f32` every value is an integer, so
+/// adding a half rounds back to it.
+fn snap(coordinate: f32, odd: bool) -> f32 {
     let nearest = (coordinate + 0.5).floor();
-    finite(if odd { nearest + 0.5 } else { nearest })
+    if odd { nearest + 0.5 } else { nearest }
 }
 
 /// The pixel a point of a stroke weight of at most 1 lights: the one whose centre is nearest,
 /// halves up, as a stroke of odd width is normalised onto the pixel grid.
-fn pixel_ring(x: f32, y: f32) -> Result<Ring> {
-    let (x, y) = (finite((x + 0.5).floor())?, finite((y + 0.5).floor())?);
-    Ok(vec![[x, y], [x + 1.0, y], [x + 1.0, y + 1.0], [x, y + 1.0]])
+/// The corners of the pixel whose centre is nearest to the finite point `(x, y)`; as for
+/// [`snap`], the corners stay finite.
+fn pixel_ring(x: f32, y: f32) -> Ring {
+    let (x, y) = ((x + 0.5).floor(), (y + 0.5).floor());
+    vec![[x, y], [x + 1.0, y], [x + 1.0, y + 1.0], [x, y + 1.0]]
 }
 
 impl Graphics {
@@ -116,7 +121,7 @@ impl Graphics {
                 .iter()
                 .map(|&p| -> Result<[f32; 2]> {
                     let [x, y] = self.device(p)?;
-                    Ok([snap(x, odd)?, snap(y, odd)?])
+                    Ok([snap(x, odd), snap(y, odd)])
                 })
                 .collect::<Result<Vec<_>>>()?;
             subpaths.push(Subpath {
@@ -128,7 +133,7 @@ impl Graphics {
         for &p in &outline.points {
             let [x, y] = self.device(p)?;
             rings.push(if weight <= 1.0 {
-                pixel_ring(x, y)?
+                pixel_ring(x, y)
             } else {
                 disc([x, y], half)?
             });

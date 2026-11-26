@@ -283,11 +283,7 @@ impl Graphics {
     /// neighbour (`background(PImage)`). An empty source has no pixel to take.
     pub fn background_image(&mut self, source: &Image) -> crate::error::Result<()> {
         if source.pixels.is_empty() {
-            return Err(ProcessingError::EmptyImage {
-                width: source.width as i64,
-                height: source.height as i64,
-            }
-            .into());
+            return Err(ProcessingError::BackgroundWithoutPixels.into());
         }
         let (width, height) = (self.image.width, self.image.height);
         for y in 0..height {

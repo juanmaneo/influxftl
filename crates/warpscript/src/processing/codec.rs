@@ -5,6 +5,8 @@
 //! the JPEG tables differ, so an encoding is compared with Warp 10 by what it decodes to, not by
 //! its bytes.
 
+use std::io::Write;
+
 use base64::Engine;
 use base64::engine::general_purpose::STANDARD;
 
@@ -101,7 +103,11 @@ pub fn encode(image: &Image, options: &Options) -> Result<String> {
         .into());
     }
     let bytes = match options.format {
-        Format::Png => png_bytes(image, &options.text)?,
+        Format::Png => {
+            let mut out = Vec::new();
+            png_bytes(&mut out, image, &options.text)?;
+            out
+        }
         Format::Jpeg => jpeg_bytes(image, options.quality)?,
     };
     Ok(format!(
@@ -112,9 +118,8 @@ pub fn encode(image: &Image, options: &Options) -> Result<String> {
 }
 
 /// The PNG of the image, RGBA with its text chunks.
-fn png_bytes(image: &Image, text: &[TextChunk]) -> Result<Vec<u8>> {
-    let mut out = Vec::new();
-    let mut encoder = png::Encoder::new(&mut out, image.width as u32, image.height as u32);
+fn png_bytes<W: Write>(out: &mut W, image: &Image, text: &[TextChunk]) -> Result<()> {
+    let mut encoder = png::Encoder::new(out, image.width as u32, image.height as u32);
     encoder.set_color(png::ColorType::Rgba);
     encoder.set_depth(png::BitDepth::Eight);
     let mut writer = encoder.write_header().map_err(encode_failure)?;
@@ -153,8 +158,7 @@ fn png_bytes(image: &Image, text: &[TextChunk]) -> Result<Vec<u8>> {
         data.extend_from_slice(&[red, green, blue, alpha]);
     }
     writer.write_image_data(&data).map_err(encode_failure)?;
-    writer.finish().map_err(encode_failure)?;
-    Ok(out)
+    writer.finish().map_err(encode_failure)
 }
 
 /// The JPEG of the image, RGB (the alpha is dropped, as `TYPE_INT_RGB` does) at the quality

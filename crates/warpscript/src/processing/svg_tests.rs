@@ -150,6 +150,10 @@ fn a_document_has_exactly_one_root() {
     assert_eq!(xml_reason(""), "no root element");
     assert_eq!(xml_reason("  \n "), "no root element");
     assert_eq!(xml_reason("<svg/><svg/>"), "content after the root element");
+    assert_eq!(
+        xml_reason(r#"<svg width="1" height="1"></svg><g></g>"#),
+        "content after the root element"
+    );
 }
 
 #[test]
@@ -168,6 +172,7 @@ fn attributes_are_read_in_either_quote_and_must_be_complete() {
         xml_reason(r#"<svg width="1/>"#),
         "an attribute value that is not closed"
     );
+    assert_eq!(xml_reason(r#"<svg ="1"/>"#), "a name expected");
 }
 
 #[test]
@@ -196,6 +201,8 @@ fn malformed_sizes_are_refused() {
             ..
         }
     ));
+    assert_eq!(number_attribute(r#"<svg width="1" height="x"/>"#), "height");
+    assert_eq!(number_attribute(r#"<svg viewBox="a b c d"/>"#), "viewBox");
     assert_eq!(
         error_of(r#"<svg width="inf" height="1"/>"#),
         Error::NotFinite(NotFinite::PositiveInfinity)
@@ -639,4 +646,72 @@ fn path_coordinates_that_overflow_are_refused() {
     // the span from a point to a far control point overflows before any curve is drawn.
     assert_eq!(error_of(&path_document("M-3e38 0 Q3e38 0 0 0")), overflow);
     assert_eq!(error_of(&path_document("M0 0 Q3e38 0 -3e38 0")), overflow);
+}
+
+/// The attribute of the number error that reading `text` fails with.
+fn number_attribute(text: &str) -> &'static str {
+    match refused(text) {
+        SvgError::Number { attribute, .. } => attribute,
+        other => panic!("not a number error: {other:?}"),
+    }
+}
+
+#[test]
+fn a_position_that_is_not_a_number_is_refused_by_its_attribute() {
+    assert_eq!(
+        number_attribute(r#"<svg><rect width="1" height="1" x="a"/></svg>"#),
+        "x"
+    );
+    assert_eq!(
+        number_attribute(r#"<svg><rect width="1" height="1" y="a"/></svg>"#),
+        "y"
+    );
+    assert_eq!(
+        number_attribute(r#"<svg><circle cx="a" r="1"/></svg>"#),
+        "cx"
+    );
+    assert_eq!(
+        number_attribute(r#"<svg><circle cy="a" r="1"/></svg>"#),
+        "cy"
+    );
+    assert_eq!(
+        number_attribute(r#"<svg><ellipse cx="a" rx="1" ry="1"/></svg>"#),
+        "cx"
+    );
+    assert_eq!(
+        number_attribute(r#"<svg><ellipse cy="a" rx="1" ry="1"/></svg>"#),
+        "cy"
+    );
+    assert_eq!(number_attribute(r#"<svg><line x1="a"/></svg>"#), "x1");
+    assert_eq!(number_attribute(r#"<svg><line y1="a"/></svg>"#), "y1");
+    assert_eq!(number_attribute(r#"<svg><line x2="a"/></svg>"#), "x2");
+    assert_eq!(number_attribute(r#"<svg><line y2="a"/></svg>"#), "y2");
+}
+
+#[test]
+fn a_command_with_too_few_numbers_is_refused() {
+    let too_few = SvgError::Malformed {
+        attribute: "d",
+        reason: "a command with too few numbers",
+    };
+    assert_eq!(path_refused("M0"), too_few);
+    assert_eq!(path_refused("M0 0 H"), too_few);
+    assert_eq!(path_refused("M0 0 V"), too_few);
+    assert_eq!(path_refused("M0 0 C1 1 2 2"), too_few);
+    assert_eq!(path_refused("M0 0 Q1 1 2"), too_few);
+}
+
+#[test]
+fn a_horizontal_or_vertical_line_before_a_move_is_refused() {
+    let no_move = SvgError::Malformed {
+        attribute: "d",
+        reason: "a path that does not begin with a move",
+    };
+    assert_eq!(path_refused("H1"), no_move);
+    assert_eq!(path_refused("V1"), no_move);
+}
+
+#[test]
+fn a_close_with_no_subpath_draws_nothing() {
+    assert_eq!(outline_of("Z"), Outline::default());
 }

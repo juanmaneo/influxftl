@@ -11,6 +11,8 @@ const F: &str = r"4 4 '2D' PGraphics 0 Pbackground 255 Pfill PnoStroke";
 const P: &str = r"4 4 '2D' PGraphics 0 Pbackground 255 Pstroke";
 const E: &str = r"8 8 '2D' PGraphics 0 Pbackground 255 Pfill PnoStroke";
 
+const CAST: &str = "class java.lang.String cannot be cast to class java.lang.Number";
+
 /// The script of a template, its `@NAME` placeholders replaced by the series above.
 fn expand(template: &str) -> String {
     template.replace("@F", F).replace("@P", P).replace("@E", E)
@@ -192,6 +194,15 @@ fn shape() {
                 r"[[-16777216,-16777216,-16777216,-16777216,-16777216,-16777216,-16777216,-16777216,-16777216,-16777216,-16777216,-16777216,-16777216,-16777216,-16777216,-16777216],null]",
             ),
         ),
+        (
+            r"@F 1 2 PbeginShape",
+            Err(r"Invalid number of parameters, expected one of [0, 1] but found 2"),
+        ),
+        (
+            r"@F 1 2 3 PendShape",
+            Err(r"Invalid number of parameters, expected one of [0, 1] but found 2"),
+        ),
+        (r"@F 'x' 2 Pvertex", Err(CAST)),
     ]);
 }
 
@@ -229,6 +240,14 @@ fn contour() {
             Ok(
                 r"[[-16777216,-16777216,-16777216,-16777216,-16777216,-16777216,-16777216,-16777216,-16777216,-16777216,-16777216,-16777216,-16777216,-16777216,-16777216,-16777216,-16777216,-16777216,-16777216,-16777216,-16777216,-16777216,-16777216,-16777216,-16777216,-16777216,-16777216,-16777216,-16777216,-16777216,-16777216,-16777216,-16777216,-16777216,-16777216,-16777216,-16777216,-16777216,-16777216,-16777216,-16777216,-16777216,-16777216,-16777216,-16777216,-16777216,-16777216,-16777216,-16777216,-16777216,-16777216,-16777216,-16777216,-16777216,-16777216,-16777216,-16777216,-16777216,-16777216,-16777216,-16777216,-16777216,-16777216,-16777216],null]",
             ),
+        ),
+        (
+            r"@F 1 PbeginContour",
+            Err(r"Invalid number of parameters, expected one of [0] but found 1"),
+        ),
+        (
+            r"@F 1 PendContour",
+            Err(r"Invalid number of parameters, expected one of [0] but found 1"),
         ),
     ]);
 }
@@ -272,6 +291,21 @@ fn bezier_vertex() {
             r"@F 'POINTS' PbeginShape 1 1 Pvertex PbezierVertex Ppixels",
             Err(r"Invalid number of parameters, expected one of [6, 9] but found 0"),
         ),
+        (r"@F 'x' 1 2 3 4 5 PbezierVertex", Err(CAST)),
+        (r"@F PbeginShape 'x' 1 2 3 4 5 PbezierVertex", Err(CAST)),
+        (r"@F 'x' 1 2 3 4 5 6 7 8 PbezierVertex", Err(CAST)),
+        (
+            r"@F PbeginShape 1 1 Pvertex 4 1 Pvertex 4 4 Pvertex 1 4 Pvertex 1 2 3 4 5 6 7 8 9 PbezierVertex PendShape Ppixels",
+            Ok(
+                r"[[-16777216,-16777216,-16777216,-16777216,-16777216,-1,-1,-1,-16777216,-1,-1,-1,-16777216,-1,-1,-1],null]",
+            ),
+        ),
+        (
+            r"@F PbeginShape 1 2 3 4 5 6 7 8 9 PbezierVertex PendShape Ppixels",
+            Ok(
+                r"[[-16777216,-16777216,-16777216,-16777216,-16777216,-16777216,-16777216,-16777216,-16777216,-16777216,-16777216,-16777216,-16777216,-16777216,-16777216,-16777216],null]",
+            ),
+        ),
     ]);
 }
 
@@ -302,6 +336,20 @@ fn quadratic_vertex() {
             r"@F PbeginShape 1 2 3 4 5 PquadraticVertex",
             Err(r"Invalid number of parameters, expected one of [4, 6] but found 5"),
         ),
+        (r"@F 'x' 1 2 3 PquadraticVertex", Err(CAST)),
+        (r"@F PbeginShape 'x' 1 2 3 4 5 PquadraticVertex", Err(CAST)),
+        (
+            r"@F PbeginShape 1 1 Pvertex 4 1 Pvertex 4 4 Pvertex 1 4 Pvertex 1 2 3 4 5 6 PquadraticVertex PendShape Ppixels",
+            Ok(
+                r"[[-16777216,-16777216,-16777216,-16777216,-16777216,-1,-1,-1,-16777216,-1,-1,-1,-16777216,-1,-1,-1],null]",
+            ),
+        ),
+        (
+            r"@F PbeginShape 1 2 3 4 5 6 PquadraticVertex PendShape Ppixels",
+            Ok(
+                r"[[-16777216,-16777216,-16777216,-16777216,-16777216,-16777216,-16777216,-16777216,-16777216,-16777216,-16777216,-16777216,-16777216,-16777216,-16777216,-16777216],null]",
+            ),
+        ),
     ]);
 }
 
@@ -330,6 +378,7 @@ fn curve_vertex() {
             r"@F PbeginShape 1 2 3 4 5 PcurveVertex",
             Err(r"Invalid number of parameters, expected one of [2, 3] but found 4"),
         ),
+        (r"@F 'x' 1 PcurveVertex", Err(CAST)),
         (
             r"@F PbeginShape 1 2 3 PcurveVertex PendShape Ppixels",
             Ok(

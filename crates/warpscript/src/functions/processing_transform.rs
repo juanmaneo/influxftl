@@ -49,10 +49,11 @@ pub const FUNCTIONS: &[(&str, Entry)] = &[
 const MATRIX_STACK_DEPTH: usize = 32;
 
 /// Compose `next` after the current matrix (`current = current * next`), keeping the result
-/// finite.
-fn compose(params: &Params, next: &Transform) -> Result<()> {
+/// finite. A `next` refused by its builder (a shear whose tangent is not finite) is refused here.
+fn compose(params: &Params, next: Result<Transform>) -> Result<()> {
     let mut graphics = params.graphics.borrow_mut();
-    graphics.transform = graphics.transform.then(next)?;
+    let composed = next.and_then(|next| graphics.transform.then(&next));
+    graphics.transform = composed?;
     Ok(())
 }
 
@@ -60,7 +61,7 @@ fn compose(params: &Params, next: &Transform) -> Result<()> {
 fn turn(stack: &mut Stack, transform: fn(f32) -> Transform) -> Result<()> {
     let params = parse_params(stack, &[1])?;
     let [angle] = params.floats()?;
-    compose(&params, &transform(angle))?;
+    compose(&params, Ok(transform(angle)))?;
     give_back(stack, params.graphics);
     Ok(())
 }
@@ -70,7 +71,7 @@ fn turn(stack: &mut Stack, transform: fn(f32) -> Transform) -> Result<()> {
 fn shear(stack: &mut Stack, transform: fn(f32) -> Result<Transform>) -> Result<()> {
     let params = parse_params(stack, &[1])?;
     let [angle] = params.floats()?;
-    compose(&params, &transform(angle)?)?;
+    compose(&params, transform(angle))?;
     give_back(stack, params.graphics);
     Ok(())
 }
@@ -129,7 +130,7 @@ fn pscale(stack: &mut Stack) -> Result<()> {
             Transform::scale(x, y, z)
         }
     };
-    compose(&params, &transform)?;
+    compose(&params, Ok(transform))?;
     give_back(stack, params.graphics);
     Ok(())
 }
@@ -147,7 +148,7 @@ fn ptranslate(stack: &mut Stack) -> Result<()> {
             Transform::translate(x, y, z)
         }
     };
-    compose(&params, &transform)?;
+    compose(&params, Ok(transform))?;
     give_back(stack, params.graphics);
     Ok(())
 }

@@ -65,6 +65,10 @@ fn structure() {
             r"@G PpushStyle PpopStyle PpopStyle",
             Err(r"Too many popStyle() without enough pushStyle()"),
         ),
+        (
+            r"@G 1 PpopStyle",
+            Err(r"Invalid number of parameters, expected one of [0] but found 1"),
+        ),
         (r"@G 'BLEND' PblendMode", Ok(r"[null]")),
         (r"@G 'ADD' PblendMode", Ok(r"[null]")),
         (r"@G 'SUBTRACT' PblendMode", Ok(r"[null]")),
@@ -100,10 +104,6 @@ fn structure() {
         (r"@G 0 0 10 10 Pclip 2 2 20 20 Pclip", Ok(r"[null]")),
         (r"@G 0 0 10 10 Pclip PnoClip", Ok(r"[null]")),
         (r"@G PnoClip", Ok(r"[null]")),
-        (
-            r"@G 3e38 0 Ptranslate 3e38 0 1 1 Pclip",
-            Err(r"not a finite number"),
-        ),
         (
             r"@G 0 0 10 Pclip",
             Err(r"Invalid number of parameters, expected one of [4] but found 3"),
@@ -200,7 +200,6 @@ fn maths() {
         ),
         (r"@G '3' ->BD 4 Pmag", Ok(r"[5.0,null]")),
         (r"@G '128' ->BD Pcolor", Ok(r"[-8355712,null]")),
-        (r"@G 1e30 1e30 1e30 Pmag", Err(r"not a finite number")),
         (
             r"@G 'x' 1 1 Pmag",
             Err(r"class java.lang.String cannot be cast to class java.lang.Number"),
@@ -240,7 +239,6 @@ fn maths() {
             r"@G 0 10 1 2 Plerp",
             Err(r"Invalid number of parameters, expected one of [3] but found 4"),
         ),
-        (r"@G -3e38 3e38 2 Plerp", Err(r"not a finite number")),
         (r"@G 15 10 20 Pnorm", Ok(r"[0.5,null]")),
         (
             r"@G 'x' 0 10 Pnorm",

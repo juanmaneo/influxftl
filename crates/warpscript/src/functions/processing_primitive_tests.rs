@@ -270,6 +270,21 @@ fn rect() {
         ),
         (r"@F 1 1 4 4 1 Prect", Ok(r"[null]")),
         (
+            r"@F 1 1 4 4 0 0 0 0 Prect Ppixels",
+            Ok(
+                r"[[-16777216,-16777216,-16777216,-16777216,-16777216,-1,-1,-1,-16777216,-1,-1,-1,-16777216,-1,-1,-1],null]",
+            ),
+        ),
+        (r"@F 1 1 4 4 1 1 1 1 Prect", Ok(r"[null]")),
+        (
+            r"@F 1 1 4 4 'x' Prect",
+            Err(r"class java.lang.String cannot be cast to class java.lang.Number"),
+        ),
+        (
+            r"@F 1 1 4 4 1 1 1 'x' Prect",
+            Err(r"class java.lang.String cannot be cast to class java.lang.Number"),
+        ),
+        (
             r"@F 1 1 4 Prect",
             Err(r"Invalid number of parameters, expected one of [4, 5, 8] but found 3"),
         ),
@@ -372,6 +387,14 @@ fn arc() {
             Err(r"NullPointerException"),
         ),
         (
+            r"@T 1 1 8 8 'x' 1.5707963 Parc",
+            Err(r"class java.lang.String cannot be cast to class java.lang.Number"),
+        ),
+        (
+            r"@T 1 1 8 8 0 'x' Parc",
+            Err(r"class java.lang.String cannot be cast to class java.lang.Number"),
+        ),
+        (
             r"@T 'CENTER' PellipseMode 5 5 8 8 0 1.5707963 Parc 6 6 Pget",
             Ok(r"[-1,null]"),
         ),
@@ -422,4 +445,59 @@ fn box_and_sphere() {
             Err(r"Invalid number of parameters, expected one of [1] but found 0"),
         ),
     ]);
+}
+
+#[test]
+fn geometry_beyond_the_range_of_a_float_is_refused_as_not_finite() {
+    const G: &str = "4 4 '2D' PGraphics 0 Pbackground 255 Pstroke";
+    let cases = [
+        format!("{G} 1e38 PstrokeWeight 0 0 10 10 Pline"),
+        format!("{G} 1e38 PstrokeWeight 0 0 3e38 3e38 Pline"),
+        format!("{G} 3e38 3e38 1e38 1e38 Prect"),
+        format!("{G} 3e38 3e38 1e38 1e38 Pellipse"),
+        format!("{G} 3e38 3e38 1e38 1e38 0 1.5 Parc"),
+        format!("{G} 3e38 3e38 Ptranslate 1e38 0 0 10 Pline"),
+        format!("{G} 1e38 1e38 Pscale 0 0 10 10 Pline"),
+    ];
+    for script in &cases {
+        let mut stack = test_stack();
+        let result = stack.exec_checked(script).map_err(|err| err.to_string());
+        assert!(
+            matches!(&result, Err(message) if message.contains("not a finite number")),
+            "{script}: {result:?}"
+        );
+    }
+}
+
+#[test]
+fn stroke_geometry_beyond_the_range_of_a_float_is_refused_as_not_finite() {
+    const G: &str = "4 4 '2D' PGraphics 0 Pbackground 255 Pstroke";
+    let cases = [
+        format!(
+            "{G} 1e38 PstrokeWeight 'ROUND' PstrokeJoin PbeginShape 0 0 Pvertex 3e38 3e38 Pvertex 3e38 0 Pvertex PendShape"
+        ),
+        format!(
+            "{G} 1e38 PstrokeWeight 'BEVEL' PstrokeJoin PbeginShape 0 0 Pvertex 3e38 3e38 Pvertex 3e38 0 Pvertex PendShape"
+        ),
+        format!(
+            "{G} 1e38 PstrokeWeight 'MITER' PstrokeJoin 'PROJECT' PstrokeCap PbeginShape 0 0 Pvertex 3e38 3e38 Pvertex 3e38 0 Pvertex PendShape"
+        ),
+        format!(
+            "{G} 1e38 PstrokeWeight 'ROUND' PstrokeCap PbeginShape 0 0 Pvertex 3e38 3e38 Pvertex PendShape"
+        ),
+        format!(
+            "{G} 1e38 PstrokeWeight 'SQUARE' PstrokeCap PbeginShape 0 0 Pvertex 3e38 3e38 Pvertex 'CLOSE' PendShape"
+        ),
+        format!("{G} 1e38 PstrokeWeight 3e38 3e38 Ppoint"),
+        format!("{G} 1e38 PstrokeWeight 3e38 0 Ppoint"),
+        format!("{G} 1e38 1e38 Pscale 1 1 Ppoint"),
+    ];
+    for script in &cases {
+        let mut stack = test_stack();
+        let result = stack.exec_checked(script).map_err(|err| err.to_string());
+        assert!(
+            matches!(&result, Err(message) if message.contains("not a finite number")),
+            "{script}: {result:?}"
+        );
+    }
 }

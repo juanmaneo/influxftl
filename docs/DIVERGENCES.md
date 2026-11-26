@@ -102,6 +102,23 @@ longs on top of the stack.` (Java raises a bare `ClassCastException`).
 generator state is stored in the `seeded.prng` stack attribute as a `LONG` rather than as a
 `Random` object.
 
+### 5.4 Non-finite values in Processing
+
+Processing computes in Java `float` arithmetic, where an overflow gives `Infinity` and `0/0` gives
+`NaN`, without an error. The port refuses each result that is not finite, with `not a finite
+number`, so a Processing function never pushes `Infinity` or `NaN` and never draws with one.
+Checked against Warp 10 3.5.0:
+
+- A result that Warp 10 pushes as `NaN` or `Infinity` is refused: for example `Pnorm` of three
+  equal values (`0/0`), `Pmag` of `1e30 1e30` (an overflow), and `Pmap` with an empty input range.
+- A shape, a curve or an image placed where its coordinates overflow a float is refused. Warp 10
+  answers OK and draws nothing, for the shapes (`Pshape`, `Prect`, `Pellipse`, `Parc`), the curves
+  (`Pbezier`, `Pcurve`) and the `CORNERS` image mode of `Pimage`.
+
+A script that runs to the end on Warp 10 with an `Infinity` in its Processing values fails here.
+Matching Warp 10 would mean carrying `Infinity` and `NaN` through the stack and drawing nothing for
+an out-of-range coordinate; the port does not do this.
+
 ## 6. Concurrency of `TIMEBOX`
 
 Warp 10 runs the boxed macro on a separate thread and interrupts it on timeout. WarpScript
@@ -1446,3 +1463,44 @@ a flag that is not a BOOLEAN is false.
   port refuses them as unported algorithms), an RSA key that cannot hold a session key (the port
   gives `input data too large`), and the bzip2 decompression, which is checked against the
   reference decoder of the `bz2` module of Python rather than against the oracle.
+
+## 43. Processing (`PGRAPHICS`, `PIMAGE`, `PSHAPE`)
+
+The renderer is written from the documented behaviour of the Processing API, not ported from its
+source. Where Warp 10 3.5.0 gives an answer that can be compared, the functions are checked on the
+oracle; the points below differ from Warp 10, or are not checked on the oracle.
+
+- **Non-finite values.** Refused rather than computed, see section 5.4.
+- **Anti-aliasing and edges.** Shapes are not anti-aliased: a pixel is covered when its centre lies
+  inside the outline (non-zero fill). A pixel whose centre lies exactly on an edge may be decided
+  the other way by Java2D's rasteriser; this is not compared on the oracle.
+- **Rounded corners.** `Prect` with a corner radius draws each corner as a circular arc. Processing
+  builds the corner as a quadratic Bézier, which is not reproduced. On the oracle, Warp 10 3.5.0
+  leaves `(0, 0)` and `(1, 0)` unpainted for `0 0 8 8 2 Prect`, where the port paints `(1, 0)`.
+- **Strokes.** Joins follow Java2D's miter limit (10). A miter tip whose coordinates overflow a
+  float is refused as not finite (section 5.4), where Warp 10 would compute an infinite tip; the
+  bevel is used when the tip is beyond the limit, as in Java2D.
+- **3D contexts.** Not checked on the oracle: Warp 10 3.5.0 throws a `NullPointerException` on any
+  `'3D'` `PGRAPHICS`. The port draws a 3D context in the plane of its transform: the `z`
+  coordinates of a shape or a curve are checked for presence, as Warp 10 checks them, but not
+  drawn. `box` and `sphere` draw nothing, and a 3D `box` is not drawn yet. An image is drawn
+  flat, neither in perspective nor against the depth buffer.
+- **`Pdecode`.** Data that is not an image: Warp 10 3.5.0 answers OK with a broken image of size
+  -1 by -1 (`Psize` gives `[-1,-1]`). The port has no image of negative size and refuses the data
+  with `Pdecode cannot read the image`.
+- **Codecs.** `Pencode` writes PNG or JPEG bytes that are not Java's: the compressor and the JPEG
+  tables differ, so an encoding is compared with Warp 10 by what it decodes to, not by its bytes.
+- **SVG.** `loadShape` reads the `svg` root, its groups, the basic shapes and the paths of a
+  document through the port's own reader. The path commands `S`, `T` and `A` are refused.
+  Transforms, `style` attributes and gradients are not read, so a shape that uses them is drawn
+  without them. A malformed document (an unclosed construct, a missing or unpaired number, a
+  command with too few numbers, a second root) is refused. These malformed cases are not compared
+  on the oracle.
+- **`Pfilter` `BLUR` with a parameter.** The blur is a box blur whose radius is the parameter
+  cast to an `int` (`filter.rs`), so the values differ from Processing's kernel. On the oracle,
+  Warp 10 3.5.0 raises `ArithmeticException: / by zero` for some radii on small images: `1` on a 1
+  by 1 image, `1.5` on 1 by 1 and 2 by 2, `2` on 2 by 2 and 4 by 4, and `3` and `4` on 4 by 4. The
+  division is in Processing's blur kernel, as read from its class files. The port blurs all of
+  them without error.
+- **`CORNERS` placement overflow.** See section 5.4: Warp 10 draws nothing for a `CORNERS` image
+  whose corners overflow a float, and the port refuses it.

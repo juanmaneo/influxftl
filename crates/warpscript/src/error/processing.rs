@@ -89,6 +89,10 @@ pub enum ProcessingError {
         /// The requested height.
         height: i64,
     },
+    /// A background image with no pixel to take: Processing refuses it with its own message, as a
+    /// `RuntimeException`.
+    #[error("background image must be the same size as your application")]
+    BackgroundWithoutPixels,
     /// A list of pixels of another length than the image it is written to.
     #[error("{function} expected {article}array of {expected} pixels, found {found}")]
     PixelCount {
@@ -223,6 +227,7 @@ impl ProcessingError {
             | ProcessingError::NegativeWidth
             | ProcessingError::OutOfMemory { .. }
             | ProcessingError::ResizeWithoutSize
+            | ProcessingError::BackgroundWithoutPixels
             | ProcessingError::FilterTakesNoParam { .. }
             | ProcessingError::PosterizeNeedsLevels
             | ProcessingError::PosterizeLevels

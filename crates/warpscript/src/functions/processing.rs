@@ -11,6 +11,7 @@
 
 use std::cell::RefCell;
 use std::rc::Rc;
+use std::sync::{Mutex, PoisonError};
 
 use super::Entry;
 use super::args::fail;
@@ -64,8 +65,10 @@ pub fn parse_params(stack: &mut Stack, counts: &'static [usize]) -> Result<Param
     let most = counts.iter().copied().fold(0, usize::max);
     let mut popped = Vec::new();
     let mut found = None;
-    while stack.depth() != 0 && popped.len() <= most {
-        match stack.pop()? {
+    while popped.len() <= most
+        && let Some(value) = stack.take_top(1).pop()
+    {
+        match value {
             Value::Graphics(graphics) => {
                 found = Some(graphics);
                 break;
@@ -141,6 +144,11 @@ impl Params {
             found: self.args.len(),
         }
         .into()
+    }
+
+    /// The first value above the graphics, the one a function reads before the others.
+    pub fn first(&self) -> Result<&Value> {
+        self.args.first().ok_or_else(|| self.arity())
     }
 
     /// The `N` values from the `skip`-th one on (the first `skip` are left out), as they are.
@@ -260,6 +268,21 @@ pub fn answer(stack: &mut Stack, graphics: SharedGraphics, result: impl Into<Val
 /// Push the graphics back, with nothing above it.
 pub fn give_back(stack: &mut Stack, graphics: SharedGraphics) {
     stack.push(Value::Graphics(graphics));
+}
+
+/// The messages shown so far: Processing's `showWarning` shows each distinct message once.
+static SHOWN_WARNINGS: Mutex<Vec<&'static str>> = Mutex::new(Vec::new());
+
+/// Processing's `showWarning`: `message` goes to standard error, unless it was shown before. The
+/// call does not fail; the function that warned carries on, as Processing's does.
+pub fn show_warning(message: &'static str) {
+    let mut shown = SHOWN_WARNINGS
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner);
+    if !shown.contains(&message) {
+        eprintln!("{message}");
+        shown.push(message);
+    }
 }
 
 /// Whether a graphics type is `3D`: `Some(false)` for `2D`, `Some(true)` for `3D`, `None` for

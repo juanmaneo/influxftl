@@ -26,7 +26,7 @@ use crate::error::{Class, Error, Result};
 use crate::processing::Blend;
 use crate::processing::blend::blit;
 use crate::processing::filter::{self, Kind};
-use crate::processing::finite;
+
 use crate::processing::image::{Image, Rect};
 use crate::stack::Stack;
 use crate::value::{Value, ValueKind};
@@ -183,7 +183,8 @@ fn side(value: i64) -> Result<usize> {
 
 /// `own` times `given / given_source`: the side of the image that keeps the proportion of the given
 /// side. Processing's float arithmetic truncates the result, and so does this. An image with no
-/// side has no proportion to keep.
+/// side has no proportion to keep. The sides are at most `Integer.MAX_VALUE`, so the arithmetic is
+/// finite.
 fn in_proportion(source: &Image, own: usize, given_source: usize, given: usize) -> Result<usize> {
     if given_source == 0 {
         return Err(ProcessingError::EmptyImage {
@@ -192,25 +193,34 @@ fn in_proportion(source: &Image, own: usize, given_source: usize, given: usize) 
         }
         .into());
     }
-    let factor = finite(given as f32 / given_source as f32)?;
-    Ok(finite(own as f32 * factor)? as usize)
+    let factor = given as f32 / given_source as f32;
+    Ok((own as f32 * factor) as usize)
 }
 
 /// The size `Presize` gives an image: a side given as zero takes the length that keeps the
-/// proportion of the image, and two zero sides are refused.
+/// proportion of the image, and two zero sides are refused. A side that comes out as zero is an
+/// empty image, refused as Processing refuses it.
 fn resized_size(source: &Image, width: usize, height: usize) -> Result<(usize, usize)> {
-    match (width, height) {
-        (0, 0) => Err(ProcessingError::ResizeWithoutSize.into()),
-        (0, height) => Ok((
+    let (width, height) = match (width, height) {
+        (0, 0) => return Err(ProcessingError::ResizeWithoutSize.into()),
+        (0, height) => (
             in_proportion(source, source.width, source.height, height)?,
             height,
-        )),
-        (width, 0) => Ok((
+        ),
+        (width, 0) => (
             width,
             in_proportion(source, source.height, source.width, width)?,
-        )),
-        sizes => Ok(sizes),
+        ),
+        sizes => sizes,
+    };
+    if width == 0 || height == 0 {
+        return Err(ProcessingError::EmptyImage {
+            width: width as i64,
+            height: height as i64,
+        }
+        .into());
     }
+    Ok((width, height))
 }
 
 /// `Presize`: `image width height Presize` resizes a `PIMAGE` or a `PGRAPHICS` (pushed back) to the
@@ -319,7 +329,7 @@ fn pupdatepixels(stack: &mut Stack) -> Result<()> {
         let count = image.borrow().pixels.len();
         let pixels = pixels_of(&list.borrow(), count, NAME, "")?;
         image.borrow_mut().pixels = pixels;
-        stack.pop()?;
+        stack.discard_top(1);
         return Ok(());
     }
     let params = parse_params(stack, &[1])?;
@@ -346,11 +356,12 @@ fn ptoimage(stack: &mut Stack) -> Result<()> {
     Ok(())
 }
 
-/// The blend mode a `Pblend` names in its last value: every mode of `blendMode` but `REPLACE`.
+/// The blend mode a `Pblend` names in its last value: every mode of `blendMode` but `REPLACE`. A
+/// `null` names no mode, and is refused as any other text is.
 fn blend_mode(params: &Params) -> Result<Blend> {
     let keyword = match params.args.last() {
-        Some(Value::String(keyword)) => keyword,
-        Some(Value::Null) => return Err(Error::null_pointer()),
+        Some(Value::String(keyword)) => Some(&**keyword),
+        Some(Value::Null) => None,
         Some(other) => {
             return Err(Error::class_cast(
                 other.kind(),
@@ -359,21 +370,21 @@ fn blend_mode(params: &Params) -> Result<Blend> {
         }
         None => return Err(params.arity()),
     };
-    Ok(match &**keyword {
-        "BLEND" => Blend::Blend,
-        "ADD" => Blend::Add,
-        "SUBTRACT" => Blend::Subtract,
-        "DARKEST" => Blend::Darkest,
-        "LIGHTEST" => Blend::Lightest,
-        "DIFFERENCE" => Blend::Difference,
-        "EXCLUSION" => Blend::Exclusion,
-        "MULTIPLY" => Blend::Multiply,
-        "SCREEN" => Blend::Screen,
-        "OVERLAY" => Blend::Overlay,
-        "HARD_LIGHT" => Blend::HardLight,
-        "SOFT_LIGHT" => Blend::SoftLight,
-        "DODGE" => Blend::Dodge,
-        "BURN" => Blend::Burn,
+    Ok(match keyword {
+        Some("BLEND") => Blend::Blend,
+        Some("ADD") => Blend::Add,
+        Some("SUBTRACT") => Blend::Subtract,
+        Some("DARKEST") => Blend::Darkest,
+        Some("LIGHTEST") => Blend::Lightest,
+        Some("DIFFERENCE") => Blend::Difference,
+        Some("EXCLUSION") => Blend::Exclusion,
+        Some("MULTIPLY") => Blend::Multiply,
+        Some("SCREEN") => Blend::Screen,
+        Some("OVERLAY") => Blend::Overlay,
+        Some("HARD_LIGHT") => Blend::HardLight,
+        Some("SOFT_LIGHT") => Blend::SoftLight,
+        Some("DODGE") => Blend::Dodge,
+        Some("BURN") => Blend::Burn,
         _ => {
             return Err(ProcessingError::Refused {
                 function: "Pblend",
@@ -471,6 +482,14 @@ fn pget(stack: &mut Stack) -> Result<()> {
 /// graphics are not drawn.
 fn pset(stack: &mut Stack) -> Result<()> {
     let params = parse_params(stack, &[3])?;
+    set_or_paste(&params)?;
+    give_back(stack, params.graphics);
+    Ok(())
+}
+
+/// The write of `Pset`: the values above the graphics are `x`, `y` and what is written there, a
+/// `PIMAGE` pasted at (`x`, `y`) or an integer colour set on the pixel.
+fn set_or_paste(params: &Params) -> Result<()> {
     let [x, y] = params.ints_window::<2>(0)?;
     let (x, y) = (i64::from(x), i64::from(y));
     let value = params.args.get(2).ok_or_else(|| params.arity())?;
@@ -485,7 +504,6 @@ fn pset(stack: &mut Stack) -> Result<()> {
             params.graphics.borrow_mut().image.set(x, y, colour as u32);
         }
     }
-    give_back(stack, params.graphics);
     Ok(())
 }
 
@@ -515,3 +533,7 @@ fn pfilter(stack: &mut Stack) -> Result<()> {
     give_back(stack, params.graphics);
     Ok(())
 }
+
+#[cfg(test)]
+#[path = "processing_image_private_tests.rs"]
+mod private_tests;

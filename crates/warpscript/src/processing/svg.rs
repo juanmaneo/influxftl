@@ -227,9 +227,7 @@ fn attributes(text: &str) -> Result<(Attributes, &str, bool)> {
             .trim_start();
         let quote = ['"', '\''].into_iter().find(|&q| after.starts_with(q));
         let quote = quote.ok_or_else(|| xml("an attribute value that is not quoted"))?;
-        let body = after
-            .strip_prefix(quote)
-            .ok_or_else(|| xml("an attribute value that is not quoted"))?;
+        let (_, body) = after.split_at(quote.len_utf8());
         let (value, after) = body
             .split_once(quote)
             .ok_or_else(|| xml("an attribute value that is not closed"))?;
@@ -412,33 +410,33 @@ fn collect(element: &Element, inherited: Presentation, pieces: &mut Vec<Piece>) 
             let (x, y) = (optional(element, "x")?, optional(element, "y")?);
             let width = required(element, "width")?;
             let height = required(element, "height")?;
-            primitive::rect(x, y, width, height, [0.0; 4])?
+            primitive::rect(x, y, width, height, [0.0; 4])
         }
         "circle" => {
             let (cx, cy) = (optional(element, "cx")?, optional(element, "cy")?);
             let radius = required(element, "r")?;
-            centred_ellipse(cx, cy, radius, radius)?
+            centred_ellipse(cx, cy, radius, radius)
         }
         "ellipse" => {
             let (cx, cy) = (optional(element, "cx")?, optional(element, "cy")?);
             let (rx, ry) = (required(element, "rx")?, required(element, "ry")?);
-            centred_ellipse(cx, cy, rx, ry)?
+            centred_ellipse(cx, cy, rx, ry)
         }
         "line" => {
             let from = [optional(element, "x1")?, optional(element, "y1")?];
             let to = [optional(element, "x2")?, optional(element, "y2")?];
-            primitive::line(from, to)?
+            Ok(primitive::line(from, to))
         }
-        "polyline" => Outline::open(points(element)?),
-        "polygon" => Outline::closed(points(element)?),
+        "polyline" => Ok(Outline::open(points(element)?)),
+        "polygon" => Ok(Outline::closed(points(element)?)),
         "path" => {
             let text = element
                 .attribute("d")
                 .ok_or_else(|| failure(SvgError::Missing { attribute: "d" }))?;
-            path(text)?
+            path(text)
         }
         _ => return Ok(()),
-    };
+    }?;
     pieces.push(piece(outline, paint));
     Ok(())
 }
@@ -581,19 +579,18 @@ impl PathBuilder {
     }
 
     fn line_to(&mut self, point: [f32; 2]) -> Result<()> {
-        if !self.open {
-            // A command after `Z` starts a subpath at the point the closed one started at.
-            if self.subpaths.is_empty() {
-                return Err(failure(SvgError::Malformed {
-                    attribute: "d",
-                    reason: "a path that does not begin with a move",
-                }));
-            }
+        // A command after `Z` starts a subpath at the point the closed one started at. With no
+        // subpath at all, there is nothing to continue.
+        if !self.open && !self.subpaths.is_empty() {
             self.move_to(self.start);
         }
-        if let Some(subpath) = self.subpaths.last_mut() {
-            subpath.points.push(point);
-        }
+        let subpath = self.subpaths.last_mut().ok_or_else(|| {
+            failure(SvgError::Malformed {
+                attribute: "d",
+                reason: "a path that does not begin with a move",
+            })
+        })?;
+        subpath.points.push(point);
         self.current = point;
         Ok(())
     }

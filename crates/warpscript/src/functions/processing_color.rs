@@ -74,27 +74,27 @@ pub(super) fn colour_long(colour: u32) -> Value {
 fn paint_colour(mode: &ColorMode, args: &[Value]) -> Result<Option<u32>> {
     match args {
         [value] => match value {
-            Value::Long(_) => Ok(Some(mode.from_int(int_of(value)?)?)),
-            Value::Double(_) => Ok(Some(mode.gray(float_of(value)?, mode.max_alpha)?)),
+            Value::Long(long) => Ok(Some(mode.from_int(*long as i32))),
+            Value::Double(_) => Ok(Some(mode.gray(float_of(value)?, mode.max_alpha()))),
             _ => Ok(None),
         },
         [first, alpha] => match first {
-            Value::Long(_) => Ok(Some(mode.from_int_alpha(int_of(first)?, float_of(alpha)?)?)),
-            Value::Double(_) => Ok(Some(mode.gray(float_of(first)?, float_of(alpha)?)?)),
+            Value::Long(long) => Ok(Some(mode.from_int_alpha(*long as i32, float_of(alpha)?))),
+            Value::Double(_) => Ok(Some(mode.gray(float_of(first)?, float_of(alpha)?))),
             _ => Ok(None),
         },
         [red, green, blue] => Ok(Some(mode.calc(
             float_of(red)?,
             float_of(green)?,
             float_of(blue)?,
-            mode.max_alpha,
-        )?)),
+            mode.max_alpha(),
+        ))),
         [red, green, blue, alpha] => Ok(Some(mode.calc(
             float_of(red)?,
             float_of(green)?,
             float_of(blue)?,
             float_of(alpha)?,
-        )?)),
+        ))),
         _ => Err(arity(args.len())),
     }
 }
@@ -104,25 +104,25 @@ fn paint_colour(mode: &ColorMode, args: &[Value]) -> Result<Option<u32>> {
 fn tint_colour(mode: &ColorMode, args: &[Value]) -> Result<u32> {
     match args {
         [value] => match value {
-            Value::Long(_) => mode.from_int(int_of(value)?),
-            _ => mode.gray(float_of(value)?, mode.max_alpha),
+            Value::Long(long) => Ok(mode.from_int(*long as i32)),
+            _ => Ok(mode.gray(float_of(value)?, mode.max_alpha())),
         },
         [first, alpha] => match first {
-            Value::Long(_) => mode.from_int_alpha(int_of(first)?, float_of(alpha)?),
-            _ => mode.gray(float_of(first)?, float_of(alpha)?),
+            Value::Long(long) => Ok(mode.from_int_alpha(*long as i32, float_of(alpha)?)),
+            _ => Ok(mode.gray(float_of(first)?, float_of(alpha)?)),
         },
-        [red, green, blue] => mode.calc(
+        [red, green, blue] => Ok(mode.calc(
             float_of(red)?,
             float_of(green)?,
             float_of(blue)?,
-            mode.max_alpha,
-        ),
-        [red, green, blue, alpha] => mode.calc(
+            mode.max_alpha(),
+        )),
+        [red, green, blue, alpha] => Ok(mode.calc(
             float_of(red)?,
             float_of(green)?,
             float_of(blue)?,
             float_of(alpha)?,
-        ),
+        )),
         _ => Err(arity(args.len())),
     }
 }
@@ -131,20 +131,20 @@ fn tint_colour(mode: &ColorMode, args: &[Value]) -> Result<u32> {
 /// `DOUBLE` is truncated), and the other values as floats.
 fn colour_of(mode: &ColorMode, args: &[Value]) -> Result<u32> {
     match args {
-        [value] => mode.from_int(int_of(value)?),
-        [value, alpha] => mode.from_int_alpha(int_of(value)?, float_of(alpha)?),
-        [red, green, blue] => mode.calc(
+        [value] => Ok(mode.from_int(int_of(value)?)),
+        [value, alpha] => Ok(mode.from_int_alpha(int_of(value)?, float_of(alpha)?)),
+        [red, green, blue] => Ok(mode.calc(
             float_of(red)?,
             float_of(green)?,
             float_of(blue)?,
-            mode.max_alpha,
-        ),
-        [red, green, blue, alpha] => mode.calc(
+            mode.max_alpha(),
+        )),
+        [red, green, blue, alpha] => Ok(mode.calc(
             float_of(red)?,
             float_of(green)?,
             float_of(blue)?,
             float_of(alpha)?,
-        ),
+        )),
         _ => Err(arity(args.len())),
     }
 }
@@ -185,14 +185,14 @@ fn pcolormode(stack: &mut Stack) -> Result<()> {
     };
     let current = params.graphics.borrow().style.color_mode;
     let mode = match params.len() {
-        1 => ColorMode { space, ..current },
+        1 => current.with_space(space),
         2 => {
             let [max] = params.floats_after(1)?;
             ColorMode::new(space, max, max, max, max)?
         }
         4 => {
             let [max1, max2, max3] = params.floats_after(1)?;
-            ColorMode::new(space, max1, max2, max3, current.max_alpha)?
+            ColorMode::new(space, max1, max2, max3, current.max_alpha())?
         }
         _ => {
             let [max1, max2, max3, max_alpha] = params.floats_after(1)?;
@@ -280,11 +280,10 @@ fn pcolor(stack: &mut Stack) -> Result<()> {
 /// `lerpColor`: the colour between two colours, by an amount from 0 to 1.
 fn plerpcolor(stack: &mut Stack) -> Result<()> {
     let params = parse_params(stack, &[3])?;
-    let [from, to, amount] = params.values::<3>(0)?;
-    let (from, to) = (int_of(from)?, int_of(to)?);
-    let amount = float_of(amount)?;
+    let [from, to] = params.ints_window::<2>(0)?;
+    let [amount] = params.floats_window::<1>(2)?;
     let mode = params.graphics.borrow().style.color_mode;
-    let colour = mode.lerp(from as u32, to as u32, amount)?;
+    let colour = mode.lerp(from as u32, to as u32, amount);
     answer(stack, params.graphics, colour_long(colour));
     Ok(())
 }
@@ -299,7 +298,7 @@ fn reader(stack: &mut Stack, which: Component) -> Result<()> {
         .borrow()
         .style
         .color_mode
-        .component(colour as u32, which)?;
+        .component(colour as u32, which);
     answer(stack, params.graphics, Value::Double(f64::from(value)));
     Ok(())
 }

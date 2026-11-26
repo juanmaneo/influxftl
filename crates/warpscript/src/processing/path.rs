@@ -69,6 +69,12 @@ fn point(x: f32, y: f32) -> Result<[f32; 2]> {
     Ok([finite(x)?, finite(y)?])
 }
 
+/// A ring through `points`, refused when a coordinate is not finite. Checking the whole ring at
+/// once means one refusal per ring rather than one per corner.
+fn finite_ring(points: impl IntoIterator<Item = [f32; 2]>) -> Result<Ring> {
+    points.into_iter().map(|[x, y]| point(x, y)).collect()
+}
+
 /// The pixel index a coordinate falls on, kept within `low..=high`. The coordinate is finite.
 fn index_within(coordinate: f32, low: usize, high: usize) -> usize {
     let index = coordinate.max(0.0) as usize;
@@ -172,43 +178,44 @@ fn direction(from: [f32; 2], to: [f32; 2]) -> Result<[f32; 2]> {
 pub fn disc(centre: [f32; 2], radius: f32) -> Result<Ring> {
     let radius = finite(radius)?;
     let sides = (radius.abs() * TAU * 2.0).ceil().clamp(8.0, 1024.0) as usize;
-    (0..sides)
-        .map(|i| {
-            let angle = TAU * i as f32 / sides as f32;
-            point(
-                centre[0] + radius * angle.cos(),
-                centre[1] + radius * angle.sin(),
-            )
-        })
-        .collect()
+    finite_ring((0..sides).map(|i| {
+        let angle = TAU * i as f32 / sides as f32;
+        [
+            centre[0] + radius * angle.cos(),
+            centre[1] + radius * angle.sin(),
+        ]
+    }))
 }
 
-/// The rectangle of a segment from `a` to `b`, `half` wide on each side.
-fn segment_ring(a: [f32; 2], b: [f32; 2], half: f32) -> Result<Ring> {
-    let [ux, uy] = direction(a, b)?;
+/// The rectangle of a segment from `a` to `b`, whose unit direction is `unit`, `half` wide on each
+/// side.
+fn segment_ring(a: [f32; 2], b: [f32; 2], unit: [f32; 2], half: f32) -> Result<Ring> {
+    let [ux, uy] = unit;
     let (nx, ny) = (-uy * half, ux * half);
-    Ok(positive(vec![
-        point(a[0] + nx, a[1] + ny)?,
-        point(b[0] + nx, b[1] + ny)?,
-        point(b[0] - nx, b[1] - ny)?,
-        point(a[0] - nx, a[1] - ny)?,
-    ]))
+    finite_ring([
+        [a[0] + nx, a[1] + ny],
+        [b[0] + nx, b[1] + ny],
+        [b[0] - nx, b[1] - ny],
+        [a[0] - nx, a[1] - ny],
+    ])
+    .map(positive)
 }
 
-/// The ring of a join at `corner`, between the segment from `prev` and the one to `next`.
+/// The ring of a join at `corner`, between the segment whose unit direction is `incoming` and the
+/// one whose unit direction is `outgoing`.
 ///
 /// The join fills the outer side of the turn. A round join is a disc, a bevel a triangle, and a
 /// miter the quadrilateral that reaches the intersection of the two outer edges, unless that
 /// intersection is further than [`MITER_LIMIT`] half-widths away, when it is a bevel.
 fn join_ring(
-    prev: [f32; 2],
+    incoming: [f32; 2],
+    outgoing: [f32; 2],
     corner: [f32; 2],
-    next: [f32; 2],
     half: f32,
     join: Join,
 ) -> Result<Option<Ring>> {
-    let [ax, ay] = direction(prev, corner)?;
-    let [bx, by] = direction(corner, next)?;
+    let [ax, ay] = incoming;
+    let [bx, by] = outgoing;
     let cross = ax * by - ay * bx;
     let dot = ax * bx + ay * by;
     if cross.abs() < 1e-6 && dot > 0.0 {
@@ -251,12 +258,12 @@ fn cap_ring(end: [f32; 2], outward: [f32; 2], half: f32, cap: Cap) -> Result<Opt
             let [ox, oy] = outward;
             let (nx, ny) = (-oy * half, ox * half);
             let (ex, ey) = (ox * half, oy * half);
-            Some(positive(vec![
-                point(end[0] + nx, end[1] + ny)?,
-                point(end[0] + nx + ex, end[1] + ny + ey)?,
-                point(end[0] - nx + ex, end[1] - ny + ey)?,
-                point(end[0] - nx, end[1] - ny)?,
-            ]))
+            Some(positive(finite_ring([
+                [end[0] + nx, end[1] + ny],
+                [end[0] + nx + ex, end[1] + ny + ey],
+                [end[0] - nx + ex, end[1] - ny + ey],
+                [end[0] - nx, end[1] - ny],
+            ])?))
         }
     })
 }
@@ -296,21 +303,26 @@ fn stroke_rings(
             }
         }
         _ => {
+            // The unit direction of each segment, from `points[i]` to `points[i + 1]`.
             let segments = if closed { n } else { n - 1 };
-            for i in 0..segments {
-                rings.push(segment_ring(points[i], points[(i + 1) % n], half)?);
+            let units = (0..segments)
+                .map(|i| direction(points[i], points[(i + 1) % n]))
+                .collect::<Result<Vec<_>>>()?;
+            for (i, &unit) in units.iter().enumerate() {
+                rings.push(segment_ring(points[i], points[(i + 1) % n], unit, half)?);
             }
             let corners = if closed { 0..n } else { 1..n - 1 };
             for i in corners {
-                let prev = points[(i + n - 1) % n];
-                let next = points[(i + 1) % n];
-                rings.extend(join_ring(prev, points[i], next, half, join)?);
+                let incoming = units[(i + n - 1) % n];
+                let outgoing = units[i];
+                rings.extend(join_ring(incoming, outgoing, points[i], half, join)?);
             }
             if !closed {
-                let outward_start = direction(points[1], points[0])?;
-                rings.extend(cap_ring(points[0], outward_start, half, cap)?);
-                let outward_end = direction(points[n - 2], points[n - 1])?;
-                rings.extend(cap_ring(points[n - 1], outward_end, half, cap)?);
+                // The start cap points back along the first segment, which is the negation of
+                // its direction, and the end cap onwards along the last.
+                let [ux, uy] = units[0];
+                rings.extend(cap_ring(points[0], [-ux, -uy], half, cap)?);
+                rings.extend(cap_ring(points[n - 1], units[n - 2], half, cap)?);
             }
         }
     }
@@ -613,7 +625,7 @@ mod tests {
     }
 
     #[test]
-    fn a_projecting_end_that_overflows_is_refused() {
+    fn a_projecting_start_that_overflows_is_refused() {
         let diagonal = Subpath {
             points: vec![[0.0, 0.0], [1.0, 1.0]],
             closed: false,
@@ -621,6 +633,26 @@ mod tests {
         assert_eq!(
             stroke_outline(&[diagonal], 3.0e38, Cap::Project, Join::Miter),
             Err(Error::NotFinite(NotFinite::NegativeInfinity))
+        );
+    }
+
+    #[test]
+    fn a_projecting_end_that_overflows_is_refused() {
+        let bent = Subpath {
+            points: vec![[0.0, 0.0], [1.0, 0.0], [2.0, 1.0]],
+            closed: false,
+        };
+        assert_eq!(
+            stroke_outline(&[bent], 3.0e38, Cap::Project, Join::Bevel),
+            Err(Error::NotFinite(NotFinite::PositiveInfinity))
+        );
+    }
+
+    #[test]
+    fn a_round_join_whose_disc_overflows_is_refused() {
+        assert_eq!(
+            join_ring([0.0, 1.0], [1.0, 0.0], [3.0e38, 0.0], 3.0e38, Join::Round),
+            Err(Error::NotFinite(NotFinite::PositiveInfinity))
         );
     }
 
@@ -647,36 +679,12 @@ mod tests {
     #[test]
     fn a_join_whose_outer_edge_overflows_is_refused() {
         assert_eq!(
-            join_ring(
-                [2.0e38, 1.0],
-                [2.0e38, 0.0],
-                [2.0e38, 1.0],
-                3.0e38,
-                Join::Miter
-            ),
+            join_ring([0.0, -1.0], [0.0, 1.0], [2.0e38, 0.0], 3.0e38, Join::Miter),
             Err(Error::NotFinite(NotFinite::PositiveInfinity))
         );
         assert_eq!(
-            join_ring(
-                [2.0e38, -1.0],
-                [2.0e38, 0.0],
-                [2.0e38, -1.0],
-                3.0e38,
-                Join::Miter
-            ),
+            join_ring([0.0, 1.0], [0.0, -1.0], [2.0e38, 0.0], 3.0e38, Join::Miter),
             Err(Error::NotFinite(NotFinite::PositiveInfinity))
-        );
-    }
-
-    #[test]
-    fn a_join_needs_directions_at_both_sides_of_its_corner() {
-        assert_eq!(
-            join_ring([0.0, 0.0], [0.0, 0.0], [1.0, 0.0], 1.0, Join::Round),
-            Err(Error::NotFinite(NotFinite::Nan))
-        );
-        assert_eq!(
-            join_ring([0.0, 0.0], [1.0, 0.0], [1.0, 0.0], 1.0, Join::Round),
-            Err(Error::NotFinite(NotFinite::Nan))
         );
     }
 }

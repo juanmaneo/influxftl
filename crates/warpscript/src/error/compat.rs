@@ -190,6 +190,7 @@ fn processing_class(err: &ProcessingError) -> &'static str {
         ProcessingError::StyleUnderflow
         | ProcessingError::MatrixUnderflow
         | ProcessingError::MatrixOverflow
+        | ProcessingError::BackgroundWithoutPixels
         | ProcessingError::ShapeState { .. }
         | ProcessingError::Svg(_) => "java.lang.RuntimeException",
         ProcessingError::OutOfMemory { .. } => "java.lang.OutOfMemoryError",

@@ -6,7 +6,7 @@
 
 use std::f32::consts::FRAC_PI_2;
 
-use super::{ArcMode, arc, at, bezier, ellipse, line, place, point, quad, rect, spline, triangle};
+use super::{ArcMode, arc, at, bezier, ellipse, line, place, rect, spline};
 use crate::processing::Mode;
 use crate::processing::draw::Outline;
 use crate::processing::path::Subpath;
@@ -37,17 +37,12 @@ fn a_placement_gives_the_start_and_the_size_of_its_mode() {
 fn a_point_with_a_coordinate_that_is_not_finite_is_refused() {
     assert!(at(NAN, 0.0).is_err());
     assert!(at(0.0, NAN).is_err());
-    assert!(point(NAN, 0.0).is_err());
-    assert!(line([NAN, 0.0], [0.0, 0.0]).is_err());
-    assert!(line([0.0, 0.0], [NAN, 0.0]).is_err());
-    assert!(triangle([[NAN, 0.0], [0.0, 0.0], [0.0, 0.0]]).is_err());
-    assert!(quad([[0.0, 0.0], [NAN, 0.0], [0.0, 0.0], [0.0, 0.0]]).is_err());
 }
 
 #[test]
 fn a_line_is_a_stroke_between_its_two_ends() {
     assert_eq!(
-        line([0.0, 0.0], [3.0, 4.0]).expect("finite"),
+        line([0.0, 0.0], [3.0, 4.0]),
         Outline {
             stroke: vec![Subpath {
                 points: vec![[0.0, 0.0], [3.0, 4.0]],

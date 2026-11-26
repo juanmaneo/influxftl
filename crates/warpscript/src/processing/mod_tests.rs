@@ -12,11 +12,7 @@ fn a_background_image_needs_pixels_to_take_them_from() {
     let mut g = Graphics::new(2, 2, false).expect("a small context fits in memory");
     assert_eq!(
         g.background_image(&Image::from_pixels(0, 0, Vec::new())),
-        Err(ProcessingError::EmptyImage {
-            width: 0,
-            height: 0,
-        }
-        .into())
+        Err(ProcessingError::BackgroundWithoutPixels.into())
     );
 }
 

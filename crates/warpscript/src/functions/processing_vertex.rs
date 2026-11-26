@@ -8,7 +8,7 @@
 //! refused when the shape is not a `POLYGON`, since Processing only takes those in a polygon.
 
 use super::Entry;
-use super::processing::{Params, give_back, mode_at, parse_params};
+use super::processing::{Params, give_back, mode_at, parse_params, show_warning};
 use crate::error::Result;
 use crate::error::processing::ProcessingError;
 use crate::processing::curve::steps;
@@ -50,11 +50,17 @@ const BEZIER_NEEDS_POLYGON: &str =
 const CURVE_NEEDS_POLYGON: &str =
     "You must use beginShape() or beginShape(POLYGON) before curveVertex()";
 
+/// Warp 10's warning for a Bézier vertex given z coordinates to a 2D graphics context. Processing
+/// shows it and draws nothing.
+const BEZIER_DEPTH: &str = "bezierVertex() with x, y, and z coordinates can only be used with a renderer that supports 3D, such as P3D. Use a version without a z-coordinate instead.";
+
+/// Warp 10's warning for a quadratic vertex given z coordinates to a 2D graphics context.
+const QUAD_DEPTH: &str = "quadVertex() with x, y, and z coordinates can only be used with a renderer that supports 3D, such as P3D. Use a version without a z-coordinate instead.";
+
 /// Run `act` on the shape being recorded. Without a shape begun, there is nothing to record.
-fn with_shape(params: &Params, act: impl FnOnce(&mut Recording) -> Result<()>) -> Result<()> {
-    match params.graphics.borrow_mut().recording.as_mut() {
-        Some(recording) => act(recording),
-        None => Ok(()),
+fn with_shape(params: &Params, act: impl FnOnce(&mut Recording)) {
+    if let Some(recording) = params.graphics.borrow_mut().recording.as_mut() {
+        act(recording);
     }
 }
 
@@ -68,6 +74,22 @@ fn with_polygon(
         Some(recording) if recording.kind() == Kind::Polygon => act(recording),
         _ => Err(ProcessingError::ShapeState { message }.into()),
     }
+}
+
+/// The first `N` of `values`, as they are. The callers have checked the number of values with
+/// `parse_params`, so every one of them is there.
+fn leading<const N: usize>(values: &[f32]) -> [f32; N] {
+    std::array::from_fn(|i| values.get(i).copied().unwrap_or_default())
+}
+
+/// The `(x, y)` of each of the `N` points of a vertex, `stride` values apart: a 3D point is `x, y,
+/// z`, so its stride is 3. The callers have checked the number of values with `parse_params`, so
+/// every point is there.
+fn planar<const N: usize>(values: &[f32], stride: usize) -> [[f32; 2]; N] {
+    std::array::from_fn(|i| {
+        let at = |k: usize| values.get(i * stride + k).copied().unwrap_or_default();
+        [at(0), at(1)]
+    })
 }
 
 /// `beginShape()` or `beginShape(kind)`: the vertices after it make a shape of that kind.
@@ -117,14 +139,8 @@ fn pendshape(stack: &mut Stack) -> Result<()> {
 /// are drawn.
 fn pvertex(stack: &mut Stack) -> Result<()> {
     let params = parse_params(stack, &[2, 3, 4, 5])?;
-    let values = params.float_list()?;
-    let [x, y, ..] = values[..] else {
-        return Err(params.arity());
-    };
-    with_shape(&params, |recording| {
-        recording.vertex([x, y]);
-        Ok(())
-    })?;
+    let [x, y] = leading(&params.float_list()?);
+    with_shape(&params, |recording| recording.vertex([x, y]));
     give_back(stack, params.graphics);
     Ok(())
 }
@@ -137,8 +153,7 @@ fn pbegincontour(stack: &mut Stack) -> Result<()> {
         if recording.kind() == Kind::Polygon {
             recording.begin_contour();
         }
-        Ok(())
-    })?;
+    });
     give_back(stack, params.graphics);
     Ok(())
 }
@@ -146,51 +161,43 @@ fn pbegincontour(stack: &mut Stack) -> Result<()> {
 /// `endContour()`: the hole begun is closed.
 fn pendcontour(stack: &mut Stack) -> Result<()> {
     let params = parse_params(stack, &[0])?;
-    with_shape(&params, |recording| {
-        recording.end_contour();
-        Ok(())
-    })?;
+    with_shape(&params, Recording::end_contour);
     give_back(stack, params.graphics);
     Ok(())
 }
 
 /// `bezierVertex(x2, y2, x3, y3, x4, y4)`, or with the z coordinates of a 3D shape, a cubic
 /// Bézier from the last vertex through the two control points to the end point.
-// The 3D form takes the same points as the 2D one, with their z coordinates skipped, so its arm
-// has the body of the 2D arm.
-#[allow(clippy::match_same_arms)]
 fn pbeziervertex(stack: &mut Stack) -> Result<()> {
     let params = parse_params(stack, &[6, 9])?;
     let detail = steps(params.graphics.borrow().style.bezier_detail);
     let values = params.float_list()?;
-    let (controls, end) = match values[..] {
-        [x2, y2, x3, y3, x4, y4] => ([[x2, y2], [x3, y3]], [x4, y4]),
-        [x2, y2, _, x3, y3, _, x4, y4, _] => ([[x2, y2], [x3, y3]], [x4, y4]),
-        _ => return Err(params.arity()),
-    };
-    with_polygon(&params, BEZIER_NEEDS_POLYGON, |recording| {
-        recording.bezier_vertex(controls, end, detail)
-    })?;
+    if values.len() == 9 && !params.graphics.borrow().three_d {
+        show_warning(BEZIER_DEPTH);
+    } else {
+        let [control1, control2, end] = planar::<3>(&values, values.len() / 3);
+        with_polygon(&params, BEZIER_NEEDS_POLYGON, |recording| {
+            recording.bezier_vertex([control1, control2], end, detail)
+        })?;
+    }
     give_back(stack, params.graphics);
     Ok(())
 }
 
 /// `quadraticVertex(cx, cy, x3, y3)`, or with the z coordinates of a 3D shape, a quadratic
 /// Bézier from the last vertex through the control point to the end point.
-// As for `bezierVertex`, the 3D form drops the z coordinates of the 2D one.
-#[allow(clippy::match_same_arms)]
 fn pquadraticvertex(stack: &mut Stack) -> Result<()> {
     let params = parse_params(stack, &[4, 6])?;
     let detail = steps(params.graphics.borrow().style.bezier_detail);
     let values = params.float_list()?;
-    let (control, end) = match values[..] {
-        [cx, cy, x, y] => ([cx, cy], [x, y]),
-        [cx, cy, _, x, y, _] => ([cx, cy], [x, y]),
-        _ => return Err(params.arity()),
-    };
-    with_polygon(&params, BEZIER_NEEDS_POLYGON, |recording| {
-        recording.quadratic_vertex(control, end, detail)
-    })?;
+    if values.len() == 6 && !params.graphics.borrow().three_d {
+        show_warning(QUAD_DEPTH);
+    } else {
+        let [control, end] = planar::<2>(&values, values.len() / 2);
+        with_polygon(&params, BEZIER_NEEDS_POLYGON, |recording| {
+            recording.quadratic_vertex(control, end, detail)
+        })?;
+    }
     give_back(stack, params.graphics);
     Ok(())
 }
@@ -205,10 +212,7 @@ fn pcurvevertex(stack: &mut Stack) -> Result<()> {
             graphics.style.curve_tightness,
         )
     };
-    let values = params.float_list()?;
-    let [x, y, ..] = values[..] else {
-        return Err(params.arity());
-    };
+    let [x, y] = leading(&params.float_list()?);
     with_polygon(&params, CURVE_NEEDS_POLYGON, |recording| {
         recording.curve_vertex([x, y], detail, tightness)
     })?;

@@ -114,6 +114,10 @@ fn argument_refusals() {
             r"@G 2 2 '2D' PGraphics 255 Pbackground PtoImage Pbackground",
             Ok(r"[null]"),
         ),
+        (
+            r"@G 0 0 0 0 Pget Pbackground",
+            Err(r"background image must be the same size as your application"),
+        ),
     ]);
 }
 
@@ -160,6 +164,10 @@ fn colour() {
         ),
         (
             r"@G 0 0 0 'x' Pcolor",
+            Err(r"class java.lang.String cannot be cast to class java.lang.Number"),
+        ),
+        (
+            r"@G 'x' 0.5 Pcolor",
             Err(r"class java.lang.String cannot be cast to class java.lang.Number"),
         ),
         (
@@ -373,5 +381,19 @@ fn colour() {
             Err(r"Invalid number of parameters, expected one of [1, 2, 3, 4] but found 0"),
         ),
         (r"@G PnoTint", Ok(r"[null]")),
+    ]);
+}
+
+#[test]
+fn a_lerp_amount_that_is_not_a_number_is_refused() {
+    check(&[
+        (
+            r"@G 0 255 0.0 0.0 / PlerpColor",
+            Err("not a finite number: NaN"),
+        ),
+        (
+            r"@G 0xff0000ff 0xffff0000 0.0 0.0 / PlerpColor",
+            Err("not a finite number: NaN"),
+        ),
     ]);
 }
