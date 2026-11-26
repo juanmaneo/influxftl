@@ -49,8 +49,7 @@ silently misbehaving:
 
 - `JAVA`, the Py4J bridge, and class-loader based extension/plugin loading (`EXT`…);
 - `COMPILE` / `COMPILED` (JVM bytecode compilation of macros) — raise `Not supported.`;
-- Processing typography (`PcreateFont`, `Ptext*`), which depends on the Java `Processing` library's
-  fonts and text rendering (`docs/PORTING.md` §9);
+
 - JVM-specific introspection whose output is an implementation detail (stack traces in
   `ERROR` carry the WarpScript message but an empty Java stack trace list).
 
@@ -1504,3 +1503,48 @@ oracle; the points below differ from Warp 10, or are not checked on the oracle.
   them without error.
 - **`CORNERS` placement overflow.** See section 5.4: Warp 10 draws nothing for a `CORNERS` image
   whose corners overflow a float, and the port refuses it.
+
+## 44. Processing typography (`PcreateFont`, `Ptext`, `PtextAlign`, `PtextAscent`, `PtextDescent`, `PtextFont`, `PtextLeading`, `PtextMode`, `PtextSize`, `PtextWidth`)
+
+The port follows the observation rule of `docs/PORTING.md` §9. The answers that Warp 10 3.5.0
+gives in the JSON (font sizes, widths, ascents, descents, error messages) are checked on the
+oracle. The glyph shapes are not: the JSON does not carry them, and the port's glyphs are not
+Processing's fonts.
+
+- **Glyphs.** Each printable ASCII character (U+0020 to U+007E) is a 5 by 7 bitmap written for
+  this product (`processing/glyph.rs`), scaled to the text size. The bitmaps are not the outlines
+  of any font. A character outside ASCII draws no ink.
+- **Advances.** A character's advance comes from the Regular faces of Noto Sans, Noto Serif and
+  Noto Sans Mono, for U+0020 to U+00FF (`processing/font_advances.rs`; SIL OFL 1.1, see
+  `NOTICE`). The family is chosen by the font's name, without regard to case: `Serif` selects
+  Noto Serif, `Monospaced` and `DialogInput` select Noto Sans Mono, and any other name selects
+  Noto Sans. `PtextWidth` matches Warp for the default font, `Serif` and `Monospaced` on the
+  oracle, and for CJK characters (one em).
+- **Control characters and emoji.** The port gives a control character (U+0001) no width, where
+  Warp 10 3.5.0 gives 7 pixels at size 12. A character above U+00FF takes one em in the port: an
+  emoji (U+1F600) is 12 pixels at size 12, where Warp gives 13. Other characters outside the
+  tables are not checked.
+- **Fonts.** `PcreateFont` rounds its size half up to a whole pixel. A name that is a URL is
+  refused, as no font resolver is set. A font file (`.ttf`, `.otf`) answers `null`, as fonts are
+  not loaded from files, and so does a size that rounds to zero or less. The default font of
+  `PtextSize` is named `Lucida Sans`, as in Warp's messages.
+- **Huge sizes.** Processing fails to create the image of a very large font, and the port does
+  not model these failures. On the oracle, `3e38 PtextSize` gives a `NullPointerException` after
+  Processing reports `Dimensions (width=2147483645 height=2147483645) are too large`. The port
+  accepts any positive size.
+- **Metrics.** `PtextAscent` is `ceil(1.069 × size − 0.05)` and `PtextDescent` is
+  `ceil(0.293 × size − 0.05)`, in pixels. The constants are fitted to the oracle's answers, not
+  read from a font, and checked at the sizes the tests use.
+- **Drawing.** Text is drawn in the fill only, never the stroke. `MODEL` and `SHAPE` draw the
+  same bitmaps, where Processing draws `SHAPE` text as outlines; `textMode(SHAPE)` prints a
+  warning to stderr once.
+- **Depth.** Text is drawn in the plane of its graphics, and `z` is read but not drawn. On a 2D
+  graphics a non-zero `z` prints the `translate()` warning to stderr once. 3D graphics are as in
+  section 43.
+- **Boxes.** `Ptext` with a width and a height wraps the text at line breaks and at spaces, and
+  breaks a word wider than the box where it overflows. A line whose baseline lies below the box
+  is not drawn. This is an approximation: the JSON does not show the drawn text, so the layout of
+  a box is not compared with Warp.
+- **Warnings.** The port prints only the two warnings above. Processing prints other messages in
+  some cases, such as the `Problem with createFont` message at huge sizes, which are not
+  reproduced.

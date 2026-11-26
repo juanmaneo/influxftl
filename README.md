@@ -299,7 +299,8 @@ As an Apache-2.0 derivative work, the repository follows section 4 of the licens
 | [Apache Commons Math 3.6.1](https://commons.apache.org/math/) (ASF) | Apache-2.0 | numerical routines of `cmath.rs`, interpolators of `interpolation.rs`, Levenberg-Marquardt fitting of `curvefit.rs` |
 | [Bouncy Castle](https://www.bouncycastle.org) (Legion of the Bouncy Castle) | MIT-style | Argon2 engine of `ARGON2`; OpenPGP packet and signature code of `openpgp/` |
 | [fdlibm](https://www.netlib.org/fdlibm/) (Sun Microsystems) | permissive Sun notice | `IEEEREMAINDER` algorithm |
-| [Processing](https://github.com/processing/processing4) core library (Processing Foundation) | LGPL-2.1 | **Not used as a dependency.** The ported `P*` functions follow the observation-only rule of `docs/PORTING.md` §9; the typography functions are not ported, and their licensing decision is open (`docs/PORTING.md` §9) |
+| [Noto Sans, Noto Serif, Noto Sans Mono](https://github.com/notofonts/latin-greek-cyrillic) (The Noto Project Authors) | SIL OFL 1.1 | advance widths of the typography functions (`processing/font_advances.rs`; DIVERGENCES §44) |
+| [Processing](https://github.com/processing/processing4) core library (Processing Foundation) | LGPL-2.1 | **Not used as a dependency.** The `P*` functions, the typography functions included, follow the observation-only rule of `docs/PORTING.md` §9; their glyphs are the port's own bitmaps (DIVERGENCES §44) |
 
 Java behaviour that scripts can observe (`java.lang.Math`, `java.util.Random`,
 `java.util.Formatter`, `Double.toString`, Joda-Time, Jackson, Guava…) is **re-implemented from

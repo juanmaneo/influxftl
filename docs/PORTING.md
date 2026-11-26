@@ -225,7 +225,7 @@ The `influxftl` binary runs scripts (`eval`, `run`) and serves `POST /api/v0/exe
 reads, line protocol for writes; DIVERGENCES §34) or on a datastore in memory
 (`INFLUXFTL_DATASTORE=memory`). It was checked on InfluxDB 3 Core 3.12.
 
-2182 / 2193 functions are ported, 99.5 % (`docs/FUNCTIONS.md`; the inventory includes the names
+2192 / 2193 functions are ported; only `GEO.BUFFER` is left (`docs/FUNCTIONS.md`; the inventory includes the names
 Warp 10 registers through `Builder`s and constants). The Geo Time Series model, the
 `GTSHelper` transforms (time, datapoints, statistics), `BUCKETIZE` and `MAP` with the
 shared aggregators (`sum`, `mean`, `min`, `max`, `first`, `last`, `count`, `and`, `or`,
@@ -386,11 +386,12 @@ item 6 lists what is left.
    OpenPGP encryption and decryption (`PGPENCRYPT`, `PGPDECRYPT`: `functions/pgp_crypt.rs`,
    `openpgp/encrypt.rs`, `openpgp/decrypt.rs`, `openpgp/symmetric.rs`), checked against the
    oracle (DIVERGENCES §42).
-6. **What is left** (11 of 2193): `GEO.BUFFER` (the JTS buffer); and 10 Processing typography
-   functions
-   (`PcreateFont`, `Ptext`, `PtextAlign`, `PtextAscent`, `PtextDescent`, `PtextFont`,
-   `PtextLeading`, `PtextMode`, `PtextSize`, `PtextWidth`). The other Processing `P*` functions are
-   ported. Processing's core library is LGPL-2.1 (upstream README, "License & Copyright", checked
-   on 16 Nov 2026; §8): the typography functions can only be ported from observation, and their
-   rendering is not reproduced bit for bit. The datastore functions on InfluxDB 3 are done (DIVERGENCES §34), and `METASET` seals the sets
-      of Warp 10 (§39; the binary has no key configured yet).
+6. **What is left** (1 of 2193): `GEO.BUFFER` (the JTS buffer). The Processing typography
+   functions (`PcreateFont`, `Ptext`, `PtextAlign`, `PtextAscent`, `PtextDescent`, `PtextFont`,
+   `PtextLeading`, `PtextMode`, `PtextSize`, `PtextWidth`) are ported from observation only, as
+   the other Processing `P*` functions are: Processing's core library is LGPL-2.1 (upstream
+   README, "License & Copyright", checked on 16 Nov 2026; §8). Their glyphs are bitmaps written
+   for this product, not Processing's fonts, and their advances are the metrics of Noto fonts
+   (SIL OFL 1.1, `NOTICE`; DIVERGENCES §44). The datastore functions on InfluxDB 3 are done
+   (DIVERGENCES §34), and `METASET` seals the sets of Warp 10 (§39; the binary has no key
+   configured yet).
