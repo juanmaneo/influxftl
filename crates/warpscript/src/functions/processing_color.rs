@@ -303,3 +303,7 @@ fn reader(stack: &mut Stack, which: Component) -> Result<()> {
     answer(stack, params.graphics, Value::Double(f64::from(value)));
     Ok(())
 }
+
+#[cfg(test)]
+#[path = "processing_color_private_tests.rs"]
+mod private_tests;

@@ -169,5 +169,33 @@ fn style() {
             r"@G PsphereDetail",
             Err(r"Invalid number of parameters, expected one of [1, 2] but found 0"),
         ),
+        (
+            r"@G 3 'x' PsphereDetail",
+            Err(r"class java.lang.String cannot be cast to class java.lang.Number"),
+        ),
+        (
+            r"@G PstrokeJoin",
+            Err(r"Invalid number of parameters, expected one of [1] but found 0"),
+        ),
+        (
+            r"@G PellipseMode",
+            Err(r"Invalid number of parameters, expected one of [1] but found 0"),
+        ),
+        (
+            r"@G PrectMode",
+            Err(r"Invalid number of parameters, expected one of [1] but found 0"),
+        ),
+        (
+            r"@G PimageMode",
+            Err(r"Invalid number of parameters, expected one of [1] but found 0"),
+        ),
+        (
+            r"@G PshapeMode",
+            Err(r"Invalid number of parameters, expected one of [1] but found 0"),
+        ),
+        (
+            r"@G PcurveDetail",
+            Err(r"Invalid number of parameters, expected one of [1] but found 0"),
+        ),
     ]);
 }

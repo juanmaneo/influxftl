@@ -217,3 +217,7 @@ fn extremum(image: &mut Image, pick: Extremum) {
         }
     }
 }
+
+#[cfg(test)]
+#[path = "filter_tests.rs"]
+mod filter_tests;

@@ -696,3 +696,7 @@ fn path(text: &str) -> Result<Outline> {
         points: Vec::new(),
     })
 }
+
+#[cfg(test)]
+#[path = "svg_tests.rs"]
+mod svg_tests;

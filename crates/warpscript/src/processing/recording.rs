@@ -289,3 +289,7 @@ fn quad_strip(points: &[[f32; 2]]) -> Vec<Ring> {
         })
         .collect()
 }
+
+#[cfg(test)]
+#[path = "recording_tests.rs"]
+mod recording_tests;

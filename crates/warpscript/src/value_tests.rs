@@ -1,5 +1,6 @@
 // Copyright 2026 The influxftl Authors. Licensed under the Apache License, Version 2.0.
 
+use std::cell::RefCell;
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 use std::rc::Rc;
@@ -8,7 +9,7 @@ use indexmap::{IndexMap, IndexSet};
 
 use super::bitset::BitSet;
 use super::macros::Macro;
-use super::value::{Context, FunctionObject, Value, double_to_long};
+use super::value::{Context, FunctionObject, Value, ValueKind, double_to_long};
 
 fn bitset(bytes: &[u8]) -> Value {
     Value::BitSet(Rc::new(BitSet::from_bytes(bytes)))
@@ -314,7 +315,6 @@ fn a_shape_is_a_value_of_its_own_kind() {
     use std::rc::Rc;
 
     use crate::geoshape::GeoShape;
-    use crate::value::ValueKind;
 
     let shape = Value::GeoShape(Rc::new(GeoShape::from_cells(vec![
         5_447_895_397_676_613_632,
@@ -329,4 +329,66 @@ fn a_shape_is_a_value_of_its_own_kind() {
     assert!(shape.same_object(&same));
     assert!(!shape.same_object(&equal));
     assert_eq!(shape, equal);
+}
+
+/// One value of each Processing kind, with its `TYPEOF` name, its Java class and its kind.
+pub(crate) fn processing_objects() -> [(Value, ValueKind, &'static str, &'static str); 4] {
+    use crate::processing::{Font, Graphics, Image, Shape};
+
+    [
+        (
+            Value::Graphics(Rc::new(RefCell::new(
+                Graphics::new(4, 4, false).expect("a small graphics"),
+            ))),
+            ValueKind::Graphics,
+            "PGRAPHICS",
+            "processing.core.PGraphicsJava2D",
+        ),
+        (
+            Value::Image(Rc::new(RefCell::new(
+                Image::new(2, 2).expect("a small image"),
+            ))),
+            ValueKind::Image,
+            "PIMAGE",
+            "processing.core.PImage",
+        ),
+        (
+            Value::Shape(Rc::new(Shape {
+                width: 1.0,
+                height: 1.0,
+                pieces: Vec::new(),
+            })),
+            ValueKind::Shape,
+            "PSHAPE",
+            "processing.core.PShapeJava2D",
+        ),
+        (
+            Value::Font(Rc::new(Font {
+                name: "Serif".to_owned(),
+                size: 12.0,
+            })),
+            ValueKind::Font,
+            "PFONT",
+            "processing.core.PFont",
+        ),
+    ]
+}
+
+#[test]
+fn processing_objects_are_identities_of_their_own_kind() {
+    let objects = processing_objects();
+    for (value, kind, type_name, class) in &objects {
+        assert_eq!(value.kind(), *kind, "{class}");
+        assert_eq!(value.type_name(), *type_name, "{class}");
+        assert_eq!(value.to_string(), format!("{class}@0"));
+        let same = value.clone();
+        assert!(value.same_object(&same), "{class}");
+        assert_eq!(*value, same, "{class}");
+        assert_eq!(hash_of(value), hash_of(&same), "{class}");
+    }
+    let twins = processing_objects();
+    for ((value, _, _, class), (twin, _, _, _)) in objects.iter().zip(&twins) {
+        assert!(!value.same_object(twin), "{class}");
+        assert_ne!(value, twin, "{class}");
+    }
 }

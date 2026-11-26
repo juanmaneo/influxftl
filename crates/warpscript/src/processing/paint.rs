@@ -45,3 +45,7 @@ impl Clip {
         cx >= self.x0 && cx < self.x1 && cy >= self.y0 && cy < self.y1
     }
 }
+
+#[cfg(test)]
+#[path = "paint_tests.rs"]
+mod paint_tests;

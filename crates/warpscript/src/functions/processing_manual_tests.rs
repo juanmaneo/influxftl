@@ -146,3 +146,90 @@ fn parameters_are_checked_against_their_counts() {
         "{err}"
     );
 }
+
+/// The message of the failure `result` gives.
+fn refusal<T>(result: crate::error::Result<T>) -> String {
+    result
+        .err()
+        .expect("the count should be refused")
+        .to_string()
+}
+
+#[test]
+fn readers_refuse_the_counts_they_cannot_read() {
+    // A context with no values above it: each reader asks for a count, which is refused, both
+    // for a count that is not zero and for values past the end of the list.
+    let mut stack = test_stack();
+    stack
+        .exec_checked("4 4 '2D' PGraphics")
+        .expect("the context should be created");
+    let params = parse_params(&mut stack, &[0]).expect("a context with no values above it");
+    let none = "Invalid number of parameters, expected one of [0] but found 0";
+    assert_eq!(refusal(params.values::<1>(0)), none);
+    assert_eq!(refusal(params.values::<1>(1)), none);
+    assert_eq!(refusal(params.values::<2>(0)), none);
+    assert_eq!(refusal(params.values::<2>(1)), none);
+    assert_eq!(refusal(params.values::<3>(0)), none);
+    assert_eq!(refusal(params.values::<3>(1)), none);
+    assert_eq!(refusal(params.values::<4>(0)), none);
+    assert_eq!(refusal(params.values::<4>(1)), none);
+    assert_eq!(refusal(params.values::<5>(0)), none);
+    assert_eq!(refusal(params.values::<5>(1)), none);
+    assert_eq!(refusal(params.values::<6>(0)), none);
+    assert_eq!(refusal(params.values::<6>(1)), none);
+    assert_eq!(refusal(params.values::<8>(0)), none);
+    assert_eq!(refusal(params.values::<8>(1)), none);
+    assert_eq!(refusal(params.floats_after::<1>(0)), none);
+    assert_eq!(refusal(params.floats_after::<2>(0)), none);
+    assert_eq!(refusal(params.floats_after::<3>(0)), none);
+    assert_eq!(refusal(params.floats_after::<4>(0)), none);
+    assert_eq!(refusal(params.floats_after::<5>(0)), none);
+    assert_eq!(refusal(params.floats_after::<6>(0)), none);
+    assert_eq!(refusal(params.floats_after::<8>(0)), none);
+    assert_eq!(refusal(params.floats::<1>()), none);
+    assert_eq!(refusal(params.floats::<2>()), none);
+    assert_eq!(refusal(params.floats::<3>()), none);
+    assert_eq!(refusal(params.floats::<4>()), none);
+    assert_eq!(refusal(params.floats::<5>()), none);
+    assert_eq!(refusal(params.floats::<6>()), none);
+    assert_eq!(refusal(params.floats::<8>()), none);
+    assert_eq!(refusal(params.floats_window::<2>(0)), none);
+    assert_eq!(refusal(params.floats_window::<4>(0)), none);
+    assert_eq!(refusal(params.floats_window::<6>(0)), none);
+    assert_eq!(refusal(params.ints::<1>()), none);
+    assert_eq!(refusal(params.ints::<2>()), none);
+    assert_eq!(refusal(params.ints::<3>()), none);
+    assert_eq!(refusal(params.ints::<4>()), none);
+    assert_eq!(refusal(params.ints_window::<2>(0)), none);
+    assert_eq!(refusal(params.ints_window::<8>(0)), none);
+    assert_eq!(refusal(params.keyword(0)), none);
+    assert_eq!(params.arity().to_string(), none);
+}
+
+#[test]
+fn a_context_no_memory_can_hold_is_refused() {
+    // 2^31 by 2^31 pixels of `u32` are more than `isize::MAX` bytes, so the reservation fails
+    // before any pixel is written.
+    let mut stack = test_stack();
+    stack.limits.max_pixels = i64::MAX - 1;
+    let err = stack
+        .exec_checked("2147483647 2147483647 '2D' PGraphics")
+        .expect_err("the pixel buffer cannot be reserved");
+    assert!(
+        err.to_string()
+            .contains("not enough memory for 4611686014132420609 pixels"),
+        "{err}"
+    );
+}
+
+#[test]
+fn no_context_on_an_empty_stack_is_an_index_failure() {
+    let err = parse_params(&mut Stack::new(), &[0])
+        .err()
+        .expect("no context on an empty stack");
+    assert!(
+        err.to_string()
+            .contains("Index 0 out of bounds for length 0"),
+        "{err}"
+    );
+}

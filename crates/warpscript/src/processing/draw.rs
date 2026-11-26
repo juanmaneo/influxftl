@@ -147,3 +147,7 @@ impl Graphics {
         }
     }
 }
+
+#[cfg(test)]
+#[path = "draw_tests.rs"]
+mod draw_tests;

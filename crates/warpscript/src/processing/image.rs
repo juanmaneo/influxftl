@@ -172,3 +172,7 @@ fn span(index: usize, out: usize, input: usize) -> (usize, usize) {
     let end = ((index + 1) * input / out).max(start + 1);
     (start, end.min(input))
 }
+
+#[cfg(test)]
+#[path = "image_tests.rs"]
+mod image_tests;

@@ -49,6 +49,75 @@ fn check(cases: &[(&str, Result<&str, &str>)]) {
 }
 
 #[test]
+fn argument_refusals() {
+    const CAST: &str = "class java.lang.String cannot be cast to class java.lang.Number";
+    check(&[
+        (r"@G NaN Pfill", Err(r"not a finite number: NaN")),
+        (r"@G NaN 1 Pfill", Err(r"not a finite number: NaN")),
+        (r"@G 1 'x' Pfill", Err(CAST)),
+        (r"@G 1.5 'x' Pfill", Err(CAST)),
+        (r"@G 'x' 1 Pfill", Ok(r"[null]")),
+        (r"@G 'x' 1 2 Pfill", Err(CAST)),
+        (r"@G 1 2 'x' Pfill", Err(CAST)),
+        (r"@G 'x' 1 2 3 Pfill", Err(CAST)),
+        (r"@G 1 'x' 2 3 Pfill", Err(CAST)),
+        (r"@G 1 2 'x' 3 Pfill", Err(CAST)),
+        (r"@G 1 2 3 'x' Pfill", Err(CAST)),
+        (r"@G 'x' 1 2 Pstroke", Err(CAST)),
+        (r"@G 'x' 1 2 3 Pstroke", Err(CAST)),
+        (
+            r"@G Pstroke",
+            Err(r"Invalid number of parameters, expected one of [1, 2, 3, 4] but found 0"),
+        ),
+        (
+            r"@G 1 Pclear",
+            Err(r"Invalid number of parameters, expected one of [0] but found 1"),
+        ),
+        (
+            r"@G 1 PnoFill",
+            Err(r"Invalid number of parameters, expected one of [0] but found 1"),
+        ),
+        (
+            r"@G 1 PnoStroke",
+            Err(r"Invalid number of parameters, expected one of [0] but found 1"),
+        ),
+        (
+            r"@G 1 PnoTint",
+            Err(r"Invalid number of parameters, expected one of [0] but found 1"),
+        ),
+        (r"@G 1 'x' Ptint", Err(CAST)),
+        (r"@G 'x' 1 Ptint", Err(CAST)),
+        (r"@G 1.5 'x' Ptint", Err(CAST)),
+        (r"@G 'x' 2 3 Ptint", Err(CAST)),
+        (r"@G 1 2 'x' Ptint", Err(CAST)),
+        (r"@G 'x' 2 3 4 Ptint", Err(CAST)),
+        (r"@G 1 'x' 3 4 Ptint", Err(CAST)),
+        (r"@G 1 2 'x' 4 Ptint", Err(CAST)),
+        (r"@G 1 2 3 'x' Ptint", Err(CAST)),
+        (r"@G 1 'x' Pcolor", Err(CAST)),
+        (r"@G 'x' 2 3 4 Pcolor", Err(CAST)),
+        (r"@G 1 'x' 3 4 Pcolor", Err(CAST)),
+        (r"@G 1 2 'x' 4 Pcolor", Err(CAST)),
+        (r"@G 'x' 1 0.5 PlerpColor", Err(CAST)),
+        (r"@G 1 'x' 0.5 PlerpColor", Err(CAST)),
+        (r"@G 'RGB' 'x' 1 2 PcolorMode", Err(CAST)),
+        (
+            r"@G 'RGB' 0 1 1 PcolorMode",
+            Err(r"a colour maximum must be a finite positive number."),
+        ),
+        (r"@G 'RGB' 'x' 1 1 1 PcolorMode", Err(CAST)),
+        (
+            r"@G 'RGB' 1 1 1 0 PcolorMode",
+            Err(r"a colour maximum must be a finite positive number."),
+        ),
+        (
+            r"@G 2 2 '2D' PGraphics 255 Pbackground PtoImage Pbackground",
+            Ok(r"[null]"),
+        ),
+    ]);
+}
+
+#[test]
 fn colour() {
     check(&[
         (r"@G 128 Pcolor", Ok(r"[-8355712,null]")),

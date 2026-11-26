@@ -147,3 +147,7 @@ impl Transform {
         Ok([row(0)?, row(1)?, row(2)?])
     }
 }
+
+#[cfg(test)]
+#[path = "geometry_tests.rs"]
+mod geometry_tests;

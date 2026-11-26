@@ -761,3 +761,7 @@ impl Pickler {
         hash_map(entries)
     }
 }
+
+#[cfg(test)]
+#[path = "pickle_tests.rs"]
+mod pickle_tests;

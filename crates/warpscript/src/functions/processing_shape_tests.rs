@@ -118,6 +118,10 @@ fn place() {
         ),
         (r"@G @SQUARE PloadShape 0 0 Pshape", Ok(r"[null]")),
         (
+            r"@G @SQUARE PloadShape Pshape Ppixels",
+            Ok(r"[[-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1],null]"),
+        ),
+        (
             r"@G @SQUARE PloadShape 0 Pshape Ppixels",
             Err(r"Invalid number of parameters, expected one of [1, 3, 5] but found 2"),
         ),
@@ -237,6 +241,25 @@ fn pieces() {
                 r"[[-65536,-65536,-65536,-65536,-65536,-1,-1,-1,-65536,-1,-1,-1,-65536,-1,-1,-1],null]",
             ),
         ),
+    ]);
+}
+
+#[test]
+fn refusals() {
+    check(&[
+        (
+            r"@G @SQUARE PloadShape 'x' 0 Pshape Ppixels",
+            Err(r"class java.lang.String cannot be cast to class java.lang.Number"),
+        ),
+        (
+            r"@G @SQUARE PloadShape 0 0 'x' 4 Pshape Ppixels",
+            Err(r"class java.lang.String cannot be cast to class java.lang.Number"),
+        ),
+        (
+            r"@G @SQUARE PloadShape 3e38 3e38 3e38 3e38 Pshape Ppixels",
+            Err(r"not a finite number"),
+        ),
+        (r"PloadShape", Err(r"Empty stack.")),
     ]);
 }
 

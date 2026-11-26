@@ -120,3 +120,7 @@ pub fn blit(destination: &mut Image, source: &Image, from: Rect, to: Rect, mode:
         }
     }
 }
+
+#[cfg(test)]
+#[path = "blend_tests.rs"]
+mod blend_tests;

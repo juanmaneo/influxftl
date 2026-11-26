@@ -50,6 +50,35 @@ fn check(cases: &[(&str, Result<&str, &str>)]) {
 }
 
 #[test]
+fn codec_refusals() {
+    check(&[
+        (r"Pencode", Err(r"Empty stack.")),
+        (r"{ } Pencode", Err(r"Empty stack.")),
+        (
+            r"@C { 'format' 'jpeg' 'quality' NaN } Pencode",
+            Err(r"not a finite number: NaN"),
+        ),
+        (
+            r"@C { 'format' 'jpeg' 'quality' 1e300 } Pencode",
+            Err(r"not a finite number: +Infinity"),
+        ),
+        (
+            r"@C { 'iTXt' [ { 'keyword' 'k' 'text' 'v' 'translatedKeyword' NULL } ] } Pencode",
+            Err(r"NullPointerException"),
+        ),
+        (r"Pdecode", Err(r"Empty stack.")),
+        (
+            r"'data:image/png;base64,!!!' Pdecode",
+            Err(r"Pdecode cannot read the image"),
+        ),
+        (
+            r"'data:image/png;base64,AAAA' Pdecode",
+            Err(r"Pdecode cannot read the image"),
+        ),
+    ]);
+}
+
+#[test]
 fn codec() {
     check(&[
         (

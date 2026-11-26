@@ -330,6 +330,8 @@ pub fn stroke_outline(subpaths: &[Subpath], half: f32, cap: Cap, join: Join) -> 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::error::Error;
+    use crate::finite::NotFinite;
 
     /// A square of side `size` with its corner at the origin.
     fn square(size: f32) -> Ring {
@@ -389,12 +391,22 @@ mod tests {
     }
 
     fn stroke_of(points: Vec<[f32; 2]>, join: Join) -> Coverage {
+        stroke_with(points, 1.0, Cap::Square, join)
+    }
+
+    /// The coverage of the stroke of an open path that is `half` wide, with its caps and joins.
+    fn stroke_with(points: Vec<[f32; 2]>, half: f32, cap: Cap, join: Join) -> Coverage {
         let subpath = Subpath {
             points,
             closed: false,
         };
-        let rings = stroke_outline(&[subpath], 1.0, Cap::Square, join).expect("the path is finite");
+        let rings = stroke_outline(&[subpath], half, cap, join).expect("the path is finite");
         cover(&rings, 16, 16).expect("the stroke is finite")
+    }
+
+    /// Whether the pixel at `(x, y)` is covered.
+    fn covers(coverage: &Coverage, x: usize, y: usize) -> bool {
+        coverage.pixels().any(|pixel| pixel == (x, y))
     }
 
     #[test]
@@ -418,5 +430,253 @@ mod tests {
     fn a_non_finite_crossing_is_refused() {
         let ring = vec![[-3.0e38, 0.0], [3.0e38, 1.0], [0.0, 2.0]];
         assert!(cover(&[ring], 4, 4).is_err());
+    }
+
+    #[test]
+    fn a_round_join_fills_the_disc_and_a_miter_the_corner() {
+        let corner = vec![[0.0, 8.0], [8.0, 8.0], [8.0, 0.0]];
+        let round = stroke_with(corner.clone(), 4.0, Cap::Square, Join::Round);
+        let miter = stroke_with(corner.clone(), 4.0, Cap::Square, Join::Miter);
+        let bevel = stroke_with(corner, 4.0, Cap::Square, Join::Bevel);
+        assert!(covers(&round, 10, 10));
+        assert!(covers(&miter, 10, 10));
+        assert!(!covers(&bevel, 10, 10));
+        assert!(covers(&miter, 11, 11));
+        assert!(!covers(&round, 11, 11));
+        assert!(!covers(&bevel, 11, 11));
+    }
+
+    #[test]
+    fn a_projecting_cap_extends_the_stroke_by_half_its_width() {
+        let line = vec![[4.0, 4.0], [10.0, 4.0]];
+        let square = stroke_with(line.clone(), 2.0, Cap::Square, Join::Miter);
+        let projecting = stroke_with(line, 2.0, Cap::Project, Join::Miter);
+        assert_eq!(square.pixels().count(), 24);
+        assert_eq!(projecting.pixels().count(), 40);
+        assert!(covers(&projecting, 2, 3));
+        assert!(!covers(&square, 2, 3));
+    }
+
+    #[test]
+    fn a_closed_path_that_repeats_its_first_point_is_stroked_as_its_square() {
+        let square = vec![[0.0, 0.0], [8.0, 0.0], [8.0, 8.0], [0.0, 8.0]];
+        let mut repeated = square.clone();
+        repeated.push([0.0, 0.0]);
+        let stroke = |points: Vec<[f32; 2]>| {
+            stroke_outline(
+                &[Subpath {
+                    points,
+                    closed: true,
+                }],
+                1.0,
+                Cap::Square,
+                Join::Miter,
+            )
+            .expect("the path is finite")
+        };
+        assert_eq!(stroke(square), stroke(repeated));
+    }
+
+    #[test]
+    fn a_subpath_without_points_has_no_stroke() {
+        let empty = Subpath {
+            points: Vec::new(),
+            closed: false,
+        };
+        let rings =
+            stroke_outline(&[empty], 1.0, Cap::Round, Join::Round).expect("no points is finite");
+        assert_eq!(rings.len(), 0);
+    }
+
+    #[test]
+    fn a_single_point_is_stroked_only_by_a_round_cap() {
+        let dot = Subpath {
+            points: vec![[3.0, 3.0], [3.0, 3.0]],
+            closed: false,
+        };
+        let square = stroke_outline(std::slice::from_ref(&dot), 2.0, Cap::Square, Join::Miter)
+            .expect("the point is finite");
+        assert_eq!(square.len(), 0);
+        let round =
+            stroke_outline(&[dot], 2.0, Cap::Round, Join::Miter).expect("the point is finite");
+        assert_eq!(round.len(), 1);
+        assert!(covers(&cover(&round, 16, 16).expect("finite"), 3, 3));
+    }
+
+    #[test]
+    fn a_round_cap_that_overflows_is_refused() {
+        let dot = Subpath {
+            points: vec![[-2.0e38, 0.0], [-2.0e38, 0.0]],
+            closed: false,
+        };
+        assert_eq!(
+            stroke_outline(&[dot], 3.0e38, Cap::Round, Join::Miter),
+            Err(Error::NotFinite(NotFinite::NegativeInfinity))
+        );
+    }
+
+    #[test]
+    fn a_disc_that_is_not_finite_is_refused() {
+        assert_eq!(
+            disc([0.0, 0.0], f32::INFINITY),
+            Err(Error::NotFinite(NotFinite::PositiveInfinity))
+        );
+        assert_eq!(
+            disc([0.0, 0.0], f32::NAN),
+            Err(Error::NotFinite(NotFinite::Nan))
+        );
+        assert_eq!(
+            disc([3.0e38, 0.0], 3.0e38),
+            Err(Error::NotFinite(NotFinite::PositiveInfinity))
+        );
+    }
+
+    #[test]
+    fn a_direction_needs_two_points_it_can_measure() {
+        assert_eq!(
+            direction([0.0, 0.0], [0.0, 0.0]),
+            Err(Error::NotFinite(NotFinite::Nan))
+        );
+        assert_eq!(
+            direction([0.0, 0.0], [3.0e38, 0.0]),
+            Err(Error::NotFinite(NotFinite::PositiveInfinity))
+        );
+        assert_eq!(direction([0.0, 0.0], [3.0, 4.0]), Ok([0.6, 0.8]));
+    }
+
+    #[test]
+    fn a_segment_whose_length_is_not_finite_or_not_positive_is_refused() {
+        let long = Subpath {
+            points: vec![[0.0, 0.0], [3.0e38, 0.0]],
+            closed: false,
+        };
+        assert_eq!(
+            stroke_outline(&[long], 1.0, Cap::Square, Join::Miter),
+            Err(Error::NotFinite(NotFinite::PositiveInfinity))
+        );
+        let short = Subpath {
+            points: vec![[0.0, 0.0], [1.0e-30, 0.0]],
+            closed: false,
+        };
+        assert_eq!(
+            stroke_outline(&[short], 1.0, Cap::Square, Join::Miter),
+            Err(Error::NotFinite(NotFinite::PositiveInfinity))
+        );
+    }
+
+    #[test]
+    fn a_miter_tip_that_overflows_is_refused_and_a_bevel_is_not() {
+        let corner = Subpath {
+            points: vec![[-3.0, 0.0], [0.0, 0.0], [-1.5, 2.598_076]],
+            closed: false,
+        };
+        assert_eq!(
+            stroke_outline(
+                std::slice::from_ref(&corner),
+                3.0e38,
+                Cap::Square,
+                Join::Miter
+            ),
+            Err(Error::NotFinite(NotFinite::PositiveInfinity))
+        );
+        assert!(stroke_outline(&[corner], 3.0e38, Cap::Square, Join::Bevel).is_ok());
+    }
+
+    #[test]
+    fn a_reversal_has_no_miter_and_is_cut_as_a_bevel() {
+        let back = vec![[0.0, 0.0], [4.0, 0.0], [0.0, 0.0]];
+        assert_eq!(
+            stroke_with(back.clone(), 1.0, Cap::Square, Join::Miter),
+            stroke_with(back, 1.0, Cap::Square, Join::Bevel)
+        );
+    }
+
+    #[test]
+    fn a_projecting_cap_that_overflows_is_refused() {
+        let right = [1.0, 0.0];
+        assert_eq!(
+            cap_ring([0.0, 1.0e38], right, 3.0e38, Cap::Project),
+            Err(Error::NotFinite(NotFinite::PositiveInfinity))
+        );
+        assert_eq!(
+            cap_ring([1.0e38, 0.0], right, 3.0e38, Cap::Project),
+            Err(Error::NotFinite(NotFinite::PositiveInfinity))
+        );
+        assert_eq!(
+            cap_ring([0.0, -1.0e38], right, 3.0e38, Cap::Project),
+            Err(Error::NotFinite(NotFinite::NegativeInfinity))
+        );
+        assert_eq!(
+            cap_ring([-2.0e38, 0.0], right, 3.0e38, Cap::Round),
+            Err(Error::NotFinite(NotFinite::NegativeInfinity))
+        );
+    }
+
+    #[test]
+    fn a_projecting_end_that_overflows_is_refused() {
+        let diagonal = Subpath {
+            points: vec![[0.0, 0.0], [1.0, 1.0]],
+            closed: false,
+        };
+        assert_eq!(
+            stroke_outline(&[diagonal], 3.0e38, Cap::Project, Join::Miter),
+            Err(Error::NotFinite(NotFinite::NegativeInfinity))
+        );
+    }
+
+    #[test]
+    fn a_segment_reaching_past_the_range_is_refused() {
+        let upward = Subpath {
+            points: vec![[0.0, 2.8e36], [1.0, 2.8e36]],
+            closed: false,
+        };
+        assert_eq!(
+            stroke_outline(&[upward], 3.4e38, Cap::Square, Join::Miter),
+            Err(Error::NotFinite(NotFinite::PositiveInfinity))
+        );
+        let downward = Subpath {
+            points: vec![[0.0, -2.8e36], [1.0, -2.8e36]],
+            closed: false,
+        };
+        assert_eq!(
+            stroke_outline(&[downward], 3.4e38, Cap::Square, Join::Miter),
+            Err(Error::NotFinite(NotFinite::NegativeInfinity))
+        );
+    }
+
+    #[test]
+    fn a_join_whose_outer_edge_overflows_is_refused() {
+        assert_eq!(
+            join_ring(
+                [2.0e38, 1.0],
+                [2.0e38, 0.0],
+                [2.0e38, 1.0],
+                3.0e38,
+                Join::Miter
+            ),
+            Err(Error::NotFinite(NotFinite::PositiveInfinity))
+        );
+        assert_eq!(
+            join_ring(
+                [2.0e38, -1.0],
+                [2.0e38, 0.0],
+                [2.0e38, -1.0],
+                3.0e38,
+                Join::Miter
+            ),
+            Err(Error::NotFinite(NotFinite::PositiveInfinity))
+        );
+    }
+
+    #[test]
+    fn a_join_needs_directions_at_both_sides_of_its_corner() {
+        assert_eq!(
+            join_ring([0.0, 0.0], [0.0, 0.0], [1.0, 0.0], 1.0, Join::Round),
+            Err(Error::NotFinite(NotFinite::Nan))
+        );
+        assert_eq!(
+            join_ring([0.0, 0.0], [1.0, 0.0], [1.0, 0.0], 1.0, Join::Round),
+            Err(Error::NotFinite(NotFinite::Nan))
+        );
     }
 }

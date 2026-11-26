@@ -182,3 +182,7 @@ pub fn spline(points: [[f32; 2]; 4], detail: usize, tightness: f32) -> Result<Ou
     curve.extend(curve_steps(points, detail, tightness)?);
     Ok(Outline::open(curve))
 }
+
+#[cfg(test)]
+#[path = "primitive_tests.rs"]
+mod primitive_tests;

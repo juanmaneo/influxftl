@@ -52,6 +52,7 @@ fn check(cases: &[(&str, Result<&str, &str>)]) {
 fn structure() {
     check(&[
         (r"@G PpushStyle PpopStyle", Ok(r"[null]")),
+        (r"PpushStyle", Err(r"Index 0 out of bounds for length 0")),
         (
             r"@G PpopStyle",
             Err(r"Too many popStyle() without enough pushStyle()"),
@@ -64,7 +65,15 @@ fn structure() {
             r"@G PpushStyle PpopStyle PpopStyle",
             Err(r"Too many popStyle() without enough pushStyle()"),
         ),
+        (r"@G 'BLEND' PblendMode", Ok(r"[null]")),
         (r"@G 'ADD' PblendMode", Ok(r"[null]")),
+        (r"@G 'SUBTRACT' PblendMode", Ok(r"[null]")),
+        (r"@G 'DARKEST' PblendMode", Ok(r"[null]")),
+        (r"@G 'LIGHTEST' PblendMode", Ok(r"[null]")),
+        (r"@G 'DIFFERENCE' PblendMode", Ok(r"[null]")),
+        (r"@G 'EXCLUSION' PblendMode", Ok(r"[null]")),
+        (r"@G 'MULTIPLY' PblendMode", Ok(r"[null]")),
+        (r"@G 'SCREEN' PblendMode", Ok(r"[null]")),
         (r"@G 'REPLACE' PblendMode", Ok(r"[null]")),
         (
             r"@G 'bogus' PblendMode",
@@ -91,6 +100,10 @@ fn structure() {
         (r"@G 0 0 10 10 Pclip 2 2 20 20 Pclip", Ok(r"[null]")),
         (r"@G 0 0 10 10 Pclip PnoClip", Ok(r"[null]")),
         (r"@G PnoClip", Ok(r"[null]")),
+        (
+            r"@G 3e38 0 Ptranslate 3e38 0 1 1 Pclip",
+            Err(r"not a finite number"),
+        ),
         (
             r"@G 0 0 10 Pclip",
             Err(r"Invalid number of parameters, expected one of [4] but found 3"),
@@ -121,6 +134,7 @@ fn structure() {
             r"4 PGraphics",
             Err(r"PGraphics expects a type ('2D' or '3D') on top of the stack."),
         ),
+        (r"PGraphics", Err(r"Empty stack.")),
         (r"'2D' PGraphics", Err(r"Empty stack.")),
         (r"3 '2D' PGraphics", Err(r"Empty stack.")),
         (
@@ -184,6 +198,18 @@ fn maths() {
             r"@G 'x' 1 Pmag",
             Err(r"class java.lang.String cannot be cast to class java.lang.Number"),
         ),
+        (r"@G '3' ->BD 4 Pmag", Ok(r"[5.0,null]")),
+        (r"@G '128' ->BD Pcolor", Ok(r"[-8355712,null]")),
+        (r"@G 1e30 1e30 1e30 Pmag", Err(r"not a finite number")),
+        (
+            r"@G 'x' 1 1 Pmag",
+            Err(r"class java.lang.String cannot be cast to class java.lang.Number"),
+        ),
+        (r"@G -3.5 0 10 Pconstrain", Ok(r"[0.0,null]")),
+        (
+            r"@G 3 0 'x' Pconstrain",
+            Err(r"class java.lang.String cannot be cast to class java.lang.Number"),
+        ),
         (r"@G 3 0 10 Pconstrain", Ok(r"[3,null]")),
         (r"@G 3.5 0 10 Pconstrain", Ok(r"[3.5,null]")),
         (r"@G -3 0 10 Pconstrain", Ok(r"[0,null]")),
@@ -214,7 +240,16 @@ fn maths() {
             r"@G 0 10 1 2 Plerp",
             Err(r"Invalid number of parameters, expected one of [3] but found 4"),
         ),
+        (r"@G -3e38 3e38 2 Plerp", Err(r"not a finite number")),
         (r"@G 15 10 20 Pnorm", Ok(r"[0.5,null]")),
+        (
+            r"@G 'x' 0 10 Pnorm",
+            Err(r"class java.lang.String cannot be cast to class java.lang.Number"),
+        ),
+        (
+            r"@G 'x' 0 10 0 20 Pmap",
+            Err(r"class java.lang.String cannot be cast to class java.lang.Number"),
+        ),
         (r"@G 10 10 20 Pnorm", Ok(r"[0.0,null]")),
         (
             r"@G 0 1 2 3 Pnorm",

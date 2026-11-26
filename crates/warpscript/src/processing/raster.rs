@@ -123,3 +123,7 @@ fn tinted(colour: u32, tint: Option<u32>) -> u32 {
 fn scaled(channel: u8, tint: u8) -> u8 {
     (u32::from(channel) * u32::from(tint) / 255) as u8
 }
+
+#[cfg(test)]
+#[path = "raster_tests.rs"]
+mod raster_tests;

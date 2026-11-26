@@ -265,3 +265,7 @@ pub enum Component {
     /// `brightness`.
     Brightness,
 }
+
+#[cfg(test)]
+#[path = "color_tests.rs"]
+mod color_tests;

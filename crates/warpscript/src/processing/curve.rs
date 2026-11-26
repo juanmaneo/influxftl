@@ -99,3 +99,7 @@ pub fn curve_steps(
     points.push(p2);
     Ok(points)
 }
+
+#[cfg(test)]
+#[path = "curve_tests.rs"]
+mod curve_tests;

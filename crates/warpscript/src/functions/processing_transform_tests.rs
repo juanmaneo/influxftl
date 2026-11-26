@@ -133,3 +133,43 @@ fn transform() {
         ),
     ]);
 }
+
+#[test]
+fn refusals() {
+    check(&[
+        (
+            r"@G 1 PpushMatrix",
+            Err(r"Invalid number of parameters, expected one of [0] but found 1"),
+        ),
+        (
+            r"@G 1 PpopMatrix",
+            Err(r"Invalid number of parameters, expected one of [0] but found 1"),
+        ),
+        (
+            r"@G 1 PresetMatrix",
+            Err(r"Invalid number of parameters, expected one of [0] but found 1"),
+        ),
+        (
+            r"@G 'x' 1 Pscale",
+            Err(r"class java.lang.String cannot be cast to class java.lang.Number"),
+        ),
+        (
+            r"@G 'x' 1 2 Pscale",
+            Err(r"class java.lang.String cannot be cast to class java.lang.Number"),
+        ),
+        (
+            r"@G 'x' 1 2 Ptranslate",
+            Err(r"class java.lang.String cannot be cast to class java.lang.Number"),
+        ),
+        (r"@G 3e38 Pscale 3e38 Pscale", Err(r"not a finite number")),
+        (
+            r"@G 3e38 0 Ptranslate 3e38 0 Ptranslate",
+            Err(r"not a finite number"),
+        ),
+        (r"@G 3e38 Pscale 1 PshearX", Err(r"not a finite number")),
+        (
+            r"@G 3e38 Pscale 0.7853982 PshearX 0.7853982 Protate",
+            Err(r"not a finite number"),
+        ),
+    ]);
+}

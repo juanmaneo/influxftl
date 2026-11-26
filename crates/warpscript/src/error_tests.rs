@@ -230,6 +230,10 @@ fn classes_of_every_kind_of_value() {
         (ValueKind::Encoder, "io.warp10.continuum.gts.GTSEncoder"),
         (ValueKind::GeoShape, "com.geoxp.GeoXPLib$GeoXPShape"),
         (ValueKind::Key, "io.warp10.script.functions.ECPRIVATE$1"),
+        (ValueKind::Graphics, "processing.core.PGraphicsJava2D"),
+        (ValueKind::Image, "processing.core.PImage"),
+        (ValueKind::Shape, "processing.core.PShapeJava2D"),
+        (ValueKind::Font, "processing.core.PFont"),
     ] {
         assert_eq!(compat::class_name(Class::Value(kind)), class);
         assert_eq!(compat::value_class(kind), class);
@@ -245,6 +249,12 @@ fn classes_of_every_kind_of_value() {
         compat::class_name(Class::ObjectArray),
         "[Ljava.lang.Object;"
     );
+    assert_eq!(compat::class_name(Class::Font), "processing.core.PFont");
+    assert_eq!(
+        compat::class_name(Class::Geometry),
+        "com.vividsolutions.jts.geom.Geometry"
+    );
+    assert_eq!(compat::class_name(Class::Double), "java.lang.Double");
     assert_eq!(Class::from(ValueKind::Long), Class::Value(ValueKind::Long));
 }
 
@@ -1341,6 +1351,264 @@ fn format_failures_have_the_wording_of_the_jdk() {
         );
         assert!(!error.is_runtime(), "{message}");
     }
+}
+
+#[test]
+fn processing_failures_have_the_wording_and_class_of_warp10() {
+    use super::error::processing::{ProcessingError, SharedError};
+    use super::processing::svg::SvgError;
+
+    let failures: Vec<(ProcessingError, &str, &str, bool)> = vec![
+        (
+            ProcessingError::Arity {
+                expected: &[1, 2, 3, 4],
+                found: 5,
+            },
+            "Invalid number of parameters, expected one of [1, 2, 3, 4] but found 5",
+            "io.warp10.script.WarpScriptException",
+            false,
+        ),
+        (
+            ProcessingError::Refused {
+                function: "PcolorMode",
+                message: ": invalid mode, should be one of 'RGB' or 'HSB'",
+            },
+            "PcolorMode: invalid mode, should be one of 'RGB' or 'HSB'",
+            "io.warp10.script.WarpScriptException",
+            false,
+        ),
+        (
+            ProcessingError::TooManyPixels {
+                function: "PGraphics",
+                allowed: "PGRAPHICS",
+                limit: 10,
+                width: 100,
+                height: 200,
+                pixels: 20_000,
+            },
+            "PGraphics only allows PGRAPHICS with a total number of pixels less than 10 requested size was 100x200 (20000).",
+            "io.warp10.script.WarpScriptException",
+            false,
+        ),
+        (
+            ProcessingError::EmptyImage {
+                width: 0,
+                height: -2,
+            },
+            "Width (0) and height (-2) cannot be <= 0",
+            "java.lang.IllegalArgumentException",
+            true,
+        ),
+        (
+            ProcessingError::PixelCount {
+                function: "Pset",
+                article: "an ",
+                expected: 4,
+                found: 2,
+            },
+            "Pset expected an array of 4 pixels, found 2",
+            "io.warp10.script.WarpScriptException",
+            false,
+        ),
+        (
+            ProcessingError::PixelNotLong { function: "Pset" },
+            "Pset expected an array of LONG.",
+            "io.warp10.script.WarpScriptException",
+            false,
+        ),
+        (
+            ProcessingError::StyleUnderflow,
+            "Too many popStyle() without enough pushStyle()",
+            "java.lang.RuntimeException",
+            true,
+        ),
+        (
+            ProcessingError::MatrixUnderflow,
+            "missing a pushMatrix() to go with that popMatrix()",
+            "java.lang.RuntimeException",
+            true,
+        ),
+        (
+            ProcessingError::MatrixOverflow,
+            "pushMatrix() cannot use push more than 32 times",
+            "java.lang.RuntimeException",
+            true,
+        ),
+        (
+            ProcessingError::NegativeWidth,
+            "negative width",
+            "java.lang.IllegalArgumentException",
+            true,
+        ),
+        (
+            ProcessingError::NonPositiveMaximum,
+            "a colour maximum must be a finite positive number.",
+            "io.warp10.script.WarpScriptException",
+            false,
+        ),
+        (
+            ProcessingError::OutOfMemory {
+                pixels: 1 << 40,
+                source: Vec::<u32>::new()
+                    .try_reserve_exact(usize::MAX)
+                    .expect_err("no vector holds usize::MAX elements"),
+            },
+            "not enough memory for 1099511627776 pixels",
+            "java.lang.OutOfMemoryError",
+            true,
+        ),
+        (
+            ProcessingError::ResizeWithoutSize,
+            "width or height must be > 0 for resize",
+            "java.lang.IllegalArgumentException",
+            true,
+        ),
+        (
+            ProcessingError::FilterTakesNoParam { kind: "GRAY" },
+            "Use filter(GRAY) instead of filter(GRAY, param)",
+            "java.lang.IllegalArgumentException",
+            true,
+        ),
+        (
+            ProcessingError::PosterizeNeedsLevels,
+            "Use filter(POSTERIZE, int levels) instead of filter(POSTERIZE)",
+            "java.lang.IllegalArgumentException",
+            true,
+        ),
+        (
+            ProcessingError::PosterizeLevels,
+            "Levels must be between 2 and 255 for filter(POSTERIZE, levels)",
+            "java.lang.IllegalArgumentException",
+            true,
+        ),
+        (
+            ProcessingError::NegativeRegion,
+            "-1",
+            "java.lang.NegativeArraySizeException",
+            true,
+        ),
+        (
+            ProcessingError::QualityOutOfBounds,
+            "Quality out-of-bounds!",
+            "java.lang.IllegalArgumentException",
+            true,
+        ),
+        (
+            ProcessingError::Decode(SharedError::new(std::io::Error::other("bad"))),
+            "Pdecode cannot read the image",
+            "io.warp10.script.WarpScriptException",
+            false,
+        ),
+        (
+            ProcessingError::Encode(SharedError::new(std::io::Error::other("bad"))),
+            "Error while encoding PGraphics or PImage.",
+            "io.warp10.script.WarpScriptException",
+            false,
+        ),
+        (
+            ProcessingError::UnsupportedFormat,
+            "Only formats 'png' and 'jpeg' are supported.",
+            "io.warp10.script.WarpScriptException",
+            false,
+        ),
+        (
+            ProcessingError::ChunkNotList,
+            "Chunk type must be associated with a list of chunks.",
+            "io.warp10.script.WarpScriptException",
+            false,
+        ),
+        (
+            ProcessingError::ChunkNotMap {
+                kinds: "tEXt and zTXt",
+            },
+            "tEXt and zTXt chunks must be MAP instances.",
+            "io.warp10.script.WarpScriptException",
+            false,
+        ),
+        (
+            ProcessingError::ChunkFields { kinds: "iTXt" },
+            "iTXt chunks MUST contains 'keyword' and 'text' entries of type STRING.",
+            "io.warp10.script.WarpScriptException",
+            false,
+        ),
+        (
+            ProcessingError::UnknownChunk,
+            "Only 'tEXt', 'zTXt' and 'iTXt' chunks can be specified.",
+            "io.warp10.script.WarpScriptException",
+            false,
+        ),
+        (
+            ProcessingError::QualityType,
+            "Parameter 'quality' for format 'jpeg' must be a DOUBLE between 0.0 and 1.0, or a LONG between 0 and 100.",
+            "io.warp10.script.WarpScriptException",
+            false,
+        ),
+        (
+            ProcessingError::ShapeState {
+                message: "You must use beginShape() or beginShape(POLYGON) before curveVertex()",
+            },
+            "You must use beginShape() or beginShape(POLYGON) before curveVertex()",
+            "java.lang.RuntimeException",
+            true,
+        ),
+        (
+            SvgError::Xml {
+                reason: "unexpected end of input",
+            }
+            .into(),
+            "malformed XML: unexpected end of input",
+            "org.xml.sax.SAXParseException",
+            false,
+        ),
+        (
+            SvgError::NotSvg {
+                found: "html".to_owned(),
+            }
+            .into(),
+            "the root element is <html>, not <svg>",
+            "java.lang.RuntimeException",
+            false,
+        ),
+    ];
+    for (err, message, class, runtime) in failures {
+        assert_eq!(err.to_string(), message);
+        assert_eq!(err.is_runtime(), runtime, "{message}");
+        let error = Error::from(err.clone());
+        assert_eq!(error.to_string(), message);
+        assert_eq!(error.is_runtime(), runtime, "{message}");
+        assert_eq!(exception_class(&error), class, "{message}");
+    }
+}
+
+#[test]
+fn processing_failures_share_the_failure_of_their_library() {
+    use super::error::processing::{ProcessingError, SharedError};
+
+    let shared = SharedError::new(std::io::Error::other("boom"));
+    assert_eq!(shared.to_string(), "boom");
+    assert_eq!(shared, SharedError::new(std::io::Error::other("boom")));
+    assert_ne!(shared, SharedError::new(std::io::Error::other("bang")));
+    assert_eq!(shared.clone(), shared);
+    assert_eq!(
+        std::error::Error::source(&shared).map(ToString::to_string),
+        Some("boom".to_owned())
+    );
+    let decode = ProcessingError::Decode(shared.clone());
+    assert_eq!(
+        decode.source().map(ToString::to_string),
+        Some("boom".to_owned())
+    );
+    assert_eq!(
+        ProcessingError::Encode(shared.clone())
+            .source()
+            .map(ToString::to_string),
+        Some("boom".to_owned())
+    );
+    assert!(ProcessingError::UnsupportedFormat.source().is_none());
+    assert_ne!(
+        decode,
+        ProcessingError::Encode(SharedError::new(std::io::Error::other("boom")))
+    );
 }
 
 #[test]

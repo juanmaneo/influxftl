@@ -58,6 +58,18 @@ fn scalars() {
 }
 
 #[test]
+fn processing_objects_are_unsupported_in_snapshots() {
+    use super::value_tests::processing_objects;
+
+    for (value, _, type_name, _) in processing_objects() {
+        assert_eq!(
+            value_snapshot(&value),
+            format!("'UNSUPPORTED:{type_name}' ")
+        );
+    }
+}
+
+#[test]
 fn containers() {
     assert_eq!(
         value_snapshot(&Value::list(vec![Value::Long(1), Value::from("x")])),

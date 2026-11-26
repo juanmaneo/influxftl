@@ -214,3 +214,7 @@ fn encode_failure(err: impl std::error::Error + Send + Sync + 'static) -> Error 
 fn decode_failure(err: impl std::error::Error + Send + Sync + 'static) -> Error {
     ProcessingError::Decode(SharedError::new(err)).into()
 }
+
+#[cfg(test)]
+#[path = "codec_tests.rs"]
+mod codec_tests;
