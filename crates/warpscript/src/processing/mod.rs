@@ -15,7 +15,9 @@ pub mod curve;
 pub mod draw;
 pub mod filter;
 pub mod font;
+pub mod font_advances;
 pub mod geometry;
+pub mod glyph;
 pub mod image;
 pub mod paint;
 pub mod path;
@@ -24,6 +26,7 @@ pub mod raster;
 pub mod recording;
 pub mod shape;
 pub mod svg;
+pub mod text;
 
 use std::rc::Rc;
 

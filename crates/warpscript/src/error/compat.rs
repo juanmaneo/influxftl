@@ -175,7 +175,8 @@ fn processing_class(err: &ProcessingError) -> &'static str {
         | ProcessingError::ChunkNotMap { .. }
         | ProcessingError::ChunkFields { .. }
         | ProcessingError::UnknownChunk
-        | ProcessingError::QualityType => WARP_SCRIPT_EXCEPTION,
+        | ProcessingError::QualityType
+        | ProcessingError::FontResolver => WARP_SCRIPT_EXCEPTION,
         ProcessingError::EmptyImage { .. }
         | ProcessingError::NegativeWidth
         | ProcessingError::ResizeWithoutSize
@@ -192,6 +193,7 @@ fn processing_class(err: &ProcessingError) -> &'static str {
         | ProcessingError::MatrixOverflow
         | ProcessingError::BackgroundWithoutPixels
         | ProcessingError::ShapeState { .. }
+        | ProcessingError::NullFont
         | ProcessingError::Svg(_) => "java.lang.RuntimeException",
         ProcessingError::OutOfMemory { .. } => "java.lang.OutOfMemoryError",
     }

@@ -66,6 +66,7 @@ pub mod processing_primitive;
 pub mod processing_shape;
 pub mod processing_style;
 pub mod processing_transform;
+pub mod processing_typography;
 pub mod processing_vertex;
 pub mod quaternions;
 pub mod rsa;
@@ -167,6 +168,7 @@ const TABLES: &[&[(&str, Entry)]] = &[
     processing_vertex::FUNCTIONS,
     processing_curve::FUNCTIONS,
     processing_shape::FUNCTIONS,
+    processing_typography::FUNCTIONS,
     mv::FUNCTIONS,
     geo::FUNCTIONS,
     geoimport::FUNCTIONS,
@@ -446,6 +448,8 @@ mod processing_style_tests;
 mod processing_tests;
 #[cfg(test)]
 mod processing_transform_tests;
+#[cfg(test)]
+mod processing_typography_tests;
 #[cfg(test)]
 mod processing_vertex_tests;
 #[cfg(test)]

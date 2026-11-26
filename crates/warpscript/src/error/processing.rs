@@ -195,6 +195,12 @@ pub enum ProcessingError {
         /// The message, as Processing words it.
         message: &'static str,
     },
+    /// A font named by a URL: Processing's font resolver is not set, so every URL is refused.
+    #[error("Font resolver not set, rejecting all URLs.")]
+    FontResolver,
+    /// A `textFont` given a `null` font, which Processing refuses as a `RuntimeException`.
+    #[error("A null PFont was passed to textFont()")]
+    NullFont,
     /// An SVG document that `loadShape` cannot read.
     #[error(transparent)]
     Svg(#[from] crate::processing::svg::SvgError),
@@ -219,7 +225,8 @@ impl ProcessingError {
             | ProcessingError::ChunkNotMap { .. }
             | ProcessingError::ChunkFields { .. }
             | ProcessingError::UnknownChunk
-            | ProcessingError::QualityType => false,
+            | ProcessingError::QualityType
+            | ProcessingError::FontResolver => false,
             ProcessingError::EmptyImage { .. }
             | ProcessingError::StyleUnderflow
             | ProcessingError::MatrixUnderflow
@@ -233,7 +240,8 @@ impl ProcessingError {
             | ProcessingError::PosterizeLevels
             | ProcessingError::NegativeRegion
             | ProcessingError::QualityOutOfBounds
-            | ProcessingError::ShapeState { .. } => true,
+            | ProcessingError::ShapeState { .. }
+            | ProcessingError::NullFont => true,
         }
     }
 }
