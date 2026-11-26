@@ -249,11 +249,11 @@ the `MACROMAPPER` protocol and the multi-output maps. The Java runtime exception
 lets escape (`ClassCastException`, `InformativeEmptyStackException`,
 `ArrayIndexOutOfBoundsException`…) are modelled by `Error::runtime` so that the functions
 wrapping `WarpScriptException`s (`MAP was given invalid parameters. (…)`) let them through
-like Java and `ERROR` reports their class (§19 of `DIVERGENCES.md`). The remaining work, in
-the order that unlocks the most:
+like Java and `ERROR` reports their class (§19 of `DIVERGENCES.md`). Items 1 to 5 are done;
+item 6 lists what is left.
 
-1. **The remaining aggregators**: `mapper.geo.within` / `outside` / `fence` /
-   `approximate` (they need the `GeoXPShape` cells of the `GEO.*` functions). The strict
+1. **Aggregators**: `mapper.geo.within` / `outside` / `fence` / `approximate` use the
+   `GeoXPShape` cells of the `GEO.*` functions (`aggregators/geo.rs`). The strict
    wrappers, `reducer.argmin` / `argmax` and `reducer.shannonentropy.*` are in
    (`aggregators/strict.rs`, `aggregators/reducers.rs`).
    Builders with parameters (`50 bucketizer.percentile`) are `Entry::Builder` stack functions
@@ -263,7 +263,7 @@ the order that unlocks the most:
    the current tick in the window (`mapper.product`, `mapper.dotproduct`…) get it from
    `Window::tick_index` (`None` under `BUCKETIZE`, where Java would read past the
    arguments array).
-2. Done: `APPLY` / `PAPPLY` and the `op.*` operations (`functions/gts_apply.rs`, `aggregators/ops.rs`), `FILTER` /
+2. `APPLY` / `PAPPLY` and the `op.*` operations (`functions/gts_apply.rs`, `aggregators/ops.rs`), `FILTER` /
    `PFILTER` with every `filter.*` and `MACROFILTER` (`filters.rs`; the selectors of
    `PARSESELECTOR`, `TOSELECTOR` and `filter.byselector` are in `selector.rs`,
    `functions/selectors.rs`), the operators on series (`+ - * /`, the
